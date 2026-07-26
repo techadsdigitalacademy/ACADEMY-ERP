@@ -1,0 +1,564 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import type { Staff, Sale, Attendance, DailyReport } from '../types';
+import { supabase } from '../services/supabase';
+
+interface AppContextType {
+  activeStaff: Staff | null;
+  sales: Sale[];
+  attendance: Attendance[];
+  dailyReports: DailyReport[];
+  selectedMonth: string;
+  setSelectedMonth: (month: string) => void;
+  addSale: (saleData: { 
+    clientName: string; 
+    servicePackage: string; 
+    paymentType: 'Full' | 'Advance' | 'Clearance'; 
+    packageAmount: number; 
+    receivedAmount: number;
+    paymentMethod?: string;
+    paymentProofUrl?: string;
+    workDescription?: string;
+  }) => Promise<void>;
+  addDailyReport: (reportData: {
+    workType: string;
+    description: string;
+    reportDate?: string;
+    postersCount?: number;
+    reEditsCount?: number;
+    logosCount?: number;
+    othersCount?: number;
+    adsPlacedCount?: number;
+    workCategory?: string;
+    clientName?: string;
+    videosCount?: number;
+    travelExpense?: number;
+  }) => Promise<void>;
+  punchIn: (selfieUrl?: string, lat?: number, lng?: number, status?: string) => Promise<void>;
+  punchOut: (status?: string) => Promise<void>;
+  todayAttendance: Attendance | null;
+  isLoading: boolean;
+  dbError: string | null;
+  activeTab: 'sales' | 'attendance' | 'leads' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets';
+  setActiveTab: (tab: 'sales' | 'attendance' | 'leads' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets') => void;
+  isAdminMode: boolean;
+  setIsAdminMode: (mode: boolean) => void;
+  login: (username: string, pass: string) => Promise<boolean>;
+  logout: () => void;
+  updateAvatar: (avatarUrl: string) => Promise<void>;
+  fetchDashboardData: (staffId: string) => Promise<void>;
+}
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [activeStaff, setActiveStaff] = useState<Staff | null>(null);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().substring(0, 7));
+  const [todayAttendance, setTodayAttendance] = useState<Attendance | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [dbError, setDbError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'sales' | 'attendance' | 'leads' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets'>('sales');
+  const [isAdminMode, setIsAdminMode] = useState<boolean>(false);
+
+  // Fetch sales and attendance for a specific staff member
+  const fetchDashboardData = async (staffId: string) => {
+    try {
+      // Check if user has Admin/Director role
+      const { data: staffProfileCheck } = await supabase
+        .from('staff')
+        .select('*, roles(role_name)')
+        .eq('id', staffId)
+        .maybeSingle();
+
+      if (staffProfileCheck) {
+        setActiveStaff(prev => {
+          if (!prev) return null;
+          const updated = {
+            ...prev,
+            monthly_target_amount: Number(staffProfileCheck.monthly_target_amount) || 0
+          };
+          localStorage.setItem('tech_ads_active_staff', JSON.stringify(updated));
+          return updated;
+        });
+      }
+
+      const roleName = staffProfileCheck?.roles
+        ? (Array.isArray(staffProfileCheck.roles) ? staffProfileCheck.roles[0]?.role_name : staffProfileCheck.roles.role_name)
+        : '';
+      const isAdminUser = roleName === 'Director' || roleName === 'Admin' || roleName === 'Company Owner';
+
+      // Fetch sales from Supabase
+      let salesQuery = supabase
+        .from('sales')
+        .select('*, staff(full_name, avatar_url)');
+
+      if (!isAdminUser) {
+        salesQuery = salesQuery.eq('staff_id', staffId);
+      }
+
+      const { data: salesData, error: salesErr } = await salesQuery;
+      if (salesErr) throw salesErr;
+
+      // Fetch attendance records from Supabase
+      const { data: attData, error: attErr } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('staff_id', staffId);
+
+      if (attErr) throw attErr;
+
+      // Fetch daily reports from Supabase
+      let reportsQuery = supabase
+        .from('daily_reports')
+        .select('*, staff(full_name)');
+
+      if (!isAdminUser) {
+        reportsQuery = reportsQuery.eq('staff_id', staffId);
+      }
+
+      const { data: reportsData, error: reportsErr } = await reportsQuery;
+      if (reportsErr) throw reportsErr;
+
+      const mappedReports = (reportsData || []).map((r: any) => ({
+        ...r,
+        staff_name: r.staff?.full_name || 'Staff'
+      })).reverse();
+
+      const sortedSales = (salesData || []).reverse();
+      setSales(sortedSales as Sale[]);
+      setAttendance(attData as Attendance[]);
+      setDailyReports(mappedReports as DailyReport[]);
+    } catch (err: any) {
+      console.error('Error fetching dashboard data:', err);
+      setDbError(err.message || 'Failed to fetch dashboard data.');
+    }
+  };
+
+  // Run initial setup: check localStorage session
+  useEffect(() => {
+    const initializeSession = async () => {
+      setIsLoading(true);
+      setDbError(null);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user) {
+          const { data: profile } = await supabase
+            .from('staff_profiles')
+            .select('*')
+            .eq('auth_user_id', session.user.id)
+            .maybeSingle();
+
+          if (profile) {
+            let { data: staffRecord } = await supabase
+              .from('staff')
+              .select('*, departments(name), roles(role_name)')
+              .eq('id', profile.id)
+              .maybeSingle();
+
+            let deptName = 'Sales & Growth';
+            let rName = 'Senior Sales Consultant';
+
+            if (staffRecord) {
+              if (staffRecord.departments) {
+                deptName = Array.isArray(staffRecord.departments) 
+                  ? staffRecord.departments[0]?.name 
+                  : staffRecord.departments.name;
+              }
+              if (staffRecord.roles) {
+                rName = Array.isArray(staffRecord.roles) 
+                  ? staffRecord.roles[0]?.role_name 
+                  : staffRecord.roles.role_name;
+              }
+            }
+
+            const activeUser: Staff = {
+              id: staffRecord ? staffRecord.id : profile.id,
+              staff_code: staffRecord ? staffRecord.staff_code : 'TA-STF-99',
+              full_name: profile.full_name,
+              avatar_url: profile.avatar_url || staffRecord?.avatar_url || `https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(profile.full_name)}`,
+              monthly_target_amount: staffRecord ? Number(staffRecord.monthly_target_amount) : 500000,
+              notice_period_days: staffRecord ? staffRecord.notice_period_days : 60,
+              status: (staffRecord?.status as any) || 'ACTIVE',
+              department_name: deptName,
+              role_name: profile.designation || rName,
+              designation: profile.designation,
+              gender: profile.gender,
+              shift_start_time: profile.shift_start_time,
+              shift_end_time: profile.shift_end_time,
+              weekly_off_day: profile.weekly_off_day
+            };
+
+            const isAdmin = profile.designation.toLowerCase().includes('admin') || 
+                            profile.designation.toLowerCase().includes('director') || 
+                            profile.designation.toLowerCase().includes('coordinator') ||
+                            profile.designation.toLowerCase().includes('owner') ||
+                            rName.toLowerCase().includes('admin') ||
+                            rName.toLowerCase().includes('director');
+
+            setActiveStaff(activeUser);
+            setIsAdminMode(isAdmin);
+            localStorage.setItem('tech_ads_active_staff', JSON.stringify(activeUser));
+            localStorage.setItem('tech_ads_is_admin', String(isAdmin));
+            await fetchDashboardData(activeUser.id);
+          } else {
+            setActiveStaff(null);
+            localStorage.removeItem('tech_ads_active_staff');
+            localStorage.removeItem('tech_ads_is_admin');
+          }
+        } else {
+          setActiveStaff(null);
+          localStorage.removeItem('tech_ads_active_staff');
+          localStorage.removeItem('tech_ads_is_admin');
+        }
+      } catch (err: any) {
+        console.error('Database connection / session error:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeSession();
+  }, []);
+
+  // Update today's attendance state whenever attendance array updates
+  useEffect(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayRecord = attendance.find((a) => a.attendance_date === todayStr);
+    setTodayAttendance(todayRecord || null);
+  }, [attendance]);
+
+  const login = async (username: string, pass: string) => {
+    console.log('Incoming Login Attempt:', { username, pass });
+    try {
+      setDbError(null);
+      
+      // 1. Authenticate with Supabase Auth using email (username@agency.com)
+      const email = `${username.trim().toLowerCase()}@agency.com`;
+      const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
+        email,
+        password: pass
+      });
+
+      if (authErr) throw authErr;
+      if (!authData.user) return false;
+
+      // 2. Query staff_profiles table using auth_user_id (now permitted by RLS)
+      const { data: profile, error } = await supabase
+        .from('staff_profiles')
+        .select('*')
+        .eq('auth_user_id', authData.user.id)
+        .maybeSingle();
+
+      console.log('Supabase profile query result:', { profile, error });
+
+      if (error) throw error;
+      if (!profile) return false;
+
+      // Find matching staff record in general 'staff' table
+      let { data: staffRecord } = await supabase
+        .from('staff')
+        .select('*, departments(name), roles(role_name)')
+        .eq('id', profile.id)
+        .maybeSingle();
+
+      if (!staffRecord) {
+        // Automatically insert a matching staff row to satisfy foreign keys!
+        const { data: newStaffRow, error: insertStaffErr } = await supabase
+          .from('staff')
+          .insert({
+            id: profile.id, // Keep IDs identical!
+            staff_code: 'TA-STF-' + Math.floor(10 + Math.random() * 90),
+            full_name: profile.full_name,
+            department_id: '9c6d4234-7513-4b65-9c65-60bdde04220b', // Default department
+            role_id: '3a7667c8-2ea5-41f6-bd3d-6ba129582b00', // Default role
+            status: 'ACTIVE'
+          })
+          .select('*, departments(name), roles(role_name)')
+          .maybeSingle();
+
+        if (!insertStaffErr && newStaffRow) {
+          staffRecord = newStaffRow;
+        } else {
+          const { data: retryRow } = await supabase
+            .from('staff')
+            .select('*, departments(name), roles(role_name)')
+            .eq('full_name', profile.full_name)
+            .maybeSingle();
+          if (retryRow) staffRecord = retryRow;
+        }
+      }
+
+      let deptName = 'Sales & Growth';
+      let rName = 'Senior Sales Consultant';
+
+      if (staffRecord) {
+        if (staffRecord.departments) {
+          deptName = Array.isArray(staffRecord.departments) 
+            ? staffRecord.departments[0]?.name 
+            : staffRecord.departments.name;
+        }
+        if (staffRecord.roles) {
+          rName = Array.isArray(staffRecord.roles) 
+            ? staffRecord.roles[0]?.role_name 
+            : staffRecord.roles.role_name;
+        }
+      }
+
+      const activeUser: Staff = {
+        id: staffRecord ? staffRecord.id : profile.id,
+        staff_code: staffRecord ? staffRecord.staff_code : 'TA-STF-99',
+        full_name: profile.full_name,
+        avatar_url: profile.avatar_url || staffRecord?.avatar_url || `https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(profile.full_name)}`,
+        monthly_target_amount: staffRecord ? Number(staffRecord.monthly_target_amount) : 500000,
+        notice_period_days: staffRecord ? staffRecord.notice_period_days : 60,
+        status: (staffRecord?.status as any) || 'ACTIVE',
+        department_name: deptName,
+        role_name: profile.designation || rName,
+        designation: profile.designation,
+        gender: profile.gender,
+        shift_start_time: profile.shift_start_time,
+        shift_end_time: profile.shift_end_time,
+        weekly_off_day: profile.weekly_off_day
+      };
+
+      const isAdmin = profile.designation.toLowerCase().includes('admin') || 
+                      profile.designation.toLowerCase().includes('director') || 
+                      profile.designation.toLowerCase().includes('coordinator') ||
+                      profile.designation.toLowerCase().includes('owner') ||
+                      rName.toLowerCase().includes('admin') ||
+                      rName.toLowerCase().includes('director') ||
+                      rName.toLowerCase().includes('owner');
+
+      setActiveStaff(activeUser);
+      setIsAdminMode(isAdmin);
+
+      localStorage.setItem('tech_ads_active_staff', JSON.stringify(activeUser));
+      localStorage.setItem('tech_ads_is_admin', String(isAdmin));
+
+      await fetchDashboardData(activeUser.id);
+      return true;
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setDbError(err.message || 'Verification error.');
+      return false;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("Supabase auth signout error:", e);
+    }
+    setActiveStaff(null);
+    localStorage.removeItem('tech_ads_active_staff');
+    localStorage.removeItem('tech_ads_is_admin');
+  };
+
+  const updateAvatar = async (avatarUrl: string) => {
+    if (!activeStaff) return;
+    try {
+      // 1. Update in staff table
+      const { error: staffErr } = await supabase
+        .from('staff')
+        .update({ avatar_url: avatarUrl })
+        .eq('full_name', activeStaff.full_name);
+
+      if (staffErr) throw staffErr;
+
+      // 3. Update state
+      const updatedUser = { ...activeStaff, avatar_url: avatarUrl };
+      setActiveStaff(updatedUser);
+      localStorage.setItem('tech_ads_active_staff', JSON.stringify(updatedUser));
+    } catch (err: any) {
+      console.error('Avatar update failed:', err);
+      alert('Avatar update failed: ' + err.message);
+    }
+  };
+
+  const addSale = async (saleData: {
+    clientName: string;
+    servicePackage: string;
+    paymentType: 'Full' | 'Advance' | 'Clearance';
+    packageAmount: number;
+    receivedAmount: number;
+    paymentMethod?: string;
+    paymentProofUrl?: string;
+    workDescription?: string;
+  }) => {
+    if (!activeStaff) return;
+    const balance = saleData.packageAmount - saleData.receivedAmount;
+
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const now = new Date();
+    const currentMonthStr = `${months[now.getMonth()]} ${now.getFullYear()}`;
+
+    const { error } = await supabase
+      .from('sales')
+      .insert({
+        staff_id: activeStaff.id,
+        client_name: saleData.clientName,
+        service_package: saleData.servicePackage,
+        payment_type: saleData.paymentType,
+        package_amount: saleData.packageAmount,
+        received_amount: saleData.receivedAmount,
+        balance_amount: balance >= 0 ? balance : 0,
+        sale_month: currentMonthStr,
+        payment_method: saleData.paymentMethod || null,
+        payment_proof_url: saleData.paymentProofUrl || null,
+        work_description: saleData.workDescription || null
+      });
+
+    if (error) {
+      console.error('Error inserting sale:', error);
+      throw error;
+    }
+
+    await fetchDashboardData(activeStaff.id);
+  };
+
+  const addDailyReport = async (reportData: {
+    workType: string;
+    description: string;
+    reportDate?: string;
+    postersCount?: number;
+    reEditsCount?: number;
+    logosCount?: number;
+    othersCount?: number;
+    adsPlacedCount?: number;
+    workCategory?: string;
+    clientName?: string;
+    videosCount?: number;
+    travelExpense?: number;
+  }) => {
+    if (!activeStaff) return;
+    const rDate = reportData.reportDate || new Date().toISOString().substring(0, 10);
+    const { error } = await supabase
+      .from('daily_reports')
+      .insert({
+        staff_id: activeStaff.id,
+        work_type: reportData.workType,
+        description: reportData.description,
+        report_date: rDate,
+        posters_count: reportData.postersCount || 0,
+        re_edits_count: reportData.reEditsCount || 0,
+        logos_count: reportData.logosCount || 0,
+        others_count: reportData.othersCount || 0,
+        ads_placed_count: reportData.adsPlacedCount || 0,
+        work_category: reportData.workCategory || null,
+        client_name: reportData.clientName || null,
+        videos_count: reportData.videosCount || 0,
+        travel_expense: reportData.travelExpense || 0
+      });
+
+    if (error) {
+      console.error('Error inserting daily report:', error);
+      throw error;
+    }
+
+    await fetchDashboardData(activeStaff.id);
+  };
+
+  const punchIn = async (selfieUrl?: string, lat?: number, lng?: number, status?: string) => {
+    if (!activeStaff) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
+
+    if (todayAttendance) return;
+
+    const { data: newAtt, error } = await supabase
+      .from('attendance')
+      .insert({
+        staff_id: activeStaff.id,
+        attendance_date: todayStr,
+        punch_in: timeStr,
+        selfie_url: selfieUrl || activeStaff.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256&auto=format&fit=crop',
+        lat: lat || 10.9345771,
+        lng: lng || 76.0016118,
+        status: status || 'PRESENT'
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error punching in:', error);
+      throw error;
+    }
+
+    if (newAtt) {
+      setAttendance((prev) => [newAtt as Attendance, ...prev]);
+    }
+    await fetchDashboardData(activeStaff.id);
+  };
+
+  const punchOut = async (status?: string) => {
+    if (!activeStaff || !todayAttendance) return;
+    const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
+
+    const updatePayload: any = {
+      punch_out: timeStr
+    };
+    if (status) {
+      updatePayload.status = status;
+    }
+
+    const { data: updatedAtt, error } = await supabase
+      .from('attendance')
+      .update(updatePayload)
+      .eq('id', todayAttendance.id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error punching out:', error);
+      throw error;
+    }
+
+    if (updatedAtt) {
+      setAttendance((prev) =>
+        prev.map((item) => (item.id === updatedAtt.id ? (updatedAtt as Attendance) : item))
+      );
+    }
+    await fetchDashboardData(activeStaff.id);
+  };
+
+  return (
+    <AppContext.Provider
+      value={{
+        activeStaff,
+        sales,
+        attendance,
+        dailyReports,
+        selectedMonth,
+        setSelectedMonth,
+        addSale,
+        addDailyReport,
+        punchIn,
+        punchOut,
+        todayAttendance,
+        isLoading,
+        dbError,
+        activeTab,
+        setActiveTab,
+        isAdminMode,
+        setIsAdminMode,
+        login,
+        logout,
+        updateAvatar,
+        fetchDashboardData
+      }}
+    >
+      {children}
+    </AppContext.Provider>
+  );
+};
+
+export const useApp = () => {
+  const context = useContext(AppContext);
+  if (!context) {
+    throw new Error('useApp must be used within an AppProvider');
+  }
+  return context;
+};

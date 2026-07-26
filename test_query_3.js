@@ -1,0 +1,1 @@
+﻿import { createClient } from @supabase/supabase-js; const supabase = createClient(https://oxlcmtytydtudsdjsixh.supabase.co, sb_publishable_2ojRmy5ZwCsaGn9chslteg_JDFzr6ot); async function run() { const {data} = await supabase.from(staff_profiles).select(*); console.log(data); } run();
