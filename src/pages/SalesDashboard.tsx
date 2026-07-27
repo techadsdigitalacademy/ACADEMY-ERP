@@ -2306,7 +2306,7 @@ export const SalesDashboard: React.FC = () => {
                     )}
 
                   </div>
-                  <div className="space-y-3 mt-4">
+                  <div className="hidden">
                     {isOwner && (
                       <div className="flex p-1 bg-slate-900/50 rounded-xl border border-white/5 w-full sm:w-auto shrink-0 mb-4 sm:mb-0">
                         {['All Sales', 'My Sales']?.map((filter) => (
@@ -2326,7 +2326,7 @@ export const SalesDashboard: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="overflow-x-auto rounded-2xl border border-white/5 bg-slate-950/20">
+                  <div className="hidden">
                               <table className="w-full text-left border-collapse text-xs">
                                 <thead>
                                   <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
@@ -2624,7 +2624,7 @@ export const SalesDashboard: React.FC = () => {
                     const salesTeam = staffProfiles?.filter(p => p.designation === 'Sales Executive');
                     const creativeTeam = staffProfiles?.filter(p => p.designation !== 'Sales Executive');
                     return (
-                      <div className="space-y-6">
+                      <div className="hidden">
                         <div className="flex items-center justify-between">
                           <h2 className="text-base md:text-lg font-extrabold text-white flex items-center gap-2">
                             <Star className="w-5 h-5 text-indigo-400" />
@@ -3179,7 +3179,7 @@ export const SalesDashboard: React.FC = () => {
           )}
 
           {/* EXPENSE HISTORY TAB MODULE */}
-                    {activeTab === 'history' && (
+                    {activeTab === 'history' && isOwner && (
             <section className="space-y-6 pt-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
