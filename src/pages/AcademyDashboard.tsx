@@ -262,7 +262,7 @@ export const AcademyDashboard: React.FC = () => {
               <Users className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-white">{students.filter(s => s.status === 'Active').length}</div>
+          <div className="text-2xl font-black text-white">{students?.filter(s => s.status === 'Active').length}</div>
         </Card>
 
         <Card variant="glass" className="p-4 border-purple-500/20 bg-purple-500/5">

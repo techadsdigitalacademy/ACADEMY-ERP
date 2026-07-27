@@ -150,7 +150,7 @@ export const StaffManagement: React.FC = () => {
         });
       }
 
-      const mergedProfs = (profs || []).map(p => ({
+      const mergedProfs = (profs || [])?.map(p => ({
         ...p,
         avatar_url: avatarMap.get(p.full_name) || undefined
       }));
@@ -484,7 +484,7 @@ export const StaffManagement: React.FC = () => {
   };
 
   // Filter profiles
-  const filteredProfiles = profiles.filter(p => 
+  const filteredProfiles = profiles?.filter(p => 
     p.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.designation.toLowerCase().includes(searchQuery.toLowerCase()) ||
     p.username.toLowerCase().includes(searchQuery.toLowerCase())
@@ -587,7 +587,7 @@ export const StaffManagement: React.FC = () => {
                   Registered Holidays Calendar
                 </h3>
                 <div className="flex flex-wrap gap-2.5 max-h-40 overflow-y-auto pr-1 scrollbar-none">
-                  {holidays.map(h => (
+                  {holidays?.map(h => (
                     <div key={h.id} className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs flex items-center gap-2">
                       <div>
                         <span className="font-bold text-amber-300 block">{h.holiday_name}</span>
@@ -775,7 +775,7 @@ export const StaffManagement: React.FC = () => {
                       Syncing team list from Supabase...
                     </div>
                   ) : filteredProfiles.length > 0 ? (
-                    filteredProfiles.map(profile => (
+                    filteredProfiles?.map(profile => (
                       <div 
                         key={profile.id} 
                         onClick={() => handleSelectProfile(profile)}
@@ -910,7 +910,7 @@ export const StaffManagement: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 text-slate-300">
-                      {profileSales.map(sale => {
+                      {profileSales?.map(sale => {
                         const dateText = sale.created_at ? sale.created_at.split('T')[0] : 'Log';
                         return (
                           <tr key={sale.id} className="hover:bg-slate-900/10">
@@ -994,7 +994,7 @@ export const StaffManagement: React.FC = () => {
                         {/* TAB CONTENT: DAILY REPORTS */}
             {detailTab === 'reports' && (
               <div className="space-y-4">
-                {profileReports && profileReports.length > 0 ? profileReports.map((report: any) => (
+                {profileReports && profileReports.length > 0 ? profileReports?.map((report: any) => (
                   <div key={report.id} className="p-4 bg-slate-900/50 border border-white/5 rounded-xl space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="text-xs font-bold text-white">

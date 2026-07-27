@@ -2722,6 +2722,16 @@ export const SalesDashboard: React.FC = () => {
                     );
                   })()}
 
+
+
+
+
+
+          </>
+        )}
+
+          {activeTab === 'history' && (
+            <div className="space-y-6 pt-2">
               {isCreativeRole && (
                 /* CREATIVE / MARKETING MODE - DAILY REPORTS LOGGING & HISTORY */
                 <div className="space-y-6">
@@ -3165,12 +3175,8 @@ export const SalesDashboard: React.FC = () => {
                 
                 </div>
               )}
-
-
-
-
-          </>
-        )}
+            </div>
+          )}
 
           {/* EXPENSE HISTORY TAB MODULE */}
                     {activeTab === 'history' && (
@@ -3200,7 +3206,7 @@ export const SalesDashboard: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
-                    {computedMonthSales.length > 0 ? computedMonthSales.map((sale: any) => (
+                    {computedMonthSales.length > 0 ? computedMonthSales?.map((sale: any) => (
                       <tr key={sale.id} className="hover:bg-slate-900/10">
                         <td className="py-3 px-4">
                           {new Date(sale.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
