@@ -21,7 +21,7 @@ function DashboardContainer() {
   const isCounselor = activeStaff?.designation?.toLowerCase().includes('counselor') || false;
   
   if (activeTab === 'assets') return <AssetLibrary />;
-  if (activeTab === 'sales' || activeTab === 'history' || activeTab === 'expense_history' || activeTab === 'reports') return <SalesDashboard />;
+  if (activeTab === 'sales' || activeTab === 'history' || activeTab === 'staff-history' || activeTab === 'expense_history' || activeTab === 'reports') return <SalesDashboard />;
   if (activeTab === 'attendance') return (isAdminMode || isOwner) ? <AdminAttendance /> : <SalesDashboard />;
   if (activeTab.startsWith('academy')) return (isAdminMode || isTutor || isCounselor) ? <AcademyDashboard /> : <SalesDashboard />;
   if (activeTab === 'staff') return (isAdminMode || isOwner) ? <StaffManagement /> : <SalesDashboard />;

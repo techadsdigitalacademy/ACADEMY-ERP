@@ -38,8 +38,8 @@ interface AppContextType {
   todayAttendance: Attendance | null;
   isLoading: boolean;
   dbError: string | null;
-  activeTab: 'sales' | 'attendance' | 'leads' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets';
-  setActiveTab: (tab: 'sales' | 'attendance' | 'leads' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets') => void;
+  activeTab: 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets';
+  setActiveTab: (tab: 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets') => void;
   isAdminMode: boolean;
   setIsAdminMode: (mode: boolean) => void;
   login: (username: string, pass: string) => Promise<boolean>;
@@ -59,7 +59,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [todayAttendance, setTodayAttendance] = useState<Attendance | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'sales' | 'attendance' | 'leads' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets'>('sales');
+  const [activeTab, setActiveTab] = useState<'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets'>('sales');
   const [isAdminMode, setIsAdminMode] = useState<boolean>(false);
 
   // Fetch sales and attendance for a specific staff member

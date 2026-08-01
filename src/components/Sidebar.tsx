@@ -73,8 +73,8 @@ export const Sidebar: React.FC = () => {
             </button>
 
             <button 
-              onClick={() => setActiveTab('history')}
-              className={`flex items-center gap-3 w-full px-3.5 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${activeTab === 'history' ? 'text-indigo-400 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+              onClick={() => setActiveTab(isAdminView && !isOwner ? 'staff-history' : 'history')}
+              className={`flex items-center gap-3 w-full px-3.5 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${activeTab === 'history' || activeTab === 'staff-history' ? 'text-indigo-400 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
             >
               {isCreativeRole ? (
                 <>

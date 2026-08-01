@@ -5,11 +5,10 @@ import { Card } from '../components/Card';
 import { StaffDrilldownModal } from '../components/StaffDrilldownModal';
 import { NoticeBoardAdminModal } from '../components/NoticeBoardAdminModal';
 import { Megaphone } from 'lucide-react';
+import StaffProfileDrawer from '../components/StaffProfileDrawer';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
-import { AttendanceDashboard } from '../components/AttendanceDashboard';
 import { supabase, supabaseAdmin } from '../services/supabase';
-import { formatCurrency } from '../services/mockData';
 import { 
    
   Search, 
@@ -30,38 +29,13 @@ Star,
   Key,
 } from 'lucide-react';
 
-interface StaffProfile {
-  id: string;
-  auth_user_id?: string;
-  avatar_url?: string;
-  full_name: string;
-  designation: string;
-  username: string;
-  gender: string;
-  shift_start_time: string;
-  shift_end_time: string;
-  weekly_off_day: string;
-  created_at: string;
-}
+import type { StaffProfile } from '../types';
 
 interface Holiday {
   id: string;
-  holiday_date: string;
   holiday_name: string;
+  holiday_date: string;
   created_at: string;
-}
-
-interface StaffSale {
-  id: string;
-  client_name: string;
-  service_package: string;
-  payment_type: 'Full' | 'Advance' | 'Clearance';
-  package_amount: number;
-  received_amount: number;
-  balance_amount: number;
-  payment_method?: string;
-  created_at: string;
-  staff_id: string;
 }
 
 
@@ -112,17 +86,8 @@ export const StaffManagement: React.FC = () => {
 
   // Detailed Profile Overlay state
   const [selectedProfile, setSelectedProfile] = useState<StaffProfile | null>(null);
-  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
-  const [profileSales, setProfileSales] = useState<StaffSale[]>([]);
-  const [profileReports, setProfileReports] = useState<any[]>([]);
-  const [detailTab, setDetailTab] = useState<'sales' | 'attendance' | 'reports'>('sales');
 
   // Edit Sale overlay in detail view
-  const [editingSale, setEditingSale] = useState<StaffSale | null>(null);
-  const [editClientName, setEditClientName] = useState('');
-  const [editPackageAmt, setEditPackageAmt] = useState('');
-  const [editRecAmt, setEditRecAmt] = useState('');
-  const [isUpdatingSale, setIsUpdatingSale] = useState(false);
 
   // Fetch all profiles, holidays
   const loadInitialData = async () => {
@@ -181,45 +146,10 @@ export const StaffManagement: React.FC = () => {
   }, []);
 
   // Fetch detailed info for clicked profile
-  const fetchProfileDetails = async (profile: StaffProfile) => {
-    try {
-      // Find matching staff record in 'staff' table by full name to link sales & check-ins
-      const { data: staffRecord } = await supabase
-        .from('staff')
-        .select('id')
-        .eq('full_name', profile.full_name)
-        .maybeSingle();
-
-      const targetStaffId = staffRecord ? staffRecord.id : profile.id;
-      setSelectedStaffId(targetStaffId);
-
-      // 1. Fetch sales
-              const { data: saleData } = await supabase
-          .from('sales')
-          .select('*')
-          .eq('staff_id', targetStaffId)
-          .order('created_at', { ascending: false });
-        
-        const { data: reportData } = await supabase
-          .from('daily_reports')
-          .select('*')
-          .eq('staff_id', targetStaffId)
-          .order('report_date', { ascending: false });
-          
-        setProfileSales((saleData as StaffSale[]) || []);
-        setProfileReports(reportData || []);
-
-    } catch (err) {
-      console.error('Error fetching detailed logs:', err);
-    }
-  };
+  
 
   const handleSelectProfile = (profile: StaffProfile) => {
     setSelectedProfile(profile);
-    setSelectedStaffId(null);
-    setDetailTab('sales');
-    setProfileSales([]);
-    fetchProfileDetails(profile);
   };
 
   // Add new profile
@@ -442,36 +372,7 @@ export const StaffManagement: React.FC = () => {
   };
 
   // Admin update specific sale in detailed history
-  const handleUpdateSale = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingSale || !editClientName.trim()) return;
-
-    setIsUpdatingSale(true);
-    try {
-      const pAmt = Number(editPackageAmt);
-      const rAmt = Number(editRecAmt);
-      const bAmt = Math.max(0, pAmt - rAmt);
-
-      const { error } = await supabase
-        .from('sales')
-        .update({
-          client_name: editClientName.trim(),
-          package_amount: pAmt,
-          received_amount: rAmt,
-          balance_amount: bAmt
-        })
-        .eq('id', editingSale.id);
-
-      if (error) throw error;
-
-      setEditingSale(null);
-      if (selectedProfile) fetchProfileDetails(selectedProfile);
-    } catch (err: any) {
-      alert('Failed to update sale record: ' + err.message);
-    } finally {
-      setIsUpdatingSale(false);
-    }
-  };
+  
 
 
 
@@ -845,208 +746,7 @@ export const StaffManagement: React.FC = () => {
       </div>
 
       {/* DETAILED STAFF PROFILE MODAL/OVERLAY */}
-      {selectedProfile && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto animate-fade-in">
-          <Card variant="solid" className="w-full max-w-2xl p-6 bg-slate-900 border border-slate-800 relative animate-scale-up max-h-[90vh] overflow-y-auto">
-            <button 
-              onClick={() => setSelectedProfile(null)}
-              className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            <div className="flex gap-4 items-center border-b border-white/5 pb-4 mb-4">
-                <img 
-                  src={selectedProfile.avatar_url || getAvatarUrl(selectedProfile.full_name, selectedProfile.gender)} 
-                  alt={selectedProfile.full_name} 
-                  className="w-16 h-16 rounded-3xl object-cover bg-slate-900 border-2 border-slate-800" 
-                />
-              <div>
-                <h3 className="font-bold text-white text-base leading-tight">{selectedProfile.full_name}</h3>
-                <p className="text-xs text-indigo-400 font-semibold mt-0.5">{selectedProfile.designation}</p>
-                <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-1">
-                  <span>Shift: {selectedProfile.shift_start_time.substring(0, 5)} - {selectedProfile.shift_end_time.substring(0, 5)}</span>
-                  <span>Off: {selectedProfile.weekly_off_day}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Detailed Sub-tabs selectors */}
-            <div className="flex gap-2.5 border-b border-white/5 pb-3.5 mb-4">
-              <button
-                onClick={() => setDetailTab('sales')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors border ${detailTab === 'sales' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-950 border-white/5 text-slate-400'}`}
-              >
-                Sales History Log
-              </button>
-                            <button
-                onClick={() => setDetailTab('attendance')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors border ${detailTab === 'attendance' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-950 border-white/5 text-slate-400'}`}
-              >
-                Attendance
-              </button>
-              <button
-                onClick={() => setDetailTab('reports')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors border ${detailTab === 'reports' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-950 border-white/5 text-slate-400'}`}
-              >
-                Daily Reports
-              </button>
-            </div>
-
-            {/* TAB CONTENT: SALES HISTORY LOG */}
-            {detailTab === 'sales' && (
-              <div className="space-y-4">
-                <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/30">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase">
-                        <th className="py-2.5 px-3">Date</th>
-                        <th className="py-2.5 px-3">Client Company</th>
-                        <th className="py-2.5 px-3">Service Package</th>
-                        <th className="py-2.5 px-3 text-right">Package Cost</th>
-                        <th className="py-2.5 px-3 text-right">Cash Received</th>
-                        <th className="py-2.5 px-3 text-right">Balance</th>
-                        <th className="py-2.5 px-3 text-center">Edit</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5 text-slate-300">
-                      {profileSales?.map(sale => {
-                        const dateText = sale.created_at ? sale.created_at.split('T')[0] : 'Log';
-                        return (
-                          <tr key={sale.id} className="hover:bg-slate-900/10">
-                            <td className="py-2.5 px-3 text-slate-500">{dateText}</td>
-                            <td className="py-2.5 px-3 font-bold text-white truncate max-w-[120px]">{sale.client_name}</td>
-                            <td className="py-2.5 px-3 text-slate-400 truncate max-w-[120px]">{sale.service_package}</td>
-                            <td className="py-2.5 px-3 text-right">{formatCurrency(sale.package_amount)}</td>
-                            <td className="py-2.5 px-3 text-right text-emerald-400">{formatCurrency(sale.received_amount)}</td>
-                            <td className="py-2.5 px-3 text-right text-amber-500">{formatCurrency(sale.balance_amount)}</td>
-                            <td className="py-2.5 px-3 text-center">
-                              <button
-                                onClick={() => {
-                                  setEditingSale(sale);
-                                  setEditClientName(sale.client_name);
-                                  setEditPackageAmt(sale.package_amount.toString());
-                                  setEditRecAmt(sale.received_amount.toString());
-                                }}
-                                className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-400 transition-colors"
-                              >
-                                <Edit2 className="w-3 h-3" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {profileSales.length === 0 && (
-                        <tr>
-                          <td colSpan={7} className="text-center py-8 text-slate-500 font-semibold">
-                            No sales records linked to this member this month.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* EDIT SALE FORM */}
-                {editingSale && (
-                  <form onSubmit={handleUpdateSale} className="p-4 rounded-xl bg-slate-950/70 border border-indigo-500/20 grid grid-cols-3 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-400 uppercase">Client Name</label>
-                      <input 
-                        type="text" 
-                        required
-                        value={editClientName}
-                        onChange={(e) => setEditClientName(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-400 uppercase">Package Price (₹)</label>
-                      <input 
-                        type="number" 
-                        required
-                        value={editPackageAmt}
-                        onChange={(e) => setEditPackageAmt(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-400 uppercase">Received Price (₹)</label>
-                      <input 
-                        type="number" 
-                        required
-                        value={editRecAmt}
-                        onChange={(e) => setEditRecAmt(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
-                      />
-                    </div>
-                    <div className="col-span-3 flex justify-end gap-2.5 mt-1 border-t border-white/5 pt-2">
-                      <Button variant="secondary" size="sm" onClick={() => setEditingSale(null)}>Cancel</Button>
-                      <Button type="submit" variant="primary" size="sm" disabled={isUpdatingSale}>
-                        {isUpdatingSale ? 'Saving...' : 'Save Transaction'}
-                      </Button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            )}
-
-                        {/* TAB CONTENT: DAILY REPORTS */}
-            {detailTab === 'reports' && (
-              <div className="space-y-4">
-                {profileReports && profileReports.length > 0 ? profileReports?.map((report: any) => (
-                  <div key={report.id} className="p-4 bg-slate-900/50 border border-white/5 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-bold text-white">
-                        {new Date(report.report_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </div>
-                      <Badge variant="info">{report.work_type}</Badge>
-                    </div>
-                    {report.description && (
-                      <p className="text-sm text-slate-300">{report.description}</p>
-                    )}
-                    {(report.posters_count > 0 || report.re_edits_count > 0 || report.logos_count > 0 || report.ads_placed_count > 0 || report.videos_count > 0) && (
-                      <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
-                        {report.posters_count > 0 && <Badge variant="info">Posters: {report.posters_count}</Badge>}
-                        {report.re_edits_count > 0 && <Badge variant="info">Re-edits: {report.re_edits_count}</Badge>}
-                        {report.logos_count > 0 && <Badge variant="info">Logos: {report.logos_count}</Badge>}
-                        {report.ads_placed_count > 0 && <Badge variant="info">Ads Placed: {report.ads_placed_count}</Badge>}
-                        {report.videos_count > 0 && <Badge variant="info">Videos: {report.videos_count}</Badge>}
-                        {report.others_count > 0 && <Badge variant="info">Others: {report.others_count}</Badge>}
-                      </div>
-                    )}
-                  </div>
-                )) : (
-                  <div className="text-center py-8 text-slate-500 font-bold text-xs">No daily reports logged.</div>
-                )}
-              </div>
-            )}
-            
-            {/* TAB CONTENT: ATTENDANCE RECORDS */}
-            {detailTab === 'attendance' && (
-              <AttendanceDashboard 
-                staffId={selectedStaffId || selectedProfile.id}
-                fullName={selectedProfile.full_name}
-                designation={selectedProfile.designation}
-                gender={selectedProfile.gender}
-                avatarUrl={null}
-                isAdmin={true}
-                onOverrideSuccess={() => {}}
-              />
-            )}
-
-            <div className="mt-6 pt-2 border-t border-slate-800">
-              <Button 
-                variant="secondary" 
-                fullWidth 
-                onClick={() => setSelectedProfile(null)}
-              >
-                Close Profile Drawer
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
+      <StaffProfileDrawer profile={selectedProfile} onClose={() => setSelectedProfile(null)} />
 
       {/* EDIT STAFF PROFILE MODAL */}
       {isEditModalOpen && editingProfile && (
