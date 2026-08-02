@@ -174,7 +174,7 @@ export const SalesDashboard: React.FC = () => {
     if (isAdminView && (activeTab === 'sales' || activeTab === 'staff-history')) {
       const fetchTodayAttendanceSummary = async () => {
         try {
-          const todayStr = new Date().toISOString().split('T')[0];
+          const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
           const { data } = await supabase
             .from('attendance')
             .select('status')
@@ -314,36 +314,48 @@ export const SalesDashboard: React.FC = () => {
     const fetchTodayClosingData = async () => {
       setTodaySummary(prev => ({ ...prev, loading: true }));
       try {
-        const todayStr = new Date().toISOString().split('T')[0];
+        const localTodayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
         // 1. Fetch today's agency sales
         const { data: salesData, error: salesErr } = await supabase
           .from('sales')
-          .select('received_amount')
-          .gte('created_at', `${todayStr}T00:00:00`)
-          .lte('created_at', `${todayStr}T23:59:59.999`);
+          .select('received_amount, created_at')
+          .order('created_at', { ascending: false })
+          .limit(300);
 
         let agencySalesAmount = 0;
         let agencySalesCount = 0;
 
         if (!salesErr && salesData) {
-          agencySalesCount = salesData.length;
-          agencySalesAmount = salesData.reduce((sum, item) => sum + Number(item.received_amount || 0), 0);
+          const todaySales = salesData.filter(s => {
+            if (!s.created_at) return false;
+            const saleLocalDate = new Date(s.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            return saleLocalDate === localTodayStr;
+          });
+
+          agencySalesCount = todaySales.length;
+          agencySalesAmount = todaySales.reduce((sum, item) => sum + Number(item.received_amount || 0), 0);
         }
 
         // 2. Fetch today's academy payments
         const { data: feesData, error: feesErr } = await supabase
           .from('academy_installments')
-          .select('amount_paid')
-          .gte('created_at', `${todayStr}T00:00:00`)
-          .lte('created_at', `${todayStr}T23:59:59.999`);
+          .select('amount_paid, created_at')
+          .order('created_at', { ascending: false })
+          .limit(300);
 
         let academyFeesAmount = 0;
         let academyFeesCount = 0;
 
         if (!feesErr && feesData) {
-          academyFeesCount = feesData.length;
-          academyFeesAmount = feesData.reduce((sum, item) => sum + Number(item.amount_paid || 0), 0);
+          const todayFees = feesData.filter(f => {
+            if (!f.created_at) return false;
+            const feeLocalDate = new Date(f.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            return feeLocalDate === localTodayStr;
+          });
+
+          academyFeesCount = todayFees.length;
+          academyFeesAmount = todayFees.reduce((sum, item) => sum + Number(item.amount_paid || 0), 0);
         }
 
         setTodaySummary({

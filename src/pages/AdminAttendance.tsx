@@ -163,7 +163,7 @@ export const AdminAttendance: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
       // 1. Fetch all staff members from Supabase
       const { data: staffData, error: staffErr } = await supabase
@@ -247,7 +247,7 @@ export const AdminAttendance: React.FC = () => {
   }, []);
 
   // Compute metrics
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const totalStaffCount = staffList.length;
   
   const todayAttLogs = attendanceList.filter(a => a.attendance_date === todayStr);

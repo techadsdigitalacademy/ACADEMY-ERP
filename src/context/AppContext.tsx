@@ -92,7 +92,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Fetch sales from Supabase
       let salesQuery = supabase
         .from('sales')
-        .select('*, staff(full_name, avatar_url)');
+        .select('*, staff(full_name, avatar_url)')
+        .order('created_at', { ascending: false });
 
       if (!isAdminUser) {
         salesQuery = salesQuery.eq('staff_id', staffId);
@@ -225,7 +226,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Update today's attendance state whenever attendance array updates
   useEffect(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const todayRecord = attendance.find((a) => a.attendance_date === todayStr);
     setTodayAttendance(todayRecord || null);
   }, [attendance]);
@@ -389,33 +390,70 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     paymentMethod?: string;
     paymentProofUrl?: string;
     workDescription?: string;
+    utrNumber?: string;
+    date?: string;
+    saleDate?: string;
   }) => {
     if (!activeStaff) return;
     const balance = saleData.packageAmount - saleData.receivedAmount;
 
+    const currentISTDate = saleData.date || saleData.saleDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const timeIST = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' });
+    const istTimestamp = `${currentISTDate}T${timeIST}+05:30`;
+
+    const [year, monthVal] = currentISTDate.split('-').map(Number);
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    const now = new Date();
-    const currentMonthStr = `${months[now.getMonth()]} ${now.getFullYear()}`;
+    const currentMonthStr = `${months[monthVal - 1]} ${year}`;
+
+    // Append UTR / Txn Ref tag to work_description to guarantee permanence in Postgres DB
+    let combinedDescription = saleData.workDescription || null;
+    if (saleData.utrNumber && saleData.utrNumber.trim()) {
+      const refVal = saleData.utrNumber.trim();
+      const utrTag = `Txn Ref: ${refVal}`;
+      combinedDescription = combinedDescription ? `${combinedDescription} (${utrTag})` : utrTag;
+    }
+
+    const payload: any = {
+      staff_id: activeStaff.id,
+      client_name: saleData.clientName,
+      service_package: saleData.servicePackage,
+      payment_type: saleData.paymentType,
+      package_amount: saleData.packageAmount,
+      received_amount: saleData.receivedAmount,
+      balance_amount: balance >= 0 ? balance : 0,
+      sale_month: currentMonthStr,
+      payment_method: saleData.paymentMethod || null,
+      payment_proof_url: saleData.paymentProofUrl || null,
+      work_description: combinedDescription,
+      utr_number: saleData.utrNumber || null,
+      utr: saleData.utrNumber || null,
+      transaction_id: saleData.utrNumber || null,
+      payment_ref: saleData.utrNumber || null,
+      created_at: istTimestamp,
+      date: currentISTDate,
+      sale_date: currentISTDate
+    };
 
     const { error } = await supabase
       .from('sales')
-      .insert({
-        staff_id: activeStaff.id,
-        client_name: saleData.clientName,
-        service_package: saleData.servicePackage,
-        payment_type: saleData.paymentType,
-        package_amount: saleData.packageAmount,
-        received_amount: saleData.receivedAmount,
-        balance_amount: balance >= 0 ? balance : 0,
-        sale_month: currentMonthStr,
-        payment_method: saleData.paymentMethod || null,
-        payment_proof_url: saleData.paymentProofUrl || null,
-        work_description: saleData.workDescription || null
-      });
+      .insert(payload);
 
     if (error) {
-      console.error('Error inserting sale:', error);
-      throw error;
+      delete payload.date;
+      delete payload.sale_date;
+      delete payload.utr;
+      delete payload.transaction_id;
+      delete payload.payment_ref;
+      const { error: fallbackErr } = await supabase.from('sales').insert(payload);
+      if (fallbackErr) {
+        delete payload.utr_number;
+        payload.created_at = `${currentISTDate} ${timeIST}`;
+        const { error: finalErr } = await supabase.from('sales').insert(payload);
+        if (finalErr) {
+          console.error('Error inserting sale:', finalErr);
+          throw finalErr;
+        }
+      }
     }
 
     await fetchDashboardData(activeStaff.id);
@@ -436,7 +474,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     travelExpense?: number;
   }) => {
     if (!activeStaff) return;
-    const rDate = reportData.reportDate || new Date().toISOString().substring(0, 10);
+    const rDate = reportData.reportDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const { error } = await supabase
       .from('daily_reports')
       .insert({
@@ -465,7 +503,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const punchIn = async (selfieUrl?: string, lat?: number, lng?: number, status?: string) => {
     if (!activeStaff) return;
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
 
     if (todayAttendance) return;

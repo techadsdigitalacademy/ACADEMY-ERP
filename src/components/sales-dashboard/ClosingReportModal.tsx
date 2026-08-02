@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabase';
 import { Card } from '../Card';
 import { Button } from '../Button';
-import { X, Download } from 'lucide-react';
+import { Badge } from '../Badge';
+import { X, Download, Eye } from 'lucide-react';
 import { formatCurrency } from '../../services/mockData';
 
 interface ClosingReportModalProps {
@@ -19,42 +20,60 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
     loading: false
   });
 
+  const [todaySalesLogs, setTodaySalesLogs] = useState<any[]>([]);
+  const [showTodayTransactions, setShowTodayTransactions] = useState(false);
+
   useEffect(() => {
     if (!isOpen) return;
 
     const fetchTodayClosingData = async () => {
       setTodaySummary(prev => ({ ...prev, loading: true }));
       try {
-        const todayStr = new Date().toISOString().split('T')[0];
+        const localTodayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
-        // 1. Fetch today's agency sales
+        // 1. Fetch today's agency sales with staff details
         const { data: salesData, error: salesErr } = await supabase
           .from('sales')
-          .select('received_amount')
-          .gte('created_at', `${todayStr}T00:00:00`)
-          .lte('created_at', `${todayStr}T23:59:59.999`);
+          .select('*, staff:staff_id(full_name)')
+          .order('created_at', { ascending: false })
+          .limit(300);
 
         let agencySalesAmount = 0;
         let agencySalesCount = 0;
+        let todaySales: any[] = [];
 
         if (!salesErr && salesData) {
-          agencySalesCount = salesData.length;
-          agencySalesAmount = salesData.reduce((sum, item) => sum + Number(item.received_amount || 0), 0);
+          todaySales = salesData.filter(s => {
+            if (!s.created_at) return false;
+            const saleLocalDate = new Date(s.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            return saleLocalDate === localTodayStr;
+          });
+
+          agencySalesCount = todaySales.length;
+          agencySalesAmount = todaySales.reduce((sum, item) => sum + Number(item.received_amount || 0), 0);
         }
+
+        setTodaySalesLogs(todaySales);
 
         // 2. Fetch today's academy payments
         const { data: feesData, error: feesErr } = await supabase
           .from('academy_installments')
-          .select('amount_paid')
-          .gte('created_at', `${todayStr}T00:00:00`)
-          .lte('created_at', `${todayStr}T23:59:59.999`);
+          .select('amount_paid, created_at')
+          .order('created_at', { ascending: false })
+          .limit(300);
 
         let academyFeesAmount = 0;
         let academyFeesCount = 0;
 
         if (!feesErr && feesData) {
-          academyFeesCount = feesData.length;
-          academyFeesAmount = feesData.reduce((sum, item) => sum + Number(item.amount_paid || 0), 0);
+          const todayFees = feesData.filter(f => {
+            if (!f.created_at) return false;
+            const feeLocalDate = new Date(f.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            return feeLocalDate === localTodayStr;
+          });
+
+          academyFeesCount = todayFees.length;
+          academyFeesAmount = todayFees.reduce((sum, item) => sum + Number(item.amount_paid || 0), 0);
         }
 
         setTodaySummary({
@@ -73,32 +92,84 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
     fetchTodayClosingData();
   }, [isOpen]);
 
+  const formatToISTDateTime = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const dateObj = new Date(dateStr);
+      if (isNaN(dateObj.getTime())) return dateStr;
+      const datePart = dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const timePart = dateObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
+      return `${datePart} ${timePart}`;
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
   const handleDownloadAgencyReport = async () => {
     try {
+      const localTodayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
       const { data: salesData, error } = await supabase
         .from('sales')
-        .select('client_name, service_package, payment_type, package_amount, received_amount, balance_amount, payment_method, sale_month, created_at');
+        .select('*, staff:staff_id(full_name)')
+        .order('created_at', { ascending: false });
+
       if (error) throw error;
       
-      const headers = ['Client Name', 'Service Package', 'Payment Type', 'Package Amount', 'Received Amount', 'Balance', 'Payment Method', 'Month', 'Logged At'];
-      const rows = (salesData || [])?.map(s => [
-        s.client_name,
-        s.service_package,
-        s.payment_type,
-        s.package_amount,
-        s.received_amount,
-        s.balance_amount,
-        s.payment_method || 'UPI',
-        s.sale_month,
-        s.created_at
-      ]);
+      const headers = [
+        'Today Entry',
+        'Staff / Sales Executive',
+        'Client Name',
+        'Service Package',
+        'Payment Type',
+        'Package Amount',
+        'Received Amount',
+        'Payment Method',
+        'UTR / Transaction ID',
+        'Month',
+        'Logged Date (IST)',
+        'Logged Time (IST)'
+      ];
+
+      const rows = (salesData || []).map(s => {
+        const saleLocalDate = s.created_at ? new Date(s.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) : '';
+        const isToday = saleLocalDate === localTodayStr;
+        const staffName = s.staff?.full_name || s.staff_name || 'Safwana';
+
+        // Extract UTR / Transaction ID from fields or parse from work_description tag
+        let utrNum = s.utr_number || s.utr || s.transaction_id || s.payment_ref;
+        if (!utrNum && s.work_description) {
+          const match = s.work_description.match(/(?:Txn Ref|UTR|Txn ID):\s*([^\s)]+)/i);
+          if (match) utrNum = match[1];
+        }
+        utrNum = utrNum || '-';
+
+        const dateObj = s.created_at ? new Date(s.created_at) : null;
+        const dateIST = dateObj ? dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) : '';
+        const timeIST = dateObj ? dateObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+
+        return [
+          isToday ? '⭐️ TODAY' : '-',
+          staffName,
+          s.client_name,
+          s.service_package,
+          s.payment_type,
+          s.payment_type === 'Clearance' ? '-' : s.package_amount,
+          s.received_amount,
+          s.payment_method || 'UPI',
+          utrNum,
+          s.sale_month,
+          dateIST,
+          timeIST
+        ];
+      });
       
-      const csvContent = [headers.join(','), ...rows?.map(r => r?.map(val => `"${val}"`).join(','))].join('\n');
+      const csvContent = [headers.join(','), ...rows.map(r => r.map(val => `"${val ?? ''}"`).join(','))].join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `Daily_Closing_Agency_Report_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `Master_Agency_Sales_Report_${localTodayStr}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -110,33 +181,43 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
 
   const handleDownloadAcademyReport = async () => {
     try {
+      const localTodayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
       const { data: payData, error } = await supabase
         .from('academy_installments')
-        .select('student_id, amount_paid, payment_date, payment_method, transaction_slip_url, notes, created_at, academy_students(student_name)');
+        .select('student_id, amount_paid, payment_date, payment_method, transaction_slip_url, notes, created_at, academy_students(student_name)')
+        .order('created_at', { ascending: false });
+
       if (error) throw error;
       
-      const headers = ['Student Name', 'Amount Paid', 'Payment Date', 'Payment Method', 'Notes', 'Slip URL', 'Logged At'];
-      const rows = (payData || [])?.map(p => {
+      const headers = ['Student Name', 'Amount Paid', 'Payment Date', 'Payment Method', 'Notes', 'Slip URL', 'Logged Date (IST)', 'Logged Time (IST)'];
+      const rows = (payData || []).map(p => {
         const name = p.academy_students 
           ? (Array.isArray(p.academy_students) ? (p.academy_students[0] as any)?.student_name : (p.academy_students as any).student_name)
           : 'Enrolled Student';
+
+        const dateObj = p.created_at ? new Date(p.created_at) : null;
+        const dateIST = dateObj ? dateObj.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) : '';
+        const timeIST = dateObj ? dateObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+
         return [
           name,
           p.amount_paid,
-          p.payment_date,
+          formatToISTDateTime(p.payment_date || p.created_at),
           p.payment_method,
           p.notes || '',
           p.transaction_slip_url || '',
-          p.created_at
+          dateIST,
+          timeIST
         ];
       });
       
-      const csvContent = [headers.join(','), ...rows?.map(r => r?.map(val => `"${val}"`).join(','))].join('\n');
+      const csvContent = [headers.join(','), ...rows.map(r => r.map(val => `"${val ?? ''}"`).join(','))].join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `Daily_Closing_Academy_Report_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `Master_Academy_Payments_Report_${localTodayStr}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
@@ -189,15 +270,22 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
                   <span className="text-sm font-extrabold text-slate-200">{todaySummary.agencySalesCount} logs</span>
                 </div>
               </div>
-              <div className="pt-2">
+              <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                <Button 
+                  variant="secondary" 
+                  onClick={() => setShowTodayTransactions(true)}
+                  className="flex-1 py-2.5 flex items-center justify-center gap-1.5 font-bold text-[10px] uppercase tracking-wider text-indigo-300 border-indigo-500/20 hover:border-indigo-500/40"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>View Today's Logs</span>
+                </Button>
                 <Button 
                   variant="primary" 
-                  fullWidth 
                   onClick={handleDownloadAgencyReport}
-                  className="py-2.5 flex items-center justify-center gap-2 font-bold text-[10px] uppercase tracking-wider animate-scale-up"
+                  className="flex-1 py-2.5 flex items-center justify-center gap-1.5 font-bold text-[10px] uppercase tracking-wider animate-scale-up"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Export Agency Sales Log</span>
+                  <span>Export Sales</span>
                 </Button>
               </div>
             </div>
@@ -237,6 +325,98 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
           <Button variant="secondary" fullWidth onClick={onClose}>Close Modal</Button>
         </div>
       </Card>
+
+      {/* Today's Transactions Breakdown Popup Modal */}
+      {showTodayTransactions && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <Card variant="glass" className="w-full max-w-2xl p-6 bg-slate-900 border border-indigo-500/30 relative animate-scale-up max-h-[85vh] flex flex-col">
+            <button 
+              onClick={() => setShowTodayTransactions(false)}
+              className="absolute top-4 right-4 text-slate-450 hover:text-white"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4 shrink-0">
+              <div>
+                <h3 className="font-extrabold text-white text-base flex items-center gap-2">
+                  <Eye className="w-5 h-5 text-indigo-400" />
+                  Today's Sales Transactions
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Breakdown of sales logged on <span className="text-indigo-300 font-semibold">{new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'full' })}</span>
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Today</span>
+                <span className="text-base font-extrabold text-emerald-400">{formatCurrency(todaySummary.agencySalesAmount)}</span>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto flex-1 pr-1 space-y-3">
+              {todaySalesLogs.length === 0 ? (
+                <div className="text-center py-10 text-slate-500 text-xs font-semibold">
+                  No sales transactions logged today yet.
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/40">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-white/5 bg-slate-950/80 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                        <th className="py-2.5 px-3">Staff Executive</th>
+                        <th className="py-2.5 px-3">Client & Package</th>
+                        <th className="py-2.5 px-3 text-center">Type</th>
+                        <th className="py-2.5 px-3 text-right">Received</th>
+                        <th className="py-2.5 px-3">UTR / Ref #</th>
+                        <th className="py-2.5 px-3 text-right">Time (IST)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+                      {todaySalesLogs.map(sale => {
+                        const staffName = sale.staff?.full_name || sale.staff_name || 'Safwana';
+                        let utrNum = sale.utr_number || sale.utr || sale.transaction_id || sale.payment_ref;
+                        if (!utrNum && sale.work_description) {
+                          const match = sale.work_description.match(/(?:Txn Ref|UTR|Txn ID):\s*([^\s)]+)/i);
+                          if (match) utrNum = match[1];
+                        }
+                        utrNum = utrNum || '-';
+                        const timeFormatted = sale.created_at ? new Date(sale.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) : '-';
+
+                        return (
+                          <tr key={sale.id} className="hover:bg-slate-900/30">
+                            <td className="py-2.5 px-3 font-bold text-indigo-300">{staffName}</td>
+                            <td className="py-2.5 px-3">
+                              <div className="font-bold text-white">{sale.client_name}</div>
+                              <div className="text-[10px] text-slate-450">{sale.service_package}</div>
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <Badge variant={sale.payment_type === 'Full' ? 'success' : sale.payment_type === 'Advance' ? 'info' : 'purple'}>
+                                {sale.payment_type}
+                              </Badge>
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-extrabold text-emerald-400">
+                              {formatCurrency(sale.received_amount)}
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-[10px] text-slate-400">{utrNum}</td>
+                            <td className="py-2.5 px-3 text-right text-[10px] text-slate-450">{timeFormatted}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center shrink-0">
+              <span className="text-xs text-slate-400 font-semibold">{todaySalesLogs.length} Records Found</span>
+              <Button variant="secondary" onClick={() => setShowTodayTransactions(false)} className="py-1.5 px-4 text-xs font-bold">
+                Back to Reports
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

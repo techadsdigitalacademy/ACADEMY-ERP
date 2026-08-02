@@ -26,11 +26,17 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
   const [activeFilter, setActiveFilter] = useState<'All' | 'Full' | 'Advance' | 'Clearance'>('All');
 
   const filteredSales = useMemo(() => {
-    return sales.filter(s => {
+    const list = sales.filter(s => {
       const matchesSearch = s.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
                            s.service_package?.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesFilter = activeFilter === 'All' ? true : s.payment_type === activeFilter;
       return matchesSearch && matchesFilter;
+    });
+
+    return [...list].sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return timeB - timeA;
     });
   }, [sales, searchQuery, activeFilter]);
 
@@ -170,7 +176,9 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
             {filteredSales?.map((sale, index) => {
               const isClearance = sale.payment_type === 'Clearance' || (sale.package_amount === 0 && sale.received_amount > 0);
               const balance = isClearance ? 0 : Math.max(0, (sale.package_amount || 0) - (sale.received_amount || 0));
-              const dateStr = sale.created_at ? sale.created_at.split('T')[0] : (sale.sale_month || '');
+              const dateStr = sale.created_at 
+                ? new Date(sale.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) 
+                : (sale.date || sale.sale_date || sale.sale_month || '');
               
               let displaySl: string | number = '-';
               if (sale.work_sl) {

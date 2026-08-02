@@ -25,7 +25,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
   const [ownerExpCategory, setOwnerExpCategory] = useState('Salary');
   const [ownerExpAmount, setOwnerExpAmount] = useState('');
   const [ownerExpDescription, setOwnerExpDescription] = useState('');
-  const [ownerExpDate, setOwnerExpDate] = useState(new Date().toISOString().split('T')[0]);
+  const [ownerExpDate, setOwnerExpDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
   const [isSubmittingOwnerExp, setIsSubmittingOwnerExp] = useState(false);
 
   const [clientName, setClientName] = useState('');
@@ -34,6 +34,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
   const [packageAmount, setPackageAmount] = useState('');
   const [receivedAmount, setReceivedAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'Bank Transfer' | 'Cash'>('UPI');
+  const [utrNumber, setUtrNumber] = useState('');
   const [paymentProofUrl, setPaymentProofUrl] = useState('');
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [workDescription, setWorkDescription] = useState('');
@@ -53,6 +54,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
 
     setUploadedFileName(file.name);
     setIsUploadingProof(true);
+
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
@@ -101,6 +103,8 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
 
     setIsLoggingSale(true);
     try {
+      const currentISTDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
       await addSale({
         clientName,
         servicePackage,
@@ -109,7 +113,10 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
         receivedAmount: Number(receivedAmount),
         paymentMethod,
         paymentProofUrl,
-        workDescription
+        workDescription,
+        utrNumber,
+        date: currentISTDate,
+        saleDate: currentISTDate
       });
 
       setClientName('');
@@ -118,6 +125,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
       setPackageAmount('');
       setReceivedAmount('');
       setPaymentMethod('UPI');
+      setUtrNumber('');
       setPaymentProofUrl('');
       setUploadedFileName('');
       setWorkDescription('');
