@@ -33,6 +33,7 @@ export default function StaffProfileDrawer({ profile, onClose }: StaffProfileDra
   const [detailTab, setDetailTab] = useState<'sales' | 'attendance' | 'reports'>('sales');
 
   const [editingSale, setEditingSale] = useState<any | null>(null);
+  const [deletingSale, setDeletingSale] = useState<any | null>(null);
         const [isUpdatingSale, setIsUpdatingSale] = useState(false);
 
   useEffect(() => {
@@ -149,6 +150,17 @@ export default function StaffProfileDrawer({ profile, onClose }: StaffProfileDra
               targetAmount={profile.monthly_target_amount || 0}
               isAdmin={true}
               onEdit={(sale) => setEditingSale(sale)}
+              onDelete={async (sale) => {
+                if (window.confirm(`Are you sure you want to delete sale for "${sale.client_name}" (${sale.work_sl})?`)) {
+                  try {
+                    const { error } = await supabase.from('sales').delete().eq('id', sale.id);
+                    if (error) throw error;
+                    fetchProfileDetails(profile);
+                  } catch (err: any) {
+                    alert('Failed to delete sale: ' + err.message);
+                  }
+                }
+              }}
             />
             
             {editingSale && (

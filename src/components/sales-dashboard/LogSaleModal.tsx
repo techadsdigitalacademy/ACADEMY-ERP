@@ -121,6 +121,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
       setPaymentProofUrl('');
       setUploadedFileName('');
       setWorkDescription('');
+      alert('Sale registered successfully!');
       onClose(); 
     } catch (err: any) {
       alert('Sale registry failed: ' + err.message);

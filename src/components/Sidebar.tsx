@@ -12,7 +12,8 @@ import {
   Sparkles,
   Settings,
   LogOut,
-  Camera
+  Camera,
+  FolderOpen
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -105,6 +106,14 @@ export const Sidebar: React.FC = () => {
             >
               <Clock className="w-4.5 h-4.5" />
               <span>Attendance</span>
+            </button>
+
+            <button 
+              onClick={() => setActiveTab('assets')}
+              className={`flex items-center gap-3 w-full px-3.5 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${activeTab === 'assets' ? 'text-indigo-400 bg-indigo-500/10' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}
+            >
+              <FolderOpen className="w-4.5 h-4.5" />
+              <span>Asset Library</span>
             </button>
 
             {activeStaff && activeStaff.designation !== 'Graphic Designer' && activeStaff.designation !== 'Videographer' && (

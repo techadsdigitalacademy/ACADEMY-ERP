@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Briefcase, Search, Edit2 } from 'lucide-react';
+import { Briefcase, Search, Edit2, Trash2 } from 'lucide-react';
 import { Card } from './Card';
 import { Badge } from './Badge';
 import { Button } from './Button';
@@ -10,6 +10,7 @@ interface SalesHistoryLogProps {
   targetAmount: number;
   isAdmin?: boolean;
   onEdit?: (sale: any) => void;
+  onDelete?: (sale: any) => void;
   onViewSlip?: (sale: any) => void;
 }
 
@@ -18,6 +19,7 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
   targetAmount,
   isAdmin = false,
   onEdit,
+  onDelete,
   onViewSlip
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,9 +34,25 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
     });
   }, [sales, searchQuery, activeFilter]);
 
+  // Pre-calculate dynamic serial numbers for non-clearance entries (1 = oldest at bottom up to N = newest at top)
+  const serialMap = useMemo(() => {
+    const map = new Map<string | number, number>();
+    const nonClearanceEntries = filteredSales.filter(s => {
+      const isClearance = s.payment_type === 'Clearance' || (s.package_amount === 0 && s.received_amount > 0);
+      return !isClearance;
+    });
+
+    let currentSl = 1;
+    for (let i = nonClearanceEntries.length - 1; i >= 0; i--) {
+      const entry = nonClearanceEntries[i];
+      map.set(entry.id, currentSl++);
+    }
+    return map;
+  }, [filteredSales]);
+
   const getSalesTotals = (salesList: any[]) => {
     return salesList.reduce((acc, sale) => {
-      const isClearance = sale.payment_type === 'Clearance';
+      const isClearance = sale.payment_type === 'Clearance' || (sale.package_amount === 0 && sale.received_amount > 0);
       if (!isClearance) {
         acc.totalPackageAmt += (sale.package_amount || 0);
         acc.validWorksCount += 1;
@@ -149,13 +167,21 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
-            {filteredSales?.map(sale => {
-              const isClearance = sale.payment_type === 'Clearance';
+            {filteredSales?.map((sale, index) => {
+              const isClearance = sale.payment_type === 'Clearance' || (sale.package_amount === 0 && sale.received_amount > 0);
               const balance = isClearance ? 0 : Math.max(0, (sale.package_amount || 0) - (sale.received_amount || 0));
               const dateStr = sale.created_at ? sale.created_at.split('T')[0] : (sale.sale_month || '');
+              
+              let displaySl: string | number = '-';
+              if (sale.work_sl) {
+                displaySl = String(sale.work_sl).replace(/^#/, '');
+              } else if (!isClearance) {
+                displaySl = serialMap.get(sale.id) || (filteredSales.length - index);
+              }
+
               return (
                 <tr key={sale.id} className="hover:bg-slate-900/10">
-                  <td className="py-3 px-4 font-extrabold text-indigo-400">{sale.work_sl}</td>
+                  <td className="py-3 px-4 font-extrabold text-indigo-400">{displaySl}</td>
                   <td className="py-3 px-4 text-slate-500">{dateStr}</td>
                   <td className="py-3 px-4 text-white font-bold">{sale.client_name}</td>
                   <td className="py-3 px-4 text-slate-400">{sale.service_package}</td>
@@ -195,8 +221,20 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
                           size="sm"
                           className="!py-1 !px-2 text-[10px] border-white/5 hover:text-indigo-400"
                           onClick={() => onEdit(sale)}
+                          title="Edit Sale Entry"
                         >
                           <Edit2 className="w-3 h-3" />
+                        </Button>
+                      )}
+                      {isAdmin && onDelete && (
+                        <Button
+                          variant="glass"
+                          size="sm"
+                          className="!py-1 !px-2 text-[10px] border-white/5 hover:text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/20"
+                          onClick={() => onDelete(sale)}
+                          title="Delete Sale Entry"
+                        >
+                          <Trash2 className="w-3 h-3" />
                         </Button>
                       )}
                     </div>

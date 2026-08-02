@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Star, ArrowLeft, MessageSquare } from 'lucide-react';
+import { Star, ArrowLeft, MessageSquare, Trash2, AlertTriangle } from 'lucide-react';
 import { Card } from '../Card';
 import { Badge } from '../Badge';
 import { Button } from '../Button';
@@ -29,6 +29,8 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
   const [monthTargetsMap, setMonthTargetsMap] = useState<{ [staffId: string]: number }>({});
 
   const [editingSale, setEditingSale] = useState<any | null>(null);
+  const [deletingSale, setDeletingSale] = useState<any | null>(null);
+  const [isDeletingSale, setIsDeletingSale] = useState(false);
   const [previewSlipUrl, setPreviewSlipUrl] = useState<string | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
@@ -225,6 +227,27 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
     }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!deletingSale) return;
+    setIsDeletingSale(true);
+    try {
+      const { error } = await supabase
+        .from('sales')
+        .delete()
+        .eq('id', deletingSale.id);
+
+      if (error) throw error;
+      setDeletingSale(null);
+      if (selectedProfile) {
+        fetchProfileDetails(selectedProfile, activeMonthStr);
+      }
+    } catch (err: any) {
+      alert('Failed to delete sale entry: ' + err.message);
+    } finally {
+      setIsDeletingSale(false);
+    }
+  };
+
   const getAvatarUrl = (name: string, gender: string) => {
     return `https://avatar.iran.liara.run/public/${gender?.toLowerCase() === 'female' ? 'girl' : 'boy'}?username=${encodeURIComponent(name)}`;
   };
@@ -370,6 +393,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                   targetAmount={profileTarget}
                   isAdmin={true}
                   onEdit={(sale) => setEditingSale(sale)}
+                  onDelete={(sale) => setDeletingSale(sale)}
                   onViewSlip={(sale) => {
                     if (sale.payment_proof_url) {
                       setPreviewSlipUrl(sale.payment_proof_url);
@@ -403,6 +427,54 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                       fetchProfileDetails(selectedProfile, activeMonthStr);
                     }}
                   />
+                )}
+
+                {/* Delete Confirmation Modal */}
+                {deletingSale && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in p-4">
+                    <Card variant="glass" className="w-full max-w-md border-rose-500/20 p-6 animate-scale-up relative">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="p-3 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                          <AlertTriangle className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h3 className="text-lg font-bold text-white">Delete Sale Entry</h3>
+                          <p className="text-xs text-slate-400">This action cannot be undone.</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-950/60 p-3.5 rounded-xl border border-white/5 space-y-1.5 mb-6 text-xs text-slate-300">
+                        <div className="flex justify-between"><span className="text-slate-500 font-semibold">Work SL:</span> <span className="font-mono text-indigo-400 font-bold">{deletingSale.work_sl || 'N/A'}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500 font-semibold">Client Name:</span> <span className="font-bold text-white">{deletingSale.client_name}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500 font-semibold">Service Package:</span> <span className="font-semibold text-slate-400">{deletingSale.service_package}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500 font-semibold">Received Amount:</span> <span className="font-extrabold text-emerald-400">{formatCurrency(deletingSale.received_amount)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500 font-semibold">Payment Type:</span> <span className="font-semibold text-slate-200">{deletingSale.payment_type}</span></div>
+                      </div>
+
+                      <p className="text-xs font-semibold text-slate-300 mb-6">
+                        Are you sure you want to permanently delete this sale entry from the database?
+                      </p>
+
+                      <div className="flex items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setDeletingSale(null)}
+                          className="flex-1"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={handleConfirmDelete}
+                          isLoading={isDeletingSale}
+                          className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold shadow-lg shadow-rose-600/30"
+                        >
+                          Yes, Delete
+                        </Button>
+                      </div>
+                    </Card>
+                  </div>
                 )}
 
                 <SelfieLightboxModal

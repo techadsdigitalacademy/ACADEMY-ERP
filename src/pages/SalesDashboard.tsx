@@ -72,6 +72,7 @@ export const SalesDashboard: React.FC = () => {
   
   // Log Sale Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedSlipUrl, setSelectedSlipUrl] = useState<string | null>(null);
   
   // Daily Report form states
   const [dailyWorkType, setDailyWorkType] = useState('');
@@ -365,16 +366,15 @@ export const SalesDashboard: React.FC = () => {
 
   const fetchDailyLeaderboard = async () => {
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       const clientToUse = supabaseAdmin || supabase;
 
       // 1. Fetch today's sales across the company using admin client
       const { data: salesRows, error: salesErr } = await clientToUse
         .from('sales')
-        .select('*, staff(full_name, avatar_url, designation)')
-        .gte('created_at', `${todayStr}T00:00:00`)
-        .lte('created_at', `${todayStr}T23:59:59.999`)
-        .order('created_at', { ascending: false });
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(300);
 
       if (salesErr) throw salesErr;
 
@@ -398,9 +398,15 @@ export const SalesDashboard: React.FC = () => {
         if (p.full_name) staffMap[p.full_name] = p;
       });
 
-      const todaySales = salesRows || [];
+      const todaySales = (salesRows || []).filter((sale: any) => {
+        // Force convert Supabase UTC timestamp back into the user's local timezone date string
+        const saleDateLocal = sale.created_at ? new Date(sale.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) : null;
+        return saleDateLocal === todayIST || sale.date === todayIST || sale.sale_date === todayIST;
+      });
 
-      console.log(`Leaderboard Today Sales (${todayStr}):`, todaySales);
+      console.log("1. RAW SALES:", salesRows);
+      console.log("2. TODAY IST:", todayIST);
+      console.log("3. FILTERED SALES:", todaySales);
 
       // Group and aggregate collections per staff member
       const collections: { [staffKey: string]: { name: string; amount: number; avatar?: string } } = {};
@@ -411,7 +417,7 @@ export const SalesDashboard: React.FC = () => {
         // Skip Company Owners in Leaderboard
         if (staffObj?.designation === 'Company Owner') return;
 
-        const rawName = sale.staff_name || staffObj?.full_name || staffObj?.name || sale.full_name || (sale.staff_id ? staffMap[sale.staff_id]?.full_name : null) || 'Sales Executive';
+        const rawName = sale.staff_name || staffObj?.full_name || staffObj?.name || sale.full_name || (sale.staff_id ? staffMap[sale.staff_id]?.full_name : null) || activeStaff?.full_name || 'Sales Executive';
         const staffKey = sale.staff_id || rawName;
         const recAmount = Number(sale.received_amount || sale.amount || sale.package_amount || 0);
 
@@ -432,7 +438,7 @@ export const SalesDashboard: React.FC = () => {
         ?.filter(item => item.amount > 0)
         ?.sort((a, b) => b.amount - a.amount);
 
-      console.log("Final Today-Only Leaderboard Ticker List:", sortedLeaderboard);
+      console.log("4. FINAL LEADERBOARD ARRAY:", sortedLeaderboard);
       setDailyLeaderboard(sortedLeaderboard);
     } catch (err) {
       console.error('Error fetching daily leaderboard:', err);
@@ -608,16 +614,7 @@ export const SalesDashboard: React.FC = () => {
 
   const handleViewSlip = (sale: any) => {
     if (sale.payment_proof_url) {
-      if (sale.payment_proof_url.startsWith('data:')) {
-        const w = window.open();
-        if (w) {
-          w.document.write(`<img src="${sale.payment_proof_url}" style="max-width: 100%; height: auto;" />`);
-        } else {
-          alert('Popup blocked. Please allow popups to view the slip.');
-        }
-      } else {
-        window.open(sale.payment_proof_url, '_blank');
-      }
+      setSelectedSlipUrl(sale.payment_proof_url);
     } else {
       alert('No payment proof slip was uploaded for this sale.');
     }
@@ -1667,6 +1664,26 @@ export const SalesDashboard: React.FC = () => {
         enlargedSelfie={enlargedSelfie}
         onCloseSelfieLightbox={() => setEnlargedSelfie(null)}
       />
+
+      {/* IN-SCREEN SLIP VIEWER MODAL */}
+      {selectedSlipUrl && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm" onClick={() => setSelectedSlipUrl(null)}>
+          <div className="relative max-w-4xl max-h-[90vh] w-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setSelectedSlipUrl(null)}
+              className="absolute -top-10 right-0 text-white hover:text-slate-300 transition-colors bg-white/10 hover:bg-white/20 p-2 rounded-full"
+              title="Close"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img 
+              src={selectedSlipUrl} 
+              alt="Payment Proof Slip" 
+              className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl ring-1 ring-white/10"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
