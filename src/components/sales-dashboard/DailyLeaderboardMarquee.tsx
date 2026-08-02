@@ -3,65 +3,61 @@ import { Award } from 'lucide-react';
 import { formatCurrency } from '../../services/mockData';
 
 interface DailyLeaderboardMarqueeProps {
-  dailyLeaderboard: { name: string; amount: number }[];
+  dailyLeaderboard: { name: string; amount: number; avatar?: string }[];
 }
 
 export const DailyLeaderboardMarquee: React.FC<DailyLeaderboardMarqueeProps> = ({ dailyLeaderboard }) => {
-  if (dailyLeaderboard.length === 0) {
+  if (!dailyLeaderboard || dailyLeaderboard.length === 0) {
     return (
-      <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-3.5 text-center text-xs text-slate-500 font-bold uppercase tracking-wider">
-        Leaderboard: No daily sales logged today.
+      <div className="bg-slate-900/60 border border-white/5 rounded-2xl p-3 text-center text-xs text-slate-400 font-extrabold uppercase tracking-wider flex items-center justify-center gap-2">
+        <Award className="w-4 h-4 text-indigo-400" />
+        LEADERBOARD: NO DAILY SALES LOGGED TODAY
       </div>
     );
   }
 
-  const renderRankIcon = (rank: number) => {
-    if (rank === 1) return <span className="text-sm">🥇</span>;
-    if (rank === 2) return <span className="text-sm">🥈</span>;
-    if (rank === 3) return <span className="text-sm">🥉</span>;
-    return (
-      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-slate-850 border border-white/10 text-[9px] font-extrabold text-slate-350">
-        {rank}
-      </span>
-    );
-  };
+  // Duplicate items array for a 100% seamless, continuous looping scroll
+  const marqueeItems = [...dailyLeaderboard, ...dailyLeaderboard];
 
   return (
-    <div className="bg-gradient-to-r from-indigo-950/30 via-slate-900/50 to-purple-950/30 border border-white/5 rounded-2xl p-3 flex items-center gap-4 overflow-hidden relative">
-      <div className="flex items-center gap-2 shrink-0 bg-slate-950/60 border border-white/5 px-3 py-1.5 rounded-xl z-10 shadow-md">
-        <Award className="w-4 h-4 text-indigo-400" />
-        <span className="text-[10px] font-extrabold text-slate-350 uppercase tracking-widest">Daily Leaderboard</span>
+    <div className="bg-gradient-to-r from-indigo-950/40 via-slate-900/70 to-purple-950/40 border border-white/10 rounded-2xl p-2.5 flex items-center gap-3 overflow-hidden relative shadow-lg shadow-indigo-950/20">
+      {/* Fixed Title Badge */}
+      <div className="flex items-center gap-2 shrink-0 bg-slate-950/80 border border-white/10 px-3 py-1.5 rounded-xl z-10 shadow-md">
+        <Award className="w-4 h-4 text-amber-400" />
+        <span className="text-[10px] font-black text-amber-300 uppercase tracking-widest">Today's Leaders</span>
       </div>
       
-      {/* Scrolling wrapper */}
+      {/* Continuous Scrolling Marquee Ticker */}
       <div className="relative w-full overflow-hidden whitespace-nowrap select-none">
-        <div className="animate-ticker inline-flex gap-8 pl-4">
-          {dailyLeaderboard?.map((item, index) => {
-            const rank = index + 1;
+        <div className="animate-marquee inline-flex gap-6 items-center">
+          {marqueeItems.map((item, index) => {
+            const rank = (index % dailyLeaderboard.length) + 1;
             return (
-              <div key={`${item.name}-${index}`} className="inline-flex items-center gap-2.5 text-xs font-semibold">
-                {renderRankIcon(rank)}
-                <span className="text-slate-200">{item.name}</span>
-                <span className="font-extrabold text-emerald-400">{formatCurrency(item.amount)}</span>
-                {index < dailyLeaderboard.length - 1 && (
-                  <span className="text-slate-700 font-bold px-2">|</span>
-                )}
+              <div key={`${item.name}-${index}`} className="inline-flex items-center gap-2 text-xs font-semibold">
+                <span className="font-black text-amber-400 text-[11px] bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                  {rank}. {item.name}
+                </span>
+                <span className="font-extrabold text-emerald-400 text-xs">
+                  ({formatCurrency(item.amount)})
+                </span>
+                <span className="text-slate-600 font-bold px-2.5">•</span>
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* CSS for Marquee animation */}
+      {/* CSS Keyframe Animation for Infinite Continuous Motion */}
       <style>{`
-        @keyframes ticker {
-          0% { transform: translate3d(100vw, 0, 0); }
-          100% { transform: translate3d(-100%, 0, 0); }
+        @keyframes marquee {
+          0% { transform: translateX(0%); }
+          100% { transform: translateX(-50%); }
         }
-        .animate-ticker {
-          animation: ticker 25s linear infinite;
+        .animate-marquee {
+          display: inline-flex;
+          animation: marquee 22s linear infinite;
         }
-        .animate-ticker:hover {
+        .animate-marquee:hover {
           animation-play-state: paused;
         }
       `}</style>

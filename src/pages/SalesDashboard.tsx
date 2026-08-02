@@ -220,14 +220,14 @@ export const SalesDashboard: React.FC = () => {
 
           const { data: targets, error: err2 } = await supabase
             .from('staff')
-            .select('id, monthly_target_amount, full_name, avatar_url');
+            .select('id, monthly_target_amount, monthly_targets, full_name, avatar_url');
           
           const targetMap: { [key: string]: number } = {};
           const avatarMap: { [key: string]: string } = {};
           if (!err2 && targets) {
             targets.forEach(t => {
               if (t.full_name) {
-                targetMap[t.full_name] = Number(t.monthly_target_amount) || 0;
+                targetMap[t.full_name] = resolveStaffMonthTarget(t, selectedMonth);
                 if (t.avatar_url) avatarMap[t.full_name] = t.avatar_url;
               }
             });
@@ -291,6 +291,7 @@ export const SalesDashboard: React.FC = () => {
               creativeWorksCount: creativeWorks,
               attendancePCount: pCount,
               attendanceLCount: lCount,
+              attendanceTotalCount: staffAtt?.length || 0,
             };
           });
 
@@ -360,70 +361,78 @@ export const SalesDashboard: React.FC = () => {
     fetchTodayClosingData();
   }, [isClosingReportOpen]);
 
+
+
   const fetchDailyLeaderboard = async () => {
     try {
       const todayStr = new Date().toISOString().split('T')[0];
       const clientToUse = supabaseAdmin || supabase;
 
-      // 1. Fetch today's sales across the entire company using admin client to bypass RLS
-      const { data: todaySales, error: salesErr } = await clientToUse
+      // 1. Fetch today's sales across the company using admin client
+      const { data: salesRows, error: salesErr } = await clientToUse
         .from('sales')
-        .select('received_amount, staff_id, staff(full_name, avatar_url, designation)')
+        .select('*, staff(full_name, avatar_url, designation)')
         .gte('created_at', `${todayStr}T00:00:00`)
-        .lte('created_at', `${todayStr}T23:59:59.999`);
+        .lte('created_at', `${todayStr}T23:59:59.999`)
+        .order('created_at', { ascending: false });
 
       if (salesErr) throw salesErr;
 
-      // 2. Fetch staff profiles to resolve names from staff_profiles
-      const { data: profiles, error: profsErr } = await clientToUse
-        .from('staff_profiles')
-        .select('full_name');
+      // 2. Fetch staff and staff_profiles for name resolution
+      const { data: staffRows } = await clientToUse
+        .from('staff')
+        .select('id, full_name, avatar_url, designation');
 
-      if (profsErr) throw profsErr;
-
-      // Create a map for name resolution from staff_profiles (case-insensitive key)
-      const profileNamesMap = new Map<string, string>();
-      (profiles || []).forEach(p => {
-        if (p.full_name) {
-          profileNamesMap.set(p.full_name.toLowerCase().trim(), p.full_name);
-        }
+      const staffMap: { [id: string]: any } = {};
+      (staffRows || []).forEach(s => {
+        if (s.id) staffMap[s.id] = s;
+        if (s.full_name) staffMap[s.full_name] = s;
       });
 
-      // Group and sum daily sales by staff_id
-      const collections: { [staffId: string]: { name: string; amount: number; avatar?: string } } = {};
-      
-      (todaySales || []).forEach((sale: any) => {
-        const staffId = sale.staff_id;
-        if (!staffId) return;
+      const { data: profiles } = await clientToUse
+        .from('staff_profiles')
+        .select('id, full_name');
+
+      (profiles || []).forEach(p => {
+        if (p.id) staffMap[p.id] = p;
+        if (p.full_name) staffMap[p.full_name] = p;
+      });
+
+      const todaySales = salesRows || [];
+
+      console.log(`Leaderboard Today Sales (${todayStr}):`, todaySales);
+
+      // Group and aggregate collections per staff member
+      const collections: { [staffKey: string]: { name: string; amount: number; avatar?: string } } = {};
+
+      todaySales.forEach((sale: any) => {
+        const staffObj = sale.staff || staffMap[sale.staff_id];
 
         // Skip Company Owners in Leaderboard
-        if (sale.staff?.designation === 'Company Owner') return;
+        if (staffObj?.designation === 'Company Owner') return;
 
-        const rawName = sale.staff?.full_name || 'Staff Member';
-        const avatar = sale.staff?.avatar_url;
-        
-        // Resolve name from staff_profiles by matching the full name
-        const resolvedName = profileNamesMap.get(rawName.toLowerCase().trim()) || rawName;
+        const rawName = sale.staff_name || staffObj?.full_name || staffObj?.name || sale.full_name || (sale.staff_id ? staffMap[sale.staff_id]?.full_name : null) || 'Sales Executive';
+        const staffKey = sale.staff_id || rawName;
+        const recAmount = Number(sale.received_amount || sale.amount || sale.package_amount || 0);
 
-        if (!collections[staffId]) {
-          collections[staffId] = {
-            name: resolvedName,
+        if (recAmount <= 0) return;
+
+        if (!collections[staffKey]) {
+          collections[staffKey] = {
+            name: rawName,
             amount: 0,
-            avatar
+            avatar: staffObj?.avatar_url
           };
         }
-        collections[staffId].amount += Number(sale.received_amount || 0);
+        collections[staffKey].amount += recAmount;
       });
 
       // Sort in descending order of total amount
-      const sortedLeaderboard = Object.entries(collections)
-        ?.map(([_, obj]) => ({
-          name: obj.name,
-          amount: obj.amount,
-          avatar: obj.avatar
-        }))
+      const sortedLeaderboard = Object.values(collections)
+        ?.filter(item => item.amount > 0)
         ?.sort((a, b) => b.amount - a.amount);
 
+      console.log("Final Today-Only Leaderboard Ticker List:", sortedLeaderboard);
       setDailyLeaderboard(sortedLeaderboard);
     } catch (err) {
       console.error('Error fetching daily leaderboard:', err);
@@ -432,7 +441,19 @@ export const SalesDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchDailyLeaderboard();
-  }, [sales]);
+
+    // Supabase Realtime Channel listener for live leaderboard updates
+    const salesChannel = supabase
+      .channel('public:sales:leaderboard')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => {
+        fetchDailyLeaderboard();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(salesChannel);
+    };
+  }, [sales, selectedMonth]);
 
 
 
@@ -587,7 +608,16 @@ export const SalesDashboard: React.FC = () => {
 
   const handleViewSlip = (sale: any) => {
     if (sale.payment_proof_url) {
-      window.open(sale.payment_proof_url, '_blank');
+      if (sale.payment_proof_url.startsWith('data:')) {
+        const w = window.open();
+        if (w) {
+          w.document.write(`<img src="${sale.payment_proof_url}" style="max-width: 100%; height: auto;" />`);
+        } else {
+          alert('Popup blocked. Please allow popups to view the slip.');
+        }
+      } else {
+        window.open(sale.payment_proof_url, '_blank');
+      }
     } else {
       alert('No payment proof slip was uploaded for this sale.');
     }
@@ -746,8 +776,64 @@ export const SalesDashboard: React.FC = () => {
   const totalReceived = monthSales.reduce((sum, s) => sum + s.received_amount, 0);
   const totalBalance = monthSales?.filter(s => s.payment_type !== 'Clearance').reduce((sum, s) => sum + Math.max(0, s.package_amount - s.received_amount), 0);
 
-  // Targets
-  const targetAmount = activeStaff.monthly_target_amount;
+  const resolveStaffMonthTarget = (staffObj: any, monthKey: string) => {
+    if (!staffObj) return 0;
+
+    let targetsObj: any = null;
+    if (staffObj.monthly_targets) {
+      try {
+        targetsObj = typeof staffObj.monthly_targets === 'string'
+          ? JSON.parse(staffObj.monthly_targets)
+          : staffObj.monthly_targets;
+      } catch (e) {
+        targetsObj = null;
+      }
+    }
+
+    if (targetsObj && typeof targetsObj === 'object') {
+      if (targetsObj[monthKey] !== undefined && targetsObj[monthKey] !== null) {
+        return Number(targetsObj[monthKey]) || 0;
+      }
+
+      const sortedKeys = Object.keys(targetsObj)
+        .filter(k => k < monthKey)
+        .sort((a, b) => b.localeCompare(a));
+
+      if (sortedKeys.length > 0 && targetsObj[sortedKeys[0]] !== undefined) {
+        return Number(targetsObj[sortedKeys[0]]) || 0;
+      }
+    }
+
+    return Number(staffObj.monthly_target_amount) || 0;
+  };
+
+  // Sync activeStaff monthly targets from Supabase on month change
+  useEffect(() => {
+    if (!activeStaff?.id) return;
+    const syncActiveStaffTargets = async () => {
+      try {
+        const { data } = await supabase
+          .from('staff')
+          .select('monthly_targets, monthly_target_amount')
+          .eq('id', activeStaff.id)
+          .maybeSingle();
+
+        if (data) {
+          if (data.monthly_targets) activeStaff.monthly_targets = data.monthly_targets;
+          if (data.monthly_target_amount) activeStaff.monthly_target_amount = Number(data.monthly_target_amount);
+        }
+      } catch (err) {
+        console.warn('Sync activeStaff targets info:', err);
+      }
+    };
+    syncActiveStaffTargets();
+  }, [activeStaff?.id, selectedMonth]);
+
+  // Targets (month-specific resolution)
+  const targetAmount = useMemo(() => {
+    return resolveStaffMonthTarget(activeStaff, selectedMonth);
+  }, [activeStaff, activeStaff?.monthly_targets, selectedMonth]);
+
   const targetPercent = targetAmount > 0 ? Math.min(100, Math.round((totalReceived / targetAmount) * 100)) : 0;
 
 
@@ -1460,7 +1546,7 @@ export const SalesDashboard: React.FC = () => {
 
           {activeTab === 'staff-history' && isAdminView && (
             <div className="space-y-6 pt-2">
-              <StaffHistoryTab staffProfiles={staffProfiles} />
+              <StaffHistoryTab staffProfiles={staffProfiles} selectedMonth={selectedMonth} />
             </div>
           )}
 

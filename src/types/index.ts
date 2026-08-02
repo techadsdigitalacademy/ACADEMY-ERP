@@ -16,6 +16,7 @@ export interface Staff {
   role_id?: string;
   avatar_url?: string;
   monthly_target_amount: number;
+  monthly_targets?: any;
   notice_period_days: number;
   status: 'ACTIVE' | 'INACTIVE';
   

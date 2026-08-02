@@ -43,13 +43,18 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
   onOpenPunchModal,
   getDailyReportTotals
 }) => {
+  const isSalesRoleOrAdmin = isAdminView || activeStaff?.designation === 'Sales Executive' || isOwner;
+
   return (
-    <>
+    <div className="space-y-6">
+      {/* Leaderboard Marquee - Displayed for Sales Team & Admin Overview */}
+      {isSalesRoleOrAdmin && (
+        <DailyLeaderboardMarquee dailyLeaderboard={dailyLeaderboard} />
+      )}
+
       {/* ADMIN VIEW LAYOUT */}
       {isAdminView && (
         <div className="space-y-6">
-          {/* Leaderboard Marquee */}
-          <DailyLeaderboardMarquee dailyLeaderboard={dailyLeaderboard} />
 
           {/* Overhauled Admin Metrics Row */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -73,10 +78,10 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
             <Card variant="glass" className="p-5 flex flex-col min-h-[160px] max-h-[180px] overflow-y-auto scrollbar-none border-white/5">
               <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block mb-3">Daily Staff Leaderboard</span>
               <div className="space-y-2.5">
-                {dailyLeaderboard.slice(0, 5)?.map((item, index) => (
-                  <div key={item.name} className="flex items-center justify-between text-xs bg-slate-950/20 p-2 rounded-lg border border-white/5">
+                {dailyLeaderboard?.map((item, index) => (
+                  <div key={item.name} className="flex items-center justify-between text-xs bg-slate-950/40 p-2 rounded-lg border border-white/5">
                     <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-slate-500">#{index + 1}</span>
+                      <span className="font-black text-amber-400 text-[11px] px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">{index + 1}.</span>
                       <span className="font-bold text-slate-200">{item.name}</span>
                     </div>
                     <span className="font-extrabold text-emerald-400">{formatCurrency(item.amount)}</span>
@@ -118,11 +123,6 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
       {/* STAFF VIEW LAYOUT */}
       {!isAdminView && (
         <div className="space-y-6">
-          {/* Top leaderboard banner */}
-          {(activeStaff?.designation?.toLowerCase().includes('sales') || isOwner) && (
-            <DailyLeaderboardMarquee dailyLeaderboard={dailyLeaderboard} />
-          )}
-
           {/* Standard Staff Cards (Target Goal, Punch-in and Personal stats) */}
           <div className={`grid grid-cols-1 ${
             activeStaff.designation === 'Graphic Designer' || activeStaff.designation === 'Digital Marketer' || activeStaff.designation === 'Videographer' 
@@ -311,6 +311,6 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };

@@ -35,6 +35,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
   const [receivedAmount, setReceivedAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'Bank Transfer' | 'Cash'>('UPI');
   const [paymentProofUrl, setPaymentProofUrl] = useState('');
+  const [uploadedFileName, setUploadedFileName] = useState('');
   const [workDescription, setWorkDescription] = useState('');
   const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [isLoggingSale, setIsLoggingSale] = useState(false);
@@ -50,25 +51,44 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
       return;
     }
 
+    setUploadedFileName(file.name);
     setIsUploadingProof(true);
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `slips/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('payment_proofs')
-        .upload(filePath, file);
+      let publicUrlStr: string | null = null;
+      const bucketNames = ['payment_proofs', 'payment-slips', 'sales-documents'];
 
-      if (uploadError) throw uploadError;
+      for (const bName of bucketNames) {
+        try {
+          const { error: uploadError } = await supabase.storage
+            .from(bName)
+            .upload(filePath, file);
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('payment_proofs')
-        .getPublicUrl(filePath);
+          if (!uploadError) {
+            const { data } = supabase.storage.from(bName).getPublicUrl(filePath);
+            publicUrlStr = data?.publicUrl || null;
+            if (publicUrlStr) break;
+          }
+        } catch (bErr) {
+          console.warn(`Bucket ${bName} upload attempt info:`, bErr);
+        }
+      }
 
-      setPaymentProofUrl(publicUrl);
+      if (publicUrlStr) {
+        setPaymentProofUrl(publicUrlStr);
+      } else {
+        console.warn("Storage bucket not available. Fallback to base64 string.");
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPaymentProofUrl(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
     } catch (err: any) {
-      alert('Upload failed: ' + err.message);
+      console.warn('File upload error warning:', err);
     } finally {
       setIsUploadingProof(false);
     }
@@ -99,6 +119,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
       setReceivedAmount('');
       setPaymentMethod('UPI');
       setPaymentProofUrl('');
+      setUploadedFileName('');
       setWorkDescription('');
       onClose(); 
     } catch (err: any) {
@@ -293,8 +314,10 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                 >
                   Select File
                 </label>
-                {paymentProofUrl && (
-                  <span className="text-[10px] text-emerald-400 font-bold truncate max-w-[200px]">Attached ✔</span>
+                {paymentProofUrl && uploadedFileName && (
+                  <span className="text-[10px] text-emerald-400 font-bold truncate max-w-[200px]">
+                    ✔ Payment Slip Attached: {uploadedFileName}
+                  </span>
                 )}
               </div>
             </div>
