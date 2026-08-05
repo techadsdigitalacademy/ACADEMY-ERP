@@ -139,8 +139,9 @@ export const SalesDashboard: React.FC = () => {
 
   // Set default view on load
   useEffect(() => {
-    setIsAdminView(isAdminMode);
-  }, [isAdminMode]);
+    const isOwnerUser = activeStaff?.designation?.toLowerCase().includes('owner') || false;
+    setIsAdminView(isAdminMode && !isOwnerUser);
+  }, [isAdminMode, activeStaff?.designation]);
 
 
 
@@ -801,10 +802,45 @@ export const SalesDashboard: React.FC = () => {
     });
   }, [sales, selectedMonth]);
 
-  // Filter daily reports for the selected month
+  // Filter owner's personal sales for their personal Sales History view
+  const ownerPersonalSales = useMemo(() => {
+    if (!activeStaff) return [];
+    return (sales || []).filter((s: any) => 
+      s.staff_id === activeStaff.id || 
+      (s.staff_name && activeStaff.full_name && String(s.staff_name).toLowerCase() === activeStaff.full_name.toLowerCase()) ||
+      (s.full_name && activeStaff.full_name && String(s.full_name).toLowerCase() === activeStaff.full_name.toLowerCase())
+    );
+  }, [sales, activeStaff]);
+
+  {/* Main Content Area */}
   const monthReports = useMemo(() => {
     return dailyReports?.filter(r => r.report_date && r.report_date.startsWith(selectedMonth));
   }, [dailyReports, selectedMonth]);
+
+  // Owner personal monthly sales calculations for their terminal cards
+  const ownerMonthSales = useMemo(() => {
+    return ownerPersonalSales.filter((s: any) => {
+      if (!s.created_at) {
+        const [year, month] = selectedMonth.split('-');
+        const date = new Date(Number(year), Number(month) - 1, 1);
+        const name = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+        return s.sale_month === name;
+      }
+      return s.created_at.startsWith(selectedMonth);
+    });
+  }, [ownerPersonalSales, selectedMonth]);
+
+  const ownerTotalPackage = useMemo(() => {
+    return ownerMonthSales?.filter((s: any) => s.payment_type !== 'Clearance').reduce((sum: number, s: any) => sum + (Number(s.package_amount) || 0), 0);
+  }, [ownerMonthSales]);
+
+  const ownerTotalReceived = useMemo(() => {
+    return ownerMonthSales.reduce((sum: number, s: any) => sum + (Number(s.received_amount) || 0), 0);
+  }, [ownerMonthSales]);
+
+  const ownerTotalBalance = useMemo(() => {
+    return ownerMonthSales?.filter((s: any) => s.payment_type !== 'Clearance').reduce((sum: number, s: any) => sum + Math.max(0, (Number(s.package_amount) || 0) - (Number(s.received_amount) || 0)), 0);
+  }, [ownerMonthSales]);
 
   // Financial math for cards (filtered by month)
   const totalPackage = monthSales?.filter(s => s.payment_type !== 'Clearance').reduce((sum, s) => sum + s.package_amount, 0);
@@ -829,14 +865,7 @@ export const SalesDashboard: React.FC = () => {
       if (targetsObj[monthKey] !== undefined && targetsObj[monthKey] !== null) {
         return Number(targetsObj[monthKey]) || 0;
       }
-
-      const sortedKeys = Object.keys(targetsObj)
-        .filter(k => k < monthKey)
-        .sort((a, b) => b.localeCompare(a));
-
-      if (sortedKeys.length > 0 && targetsObj[sortedKeys[0]] !== undefined) {
-        return Number(targetsObj[sortedKeys[0]]) || 0;
-      }
+      return 0;
     }
 
     return Number(staffObj.monthly_target_amount) || 0;
@@ -870,6 +899,7 @@ export const SalesDashboard: React.FC = () => {
   }, [activeStaff, activeStaff?.monthly_targets, selectedMonth]);
 
   const targetPercent = targetAmount > 0 ? Math.min(100, Math.round((totalReceived / targetAmount) * 100)) : 0;
+  const ownerTargetPercent = targetAmount > 0 ? Math.min(100, Math.round((ownerTotalReceived / targetAmount) * 100)) : 0;
 
 
 
@@ -1546,11 +1576,11 @@ export const SalesDashboard: React.FC = () => {
                 dailyLeaderboard={dailyLeaderboard}
                 todayAttendanceStats={todayAttendanceStats}
                 academyRevenue={academyRevenue}
-                totalReceived={totalReceived}
-                totalPackage={totalPackage}
-                totalBalance={totalBalance}
+                totalReceived={isOwner && !isAdminView ? ownerTotalReceived : totalReceived}
+                totalPackage={isOwner && !isAdminView ? ownerTotalPackage : totalPackage}
+                totalBalance={isOwner && !isAdminView ? ownerTotalBalance : totalBalance}
                 targetAmount={targetAmount}
-                targetPercent={targetPercent}
+                targetPercent={isOwner && !isAdminView ? ownerTargetPercent : targetPercent}
                 todayAttendance={todayAttendance}
                 monthReports={monthReports}
                 selectedMonth={selectedMonth}
@@ -1595,9 +1625,9 @@ export const SalesDashboard: React.FC = () => {
             isOwner ? (
               <div className="space-y-6 pt-2">
                 <SalesHistoryLog 
-                  sales={sales} 
+                  sales={ownerPersonalSales} 
                   targetAmount={targetAmount} 
-                  isAdmin={true} 
+                  isAdmin={false} 
                   hideTargetProgress={true}
                   onViewSlip={handleViewSlip} 
                 />

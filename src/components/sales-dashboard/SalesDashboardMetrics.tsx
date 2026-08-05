@@ -44,6 +44,7 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
   getDailyReportTotals
 }) => {
   const isSalesRoleOrAdmin = isAdminView || activeStaff?.designation === 'Sales Executive' || isOwner;
+  const showAdminLayout = isAdminView && !isOwner;
 
   return (
     <div className="space-y-6">
@@ -52,8 +53,8 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
         <DailyLeaderboardMarquee dailyLeaderboard={dailyLeaderboard} />
       )}
 
-      {/* ADMIN VIEW LAYOUT */}
-      {isAdminView && (
+      {/* ADMIN VIEW LAYOUT (Only for Non-Owner Admins) */}
+      {showAdminLayout && (
         <div className="space-y-6">
 
           {/* Overhauled Admin Metrics Row */}
@@ -120,8 +121,8 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
         </div>
       )}
 
-      {/* STAFF VIEW LAYOUT */}
-      {!isAdminView && (
+      {/* STAFF & OWNER TERMINAL LAYOUT */}
+      {!showAdminLayout && (
         <div className="space-y-6">
           {/* Standard Staff Cards (Target Goal, Punch-in and Personal stats) */}
           <div className={`grid grid-cols-1 ${
@@ -130,7 +131,7 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
               : 'lg:grid-cols-3'
           } gap-6`}>
             {/* Target Card */}
-            {activeStaff.designation !== 'Graphic Designer' && activeStaff.designation !== 'Digital Marketer' && activeStaff.designation !== 'Videographer' && !isOwner && (
+            {activeStaff.designation !== 'Graphic Designer' && activeStaff.designation !== 'Digital Marketer' && activeStaff.designation !== 'Videographer' && (
               <Card variant="glass" glowColor="indigo" className="p-5 flex flex-col justify-between h-full min-h-[185px]">
                 <div className="flex justify-between items-start">
                   <div>

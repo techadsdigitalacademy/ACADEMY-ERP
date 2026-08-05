@@ -58,21 +58,19 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
       }
     }
 
-    if (targetsObj && typeof targetsObj === 'object') {
+    if (targetsObj && typeof targetsObj === 'object' && Object.keys(targetsObj).length > 0) {
       if (targetsObj[monthKey] !== undefined && targetsObj[monthKey] !== null) {
         return Number(targetsObj[monthKey]) || 0;
       }
-
-      const sortedKeys = Object.keys(targetsObj)
-        .filter(k => k < monthKey)
-        .sort((a, b) => b.localeCompare(a));
-
-      if (sortedKeys.length > 0 && targetsObj[sortedKeys[0]] !== undefined) {
-        return Number(targetsObj[sortedKeys[0]]) || 0;
-      }
+      return 0;
     }
 
-    return Number(staffRecord.monthly_target_amount) || 0;
+    const currentMonthStr = new Date().toISOString().substring(0, 7);
+    if (monthKey === currentMonthStr) {
+      return Number(staffRecord.monthly_target_amount) || 0;
+    }
+
+    return 0;
   };
 
   // Fetch targets for card grid view when activeMonthStr changes
@@ -133,18 +131,35 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
   const fetchProfileDetails = async (p: any, monthFilter: string) => {
     setIsLoadingDetails(true);
     try {
-      const { data: staffRecord } = await supabase
-        .from('staff')
-        .select('id, monthly_target_amount, monthly_targets')
-        .eq('full_name', p.full_name)
-        .maybeSingle();
+      let staffRecord: any = null;
+      try {
+        if (p.id) {
+          const { data: byId } = await supabase
+            .from('staff')
+            .select('id, monthly_target_amount, monthly_targets')
+            .eq('id', p.id)
+            .maybeSingle();
+          if (byId) staffRecord = byId;
+        }
+
+        if (!staffRecord && p.full_name) {
+          const { data: byName } = await supabase
+            .from('staff')
+            .select('id, monthly_target_amount, monthly_targets')
+            .ilike('full_name', p.full_name)
+            .maybeSingle();
+          if (byName) staffRecord = byName;
+        }
+      } catch (err) {
+        console.warn('Staff record fetch warning:', err);
+      }
 
       const targetStaffId = staffRecord ? staffRecord.id : p.id;
       setSelectedStaffId(targetStaffId);
 
       const activeTarget = resolveMonthTarget(staffRecord || p, monthFilter);
       setProfileTarget(activeTarget);
-      setNewTargetInput(activeTarget.toString());
+      setNewTargetInput(activeTarget > 0 ? activeTarget.toString() : '');
 
       // Fetch Sales & filter strictly for monthFilter
       const { data: saleData } = await supabase
@@ -320,7 +335,9 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
       }
 
       setProfileTarget(targetVal);
+      setNewTargetInput(targetVal.toString());
       setMonthTargetsMap(prev => ({ ...prev, [selectedStaffId]: targetVal }));
+      setSelectedProfile((prev: any) => prev ? { ...prev, monthly_targets: updatedTargets } : prev);
       alert(`Target for ${activeMonthStr} set to ${formatCurrency(targetVal)}!`);
     } catch (err: any) {
       alert('Failed to update target: ' + err.message);
@@ -394,8 +411,8 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             </div>
           </div>
 
-          {/* Month-Specific Target Setter for Sales Team */}
-          {isSalesRole && (
+          {/* Month-Specific Target Setter for Sales Team & Company Owners */}
+          {(isSalesRole || isOwnerRole) && (
             <div className="p-3 rounded-xl bg-slate-950/80 border border-white/10 flex items-center gap-3 self-start sm:self-center">
               <div>
                 <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Target ({activeMonthStr})</span>
@@ -528,7 +545,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                   sales={profileSales}
                   targetAmount={profileTarget}
                   isAdmin={true}
-                  hideTargetProgress={isOwnerRole}
+                  hideTargetProgress={false}
                   onEdit={(sale) => setEditingSale(sale)}
                   onDelete={(sale) => setDeletingSale(sale)}
                   onViewSlip={(sale) => {
