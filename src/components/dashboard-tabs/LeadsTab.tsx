@@ -7,7 +7,6 @@ import { supabase } from '../../services/supabase';
 
 interface LeadsTabProps {
   activeStaff: any;
-  isAdminMode: boolean;
   leadsList: any[];
   salesStaff: any[];
   newLeadName: string;
@@ -26,7 +25,6 @@ interface LeadsTabProps {
 
 export const LeadsTab: React.FC<LeadsTabProps> = ({
   activeStaff,
-  isAdminMode,
   leadsList,
   salesStaff,
   newLeadName,

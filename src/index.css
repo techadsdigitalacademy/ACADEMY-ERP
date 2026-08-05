@@ -8,8 +8,12 @@
 /* Custom scrollbar and premium micro-interactions */
 @layer base {
   body {
-    @apply bg-slate-950 text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white;
+    @apply bg-slate-950 text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-300;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  html.light body {
+    @apply bg-slate-100 text-slate-900 selection:bg-indigo-600 selection:text-white;
   }
 }
 
@@ -19,6 +23,14 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+html.light .glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .glass-card {
@@ -26,6 +38,14 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+html.light .glass-card {
+  background: rgba(248, 250, 252, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .gradient-border {
@@ -38,4 +58,8 @@
 .gradient-border-content {
   background: rgb(15, 23, 42);
   border-radius: calc(1rem - 1px);
+}
+
+html.light .gradient-border-content {
+  background: rgb(255, 255, 255);
 }

@@ -22,8 +22,8 @@ interface SalesDashboardModalsProps {
   isPunchModalOpen: boolean;
   onClosePunchModal: () => void;
   punchType: 'IN' | 'OUT';
-  punchIn: (staffId: string, location?: string, photoUrl?: string) => Promise<void>;
-  punchOut: (staffId: string, location?: string, photoUrl?: string) => Promise<void>;
+  punchIn: (selfieUrl?: string, lat?: number, lng?: number, status?: string) => Promise<void>;
+  punchOut: (status?: string) => Promise<void>;
 
   // Settings Modal
   isSettingsOpen: boolean;

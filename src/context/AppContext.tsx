@@ -9,6 +9,8 @@ interface AppContextType {
   dailyReports: DailyReport[];
   selectedMonth: string;
   setSelectedMonth: (month: string) => void;
+  theme: 'dark' | 'light';
+  toggleTheme: () => void;
   addSale: (saleData: { 
     clientName: string; 
     servicePackage: string; 
@@ -61,6 +63,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [dbError, setDbError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets'>('sales');
   const [isAdminMode, setIsAdminMode] = useState<boolean>(false);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      const saved = localStorage.getItem('tech_ads_theme');
+      return saved === 'light' ? 'light' : 'dark';
+    } catch (e) {
+      return 'dark';
+    }
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('light');
+      root.classList.remove('dark');
+    } else {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    }
+    try {
+      localStorage.setItem('tech_ads_theme', theme);
+    } catch (e) {}
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  };
 
   // Fetch sales and attendance for a specific staff member
   const fetchDashboardData = async (staffId: string) => {
@@ -87,7 +115,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const roleName = staffProfileCheck?.roles
         ? (Array.isArray(staffProfileCheck.roles) ? staffProfileCheck.roles[0]?.role_name : staffProfileCheck.roles.role_name)
         : '';
-      const isAdminUser = roleName === 'Director' || roleName === 'Admin' || roleName === 'Company Owner';
+
+      const nameUpper = String(activeStaff?.full_name || staffProfileCheck?.full_name || '').toUpperCase();
+      const desigLower = String(staffProfileCheck?.designation || activeStaff?.designation || '').toLowerCase();
+      const roleLower = String(roleName || '').toLowerCase();
+
+      const isAdminUser = 
+        nameUpper.includes('SHIBILI') ||
+        nameUpper.includes('ASHIF') ||
+        desigLower.includes('owner') ||
+        desigLower.includes('admin') ||
+        desigLower.includes('director') ||
+        desigLower.includes('managing') ||
+        roleLower.includes('owner') ||
+        roleLower.includes('admin') ||
+        roleLower.includes('director');
 
       // Fetch sales from Supabase
       let salesQuery = supabase
@@ -573,6 +615,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         dailyReports,
         selectedMonth,
         setSelectedMonth,
+        theme,
+        toggleTheme,
         addSale,
         addDailyReport,
         punchIn,

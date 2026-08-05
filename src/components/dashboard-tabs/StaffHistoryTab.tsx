@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Star, ArrowLeft, MessageSquare, Trash2, AlertTriangle } from 'lucide-react';
+import { Star, ArrowLeft, MessageSquare, AlertTriangle } from 'lucide-react';
 import { Card } from '../Card';
 import { Badge } from '../Badge';
 import { Button } from '../Button';
 import { SalesHistoryLog } from '../SalesHistoryLog';
 import { AttendanceDashboard } from '../AttendanceDashboard';
 import { EditSaleModal } from '../EditSaleModal';
+import { ExpenseHistoryTab } from './ExpenseHistoryTab';
 import { SelfieLightboxModal } from '../sales-dashboard/SelfieLightboxModal';
 import { supabase } from '../../services/supabase';
 import { formatCurrency } from '../../services/mockData';
@@ -19,12 +20,13 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
   const activeMonthStr = selectedMonth || new Date().toISOString().substring(0, 7);
 
   const [selectedProfile, setSelectedProfile] = useState<any | null>(null);
-  const [profileDetailTab, setProfileDetailTab] = useState<'sales' | 'attendance' | 'daily_reports' | 'leads'>('sales');
+  const [profileDetailTab, setProfileDetailTab] = useState<'sales' | 'attendance' | 'daily_reports' | 'leads' | 'expense_history'>('sales');
 
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [profileSales, setProfileSales] = useState<any[]>([]);
   const [profileReports, setProfileReports] = useState<any[]>([]);
   const [profileLeads, setProfileLeads] = useState<any[]>([]);
+  const [profileExpenses, setProfileExpenses] = useState<any[]>([]);
   const [profileTarget, setProfileTarget] = useState<number>(0);
   const [monthTargetsMap, setMonthTargetsMap] = useState<{ [staffId: string]: number }>({});
 
@@ -57,12 +59,10 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
     }
 
     if (targetsObj && typeof targetsObj === 'object') {
-      // 1. Exact match for monthKey
       if (targetsObj[monthKey] !== undefined && targetsObj[monthKey] !== null) {
         return Number(targetsObj[monthKey]) || 0;
       }
 
-      // 2. Immediately preceding month
       const sortedKeys = Object.keys(targetsObj)
         .filter(k => k < monthKey)
         .sort((a, b) => b.localeCompare(a));
@@ -72,7 +72,6 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
       }
     }
 
-    // 3. Fallback to default monthly_target_amount
     return Number(staffRecord.monthly_target_amount) || 0;
   };
 
@@ -112,12 +111,22 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
 
   useEffect(() => {
     if (selectedProfile) {
-      if (selectedProfile.designation === 'Sales Executive') {
+      const isOwner = selectedProfile.designation === 'Company Owner' || selectedProfile.designation === 'Company Owner / Partner' || selectedProfile.designation === 'Managing Director';
+      if (isOwner || selectedProfile.designation === 'Sales Executive') {
         setProfileDetailTab('sales');
       } else {
         setProfileDetailTab('daily_reports');
       }
       fetchProfileDetails(selectedProfile, activeMonthStr);
+
+      const handleExpensesChanged = () => {
+        fetchProfileDetails(selectedProfile, activeMonthStr);
+      };
+
+      window.addEventListener('company_expenses_changed', handleExpensesChanged);
+      return () => {
+        window.removeEventListener('company_expenses_changed', handleExpensesChanged);
+      };
     }
   }, [selectedProfile, activeMonthStr]);
 
@@ -167,9 +176,102 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
         return l.created_at.startsWith(monthFilter);
       });
 
-      setProfileSales(filteredSales);
-      setProfileReports(filteredReports);
-      setProfileLeads(filteredLeads);
+      // Fetch Owner Expenses, Partner Withdrawals & LocalStorage with Seed Fallback
+      let rawCombined: any[] = [];
+      try {
+        const { data: exp1, error: err1 } = await supabase
+          .from('expenses')
+          .select('*')
+          .eq('staff_id', targetStaffId)
+          .order('expense_date', { ascending: false });
+
+        if (err1) console.error("SUPABASE FETCH ERROR [expenses]:", err1, "DATA:", exp1);
+        console.log(`RAW DB EXPENSES (All):`, exp1);
+
+        const { data: exp2, error: err2 } = await supabase
+          .from('owner_expenses')
+          .select('*')
+          .eq('staff_id', targetStaffId)
+          .order('created_at', { ascending: false });
+
+        if (err2) console.error("SUPABASE FETCH ERROR [owner_expenses]:", err2, "DATA:", exp2);
+
+        const { data: exp3, error: err3 } = await supabase
+          .from('partner_withdrawals')
+          .select('*')
+          .or(`partner_id.eq.${targetStaffId},partner_name.eq.${p.full_name}`)
+          .order('withdrawal_date', { ascending: false });
+
+        if (err3) console.error("SUPABASE FETCH ERROR [partner_withdrawals]:", err3, "DATA:", exp3);
+
+        let localExp: any[] = [];
+        const keysToTry = ['company_expenses_local_store', 'expenses', 'owner_expenses', 'expenses_list'];
+        keysToTry.forEach(k => {
+          try {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                // Filter local storage items by the exact owner ID or Name
+                const matchingItems = parsed.filter(item => 
+                  item.staff_id === targetStaffId || 
+                  item.logged_by_name === p.full_name ||
+                  item.created_by === targetStaffId
+                );
+                localExp.push(...matchingItems);
+              }
+            }
+          } catch (e) {}
+        });
+
+        const withdrawalsAsExpenses = (exp3 || []).map((w: any) => ({
+          id: w.id || 'withdrawal-' + (w.created_at || Date.now()),
+          category: 'Partner Withdrawal',
+          description: w.notes || w.description || `Partner Withdrawal (${w.partner_name || p.full_name})`,
+          amount: Number(w.amount) || 0,
+          expense_date: w.withdrawal_date || w.created_at?.substring(0, 10),
+          staff_id: w.partner_id || targetStaffId,
+          created_at: w.created_at || w.withdrawal_date
+        }));
+
+        rawCombined = [...(exp1 || []), ...(exp2 || []), ...withdrawalsAsExpenses, ...localExp];
+
+        console.log(`🔍 [Expense Debug] Querying expenses for ${p.full_name}:`, {
+          targetStaffId,
+          profileId: p.id,
+          expensesCount: exp1?.length || 0,
+          ownerExpensesCount: exp2?.length || 0,
+          withdrawalsCount: exp3?.length || 0,
+          localExpCount: localExp.length,
+          totalRaw: rawCombined.length,
+          err1: err1?.message
+        });
+        console.log(`📦 [LocalStorage Expense Items]:`, localExp);
+      } catch (e) {
+        console.warn('Expense fetch info:', e);
+        rawCombined = [];
+      }
+
+      // Bypass restrictive filtering so that ALL expenses logged in local storage or supabase appear immediately
+      const seenIds = new Set<string>();
+      const finalExpenses: any[] = [];
+
+      rawCombined.forEach((item, idx) => {
+        if (item && !(item.id && String(item.id).startsWith('seed-exp-'))) {
+          const uniqueId = item.id ? String(item.id) : `generated-exp-${idx}-${item.amount}-${item.expense_date}`;
+          if (!seenIds.has(uniqueId)) {
+            seenIds.add(uniqueId);
+            finalExpenses.push({ ...item, id: uniqueId });
+          }
+        }
+      });
+
+      console.log(`DEBUG OWNER EXPENSES (fetchProfileDetails for ${p.full_name}):`, finalExpenses);
+
+      setProfileSales(filteredSales || []);
+      setProfileReports(filteredReports || []);
+      setProfileLeads(filteredLeads || []);
+      setProfileExpenses(finalExpenses);
     } catch (err) {
       console.error('Error fetching staff profile details:', err);
     } finally {
@@ -255,6 +357,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
   // FULL-PAGE DETAIL VIEW
   if (selectedProfile) {
     const isSalesRole = selectedProfile.designation === 'Sales Executive';
+    const isOwnerRole = selectedProfile.designation === 'Company Owner' || selectedProfile.designation === 'Company Owner / Partner' || selectedProfile.designation === 'Managing Director';
 
     return (
       <div className="space-y-6 pt-2 animate-fade-in max-w-7xl mx-auto">
@@ -277,7 +380,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
               <div>
                 <h2 className="text-base md:text-lg font-black text-white leading-tight">{selectedProfile.full_name}</h2>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <Badge variant={isSalesRole ? 'info' : 'success'}>
+                  <Badge variant={isOwnerRole ? 'purple' : isSalesRole ? 'info' : 'success'}>
                     {selectedProfile.designation}
                   </Badge>
                   <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
@@ -320,8 +423,41 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
         </div>
 
         {/* Role-Based Sub-Nav Tabs */}
-        <div className="flex gap-2 border-b border-white/5 pb-3">
-          {isSalesRole ? (
+        <div className="flex gap-2 border-b border-white/5 pb-3 overflow-x-auto scrollbar-none whitespace-nowrap">
+          {isOwnerRole ? (
+            <>
+              <button
+                onClick={() => setProfileDetailTab('sales')}
+                className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all border ${
+                  profileDetailTab === 'sales'
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
+                    : 'bg-slate-950 border-white/5 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Sales History ({profileSales.length})
+              </button>
+              <button
+                onClick={() => setProfileDetailTab('attendance')}
+                className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all border ${
+                  profileDetailTab === 'attendance'
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
+                    : 'bg-slate-950 border-white/5 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Attendance
+              </button>
+              <button
+                onClick={() => setProfileDetailTab('expense_history')}
+                className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all border ${
+                  profileDetailTab === 'expense_history'
+                    ? 'bg-rose-600 border-rose-500 text-white shadow-lg shadow-rose-600/20'
+                    : 'bg-slate-950 border-white/5 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Expense History ({profileExpenses.length})
+              </button>
+            </>
+          ) : isSalesRole ? (
             <>
               <button
                 onClick={() => setProfileDetailTab('sales')}
@@ -392,6 +528,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                   sales={profileSales}
                   targetAmount={profileTarget}
                   isAdmin={true}
+                  hideTargetProgress={isOwnerRole}
                   onEdit={(sale) => setEditingSale(sale)}
                   onDelete={(sale) => setDeletingSale(sale)}
                   onViewSlip={(sale) => {
@@ -635,6 +772,19 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                 </div>
               </Card>
             )}
+
+            {/* EXPENSE HISTORY SUB-TAB FOR COMPANY OWNER - DIRECT COMPONENT REUSE */}
+            {profileDetailTab === 'expense_history' && (() => {
+              console.log('DEBUG OWNER EXPENSES:', profileExpenses, activeMonthStr);
+              return (
+                <ExpenseHistoryTab
+                  activeTab="expense_history"
+                  isOwner={true}
+                  ownerExpenses={profileExpenses}
+                  selectedMonth={activeMonthStr}
+                />
+              );
+            })()}
           </>
         )}
       </div>

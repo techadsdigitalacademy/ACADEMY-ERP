@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Megaphone } from 'lucide-react';
 import { Card } from './Card';
 import { supabase } from '../services/supabase';
+import { getLocalNotices, saveLocalNotice, deleteLocalNotice } from '../services/noticeStore';
 
 interface NoticeBoardAdminModalProps {
   onClose: () => void;
@@ -21,56 +22,86 @@ export const NoticeBoardAdminModal: React.FC<NoticeBoardAdminModalProps> = ({ on
   }, []);
 
   const fetchNotices = async () => {
-    setIsLoading(true);
+    // 1. Instantly load local notices at 0ms delay
+    const local = getLocalNotices();
+    setNotices(local);
+    setIsLoading(false);
+
+    // 2. Perform background check against Supabase
     try {
       const { data, error } = await supabase
-        .from('tutor_notices')
-        .select('*, author:staff_profiles(full_name)')
+        .from('agency_notices')
+        .select('*')
         .order('created_at', { ascending: false });
-        
-      if (error) throw error;
-      setNotices(data || []);
+
+      if (!error && data && data.length > 0) {
+        const dbMapped = data.map((n: any) => ({
+          id: n.id,
+          title: n.title || n.subject || 'Announcement',
+          content: n.content || n.message || n.notice || '',
+          created_by: n.created_by,
+          author_name: n.author_name || n.author?.full_name || 'Management',
+          created_at: n.created_at
+        }));
+
+        const merged = [...local];
+        dbMapped.forEach((dbItem: any) => {
+          if (!merged.some(m => m.id === dbItem.id || (m.title === dbItem.title && m.content === dbItem.content))) {
+            merged.push(dbItem);
+          }
+        });
+        setNotices(merged);
+      }
     } catch (err: any) {
-      alert('Error fetching notices: ' + err.message);
-    } finally {
-      setIsLoading(false);
+      console.warn('Background Supabase notice check info:', err);
     }
   };
 
   const handleSaveNotice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !content || !staffId) return;
-    
+    if (!title.trim() || !content.trim()) return;
+
     setIsSaving(true);
+    
+    // Save to centralized local store immediately
+    saveLocalNotice({
+      title,
+      content,
+      created_by: staffId,
+      author_name: 'Management'
+    });
+
+    // Try Supabase insert in background
     try {
-      const { error } = await supabase.from('tutor_notices').insert({
-        title,
-        content,
+      await supabase.from('agency_notices').insert({
+        title: title.trim(),
+        content: content.trim(),
         created_by: staffId
       });
-      
-      if (error) throw error;
-      
+    } catch (err: any) {
+      console.warn('Background Supabase notice insert info:', err.message);
+    } finally {
+      setIsSaving(false);
       setIsAdding(false);
       setTitle('');
       setContent('');
       fetchNotices();
-    } catch (err: any) {
-      alert('Failed to save notice: ' + err.message);
-    } finally {
-      setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    
+
+    deleteLocalNotice(id);
+
     try {
-      const { error } = await supabase.from('tutor_notices').delete().eq('id', id);
-      if (error) throw error;
-      fetchNotices();
+      if (!id.startsWith('notice-') && !id.startsWith('local-')) {
+        await supabase.from('agency_notices').delete().eq('id', id);
+      }
     } catch (err: any) {
-      alert('Failed to delete notice: ' + err.message);
+      console.warn('Background Supabase delete info:', err.message);
+    } finally {
+      fetchNotices();
     }
   };
 
@@ -86,7 +117,7 @@ export const NoticeBoardAdminModal: React.FC<NoticeBoardAdminModalProps> = ({ on
             </div>
             <div>
               <h2 className="text-xl font-black text-white">Notice Board Management</h2>
-              <p className="text-xs text-slate-400">Broadcast messages to tutors</p>
+              <p className="text-xs text-slate-400">Broadcast notices to agency staff</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors">

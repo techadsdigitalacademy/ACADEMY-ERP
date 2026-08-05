@@ -13,7 +13,9 @@ import {
   Settings,
   LogOut,
   Camera,
-  FolderOpen
+  FolderOpen,
+  Sun,
+  Moon
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -23,7 +25,8 @@ export const Sidebar: React.FC = () => {
     setActiveTab, 
     isAdminMode, 
     logout,
-    
+    theme,
+    toggleTheme
   } = useApp();
 
   
@@ -207,6 +210,13 @@ export const Sidebar: React.FC = () => {
             </div>
           </div>
           <div className="flex gap-2">
+            <button 
+              onClick={toggleTheme}
+              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+              className="flex items-center justify-center p-2 rounded-xl text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition-all duration-200 cursor-pointer"
+            >
+              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4 text-indigo-400" />}
+            </button>
             <button 
               
               className="flex-1 flex items-center justify-center gap-1.5 px-2 py-2 rounded-xl text-[10px] font-bold text-slate-400 hover:text-white bg-slate-800/40 hover:bg-slate-800 border border-white/5 transition-all duration-200"

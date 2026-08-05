@@ -9,6 +9,7 @@ interface SalesHistoryLogProps {
   sales: any[];
   targetAmount: number;
   isAdmin?: boolean;
+  hideTargetProgress?: boolean;
   onEdit?: (sale: any) => void;
   onDelete?: (sale: any) => void;
   onViewSlip?: (sale: any) => void;
@@ -18,6 +19,7 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
   sales,
   targetAmount,
   isAdmin = false,
+  hideTargetProgress = false,
   onEdit,
   onDelete,
   onViewSlip
@@ -96,9 +98,9 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
       )}
 
       {/* Top Overview Metric Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className={`grid grid-cols-1 ${hideTargetProgress ? 'md:grid-cols-3' : 'grid-cols-2 md:grid-cols-4'} gap-3`}>
         <Card variant="glass" className="p-3.5 border-white/5">
-          <span className="text-[9px] font-bold text-slate-450 uppercase block tracking-wider">Total Package</span>
+          <span className="text-[9px] font-bold text-slate-400 uppercase block tracking-wider">Total Package</span>
           <p className="text-sm font-extrabold text-white mt-1">{formatCurrency(totals.totalPackageAmt)}</p>
         </Card>
         <Card variant="glass" className="p-3.5 border-white/5">
@@ -109,19 +111,21 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
           <span className="text-[9px] font-bold text-amber-500 uppercase block tracking-wider">Total Balance</span>
           <p className="text-sm font-extrabold text-amber-400 mt-1">{formatCurrency(totals.totalBal)}</p>
         </Card>
-        <Card variant="glass" className="p-3.5 border-white/5 col-span-2 md:col-span-1">
-          <span className="text-[9px] font-bold text-indigo-500 uppercase block tracking-wider">Target Progress</span>
-          <p className="text-[10px] font-extrabold text-white mt-1.5 leading-none">
-            {formatCurrency(combinedReceived)} / {formatCurrency(targetAmount)}
-          </p>
-          <div className="w-full bg-slate-950/80 rounded-full h-1 mt-2 overflow-hidden border border-white/5">
-            <div 
-              className="bg-indigo-500 h-full rounded-full transition-all duration-300" 
-              style={{ width: `${progressPercent}%` }}
-            ></div>
-          </div>
-          <span className="text-[8px] text-indigo-400 font-bold block mt-1">{progressPercent}% Achieved</span>
-        </Card>
+        {!hideTargetProgress && (
+          <Card variant="glass" className="p-3.5 border-white/5 col-span-2 md:col-span-1">
+            <span className="text-[9px] font-bold text-indigo-500 uppercase block tracking-wider">Target Progress</span>
+            <p className="text-[10px] font-extrabold text-white mt-1.5 leading-none">
+              {formatCurrency(combinedReceived)} / {formatCurrency(targetAmount)}
+            </p>
+            <div className="w-full bg-slate-950/80 rounded-full h-1 mt-2 overflow-hidden border border-white/5">
+              <div 
+                className="bg-indigo-500 h-full rounded-full transition-all duration-300" 
+                style={{ width: `${progressPercent}%` }}
+              ></div>
+            </div>
+            <span className="text-[8px] text-indigo-400 font-bold block mt-1">{progressPercent}% Achieved</span>
+          </Card>
+        )}
       </div>
 
       {/* Filters & Search */}

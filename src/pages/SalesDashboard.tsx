@@ -8,28 +8,22 @@ import { LeadsTab } from '../components/dashboard-tabs/LeadsTab';
 import { SalesHistoryLog } from '../components/SalesHistoryLog';
 import { useApp } from '../context/AppContext';
 import { Card } from '../components/Card';
-import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { AttendanceDashboard } from '../components/AttendanceDashboard';
 import { SalesDashboardModals } from '../components/sales-dashboard/SalesDashboardModals';
 import { SalesDashboardMetrics } from '../components/sales-dashboard/SalesDashboardMetrics';
+import { AgencyNoticeBoardWidget } from '../components/AgencyNoticeBoardWidget';
+import { NoticeBoardAdminModal } from '../components/NoticeBoardAdminModal';
 import { supabase, supabaseAdmin } from '../services/supabase';
 import { formatCurrency } from '../services/mockData';
 import { 
   Plus, 
-  
-  Award,
   X,
-  Briefcase,
   Edit2,
-  Camera,
-  Download,
-  MessageSquare,
-  Upload,
   Star,
-  } from 'lucide-react';
-
-import type { Sale } from '../types';
+  Sun,
+  Moon
+} from 'lucide-react';
 
 export const SalesDashboard: React.FC = () => {
   const { 
@@ -46,8 +40,8 @@ export const SalesDashboard: React.FC = () => {
     activeTab,
     
     isAdminMode,
-    
-    
+    theme,
+    toggleTheme,
     fetchDashboardData
   } = useApp();
 
@@ -62,13 +56,8 @@ export const SalesDashboard: React.FC = () => {
     return `${String(displayHrs).padStart(2, '0')}:${mins} ${ampm}`;
   };
 
-  // Search & Filter state
-  const searchQuery = '';
-  
+  // Owner expenses state
   const [ownerExpenses, setOwnerExpenses] = useState<any[]>([]);
-   // Refetch if a new expense is logged
-
-  const [activeFilter, setActiveFilter] = useState<'All' | 'Full' | 'Advance' | 'Clearance'>('All');
   
   // Log Sale Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -93,22 +82,8 @@ export const SalesDashboard: React.FC = () => {
   const [videoTravelExpense, setVideoTravelExpense] = useState('');
   const [videoFilter, setVideoFilter] = useState<'All' | 'Tech Ads Agency' | 'Tech Ads Academy' | 'External Client'>('All');
 
-  // Admin Views & Report States
   const [isAdminView, setIsAdminView] = useState(false);
   const [isClosingReportOpen, setIsClosingReportOpen] = useState(false);
-  const [todaySummary, setTodaySummary] = useState<{
-    agencySalesAmount: number;
-    agencySalesCount: number;
-    academyFeesAmount: number;
-    academyFeesCount: number;
-    loading: boolean;
-  }>({
-    agencySalesAmount: 0,
-    agencySalesCount: 0,
-    academyFeesAmount: 0,
-    academyFeesCount: 0,
-    loading: false
-  });
   const [todayAttendanceStats, setTodayAttendanceStats] = useState({ present: 0, late: 0, halfDay: 0, leave: 0 });
   const [academyRevenue, setAcademyRevenue] = useState(0);
   const [dailyLeaderboard, setDailyLeaderboard] = useState<{ name: string; amount: number; avatar?: string }[]>([]);
@@ -160,6 +135,7 @@ export const SalesDashboard: React.FC = () => {
   const [isPunchModalOpen, setIsPunchModalOpen] = useState(false);
   const [punchType, setPunchType] = useState<'IN' | 'OUT'>('IN');
   const [enlargedSelfie, setEnlargedSelfie] = useState<string | null>(null);
+  const [isNoticeBoardModalOpen, setIsNoticeBoardModalOpen] = useState(false);
 
   // Set default view on load
   useEffect(() => {
@@ -308,130 +284,139 @@ export const SalesDashboard: React.FC = () => {
     }
   }, [isAdminView, activeTab, selectedMonth]);
 
-  useEffect(() => {
-    if (!isClosingReportOpen) return;
-
-    const fetchTodayClosingData = async () => {
-      setTodaySummary(prev => ({ ...prev, loading: true }));
-      try {
-        const localTodayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-
-        // 1. Fetch today's agency sales
-        const { data: salesData, error: salesErr } = await supabase
-          .from('sales')
-          .select('received_amount, created_at')
-          .order('created_at', { ascending: false })
-          .limit(300);
-
-        let agencySalesAmount = 0;
-        let agencySalesCount = 0;
-
-        if (!salesErr && salesData) {
-          const todaySales = salesData.filter(s => {
-            if (!s.created_at) return false;
-            const saleLocalDate = new Date(s.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-            return saleLocalDate === localTodayStr;
-          });
-
-          agencySalesCount = todaySales.length;
-          agencySalesAmount = todaySales.reduce((sum, item) => sum + Number(item.received_amount || 0), 0);
-        }
-
-        // 2. Fetch today's academy payments
-        const { data: feesData, error: feesErr } = await supabase
-          .from('academy_installments')
-          .select('amount_paid, created_at')
-          .order('created_at', { ascending: false })
-          .limit(300);
-
-        let academyFeesAmount = 0;
-        let academyFeesCount = 0;
-
-        if (!feesErr && feesData) {
-          const todayFees = feesData.filter(f => {
-            if (!f.created_at) return false;
-            const feeLocalDate = new Date(f.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-            return feeLocalDate === localTodayStr;
-          });
-
-          academyFeesCount = todayFees.length;
-          academyFeesAmount = todayFees.reduce((sum, item) => sum + Number(item.amount_paid || 0), 0);
-        }
-
-        setTodaySummary({
-          agencySalesAmount,
-          agencySalesCount,
-          academyFeesAmount,
-          academyFeesCount,
-          loading: false
-        });
-      } catch (err) {
-        console.error('Failed to fetch today closing data:', err);
-        setTodaySummary(prev => ({ ...prev, loading: false }));
-      }
-    };
-
-    fetchTodayClosingData();
-  }, [isClosingReportOpen]);
+        // Academy revenue computed
 
 
 
   const fetchDailyLeaderboard = async () => {
     try {
-      const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       const clientToUse = supabaseAdmin || supabase;
 
-      // 1. Fetch today's sales across the company using admin client
-      const { data: salesRows, error: salesErr } = await clientToUse
-        .from('sales')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(300);
+      // 1. Fetch sales from Supabase DB (Unjoined query for 100% RLS compatibility across all staff sessions)
+      let dbSales: any[] = [];
+      try {
+        const { data: salesRows, error: salesErr } = await clientToUse
+          .from('sales')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(300);
 
-      if (salesErr) throw salesErr;
+        if (salesErr) {
+          console.error('LEADERBOARD DB FETCH ERROR:', salesErr);
+        } else if (salesRows) {
+          dbSales = salesRows;
+        }
+      } catch (err) {
+        console.warn('Supabase leaderboard fetch warning:', err);
+      }
 
-      // 2. Fetch staff and staff_profiles for name resolution
-      const { data: staffRows } = await clientToUse
-        .from('staff')
-        .select('id, full_name, avatar_url, designation');
-
+      // 2. Fetch staff & profiles map for name/avatar resolution
       const staffMap: { [id: string]: any } = {};
-      (staffRows || []).forEach(s => {
-        if (s.id) staffMap[s.id] = s;
-        if (s.full_name) staffMap[s.full_name] = s;
+      try {
+        const { data: staffRows } = await clientToUse
+          .from('staff')
+          .select('id, full_name, avatar_url, designation');
+        (staffRows || []).forEach(s => {
+          if (s.id) staffMap[s.id] = s;
+          if (s.full_name) staffMap[s.full_name] = s;
+        });
+
+        const { data: profiles } = await clientToUse
+          .from('staff_profiles')
+          .select('id, full_name');
+        (profiles || []).forEach(p => {
+          if (p.id) staffMap[p.id] = p;
+          if (p.full_name) staffMap[p.full_name] = p;
+        });
+      } catch (err) {
+        console.warn('Staff map fetch info:', err);
+      }
+
+      // 3. Multi-source deduplicated merge: Supabase DB + AppContext sales + LocalStorage
+      let localSales: any[] = [];
+      try {
+        const stored = localStorage.getItem('company_sales_local_store');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) localSales = parsed;
+        }
+      } catch (e) {}
+
+      const allMergedSales = [...dbSales, ...(sales || []), ...localSales];
+      const deduppedMap = new Map<string, any>();
+
+      allMergedSales.forEach(s => {
+        if (s) {
+          const key = s.id 
+            ? String(s.id) 
+            : `${String(s.client_name || s.clientName || '').trim().toLowerCase()}-${Number(s.received_amount || s.amount || 0)}-${String(s.created_at || s.date || '').substring(0, 10)}`;
+          if (!deduppedMap.has(key)) {
+            deduppedMap.set(key, s);
+          }
+        }
+      });
+      const combinedSales = Array.from(deduppedMap.values());
+
+      // 4. Determine CURRENT calendar day in Indian Standard Time (Asia/Kolkata)
+      const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+      // Robust YYYY-MM-DD extractor prioritizing created_at timestamp FIRST
+      const parseToYYYYMMDD = (item: any): string => {
+        if (!item) return '';
+        // Check created_at ISO timestamp converted to IST date
+        if (item.created_at) {
+          try {
+            const d = new Date(item.created_at);
+            if (!isNaN(d.getTime())) {
+              return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            }
+          } catch (e) {}
+        }
+        // Fallback to timestamp or date fields
+        const val = item.timestamp || item.date || item.sale_date;
+        if (val) {
+          const str = String(val).trim();
+          try {
+            const d = new Date(val);
+            if (!isNaN(d.getTime())) {
+              return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            }
+          } catch (e) {}
+          const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
+          if (match) return match[1];
+        }
+        return '';
+      };
+
+      // 5. Strictly filter sales created on TODAY'S calendar date ONLY (No carryover or accumulation from previous days)
+      const todaySales = combinedSales.filter(sale => {
+        const itemDate = parseToYYYYMMDD(sale);
+        return itemDate === todayIST;
       });
 
-      const { data: profiles } = await clientToUse
-        .from('staff_profiles')
-        .select('id, full_name');
-
-      (profiles || []).forEach(p => {
-        if (p.id) staffMap[p.id] = p;
-        if (p.full_name) staffMap[p.full_name] = p;
-      });
-
-      const todaySales = (salesRows || []).filter((sale: any) => {
-        // Force convert Supabase UTC timestamp back into the user's local timezone date string
-        const saleDateLocal = sale.created_at ? new Date(sale.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) : null;
-        return saleDateLocal === todayIST || sale.date === todayIST || sale.sale_date === todayIST;
-      });
-
-      console.log("1. RAW SALES:", salesRows);
-      console.log("2. TODAY IST:", todayIST);
-      console.log("3. FILTERED SALES:", todaySales);
-
-      // Group and aggregate collections per staff member
+      // 6. Aggregate collections per Sales Executive for TODAY (Excluding Owners & Admins)
       const collections: { [staffKey: string]: { name: string; amount: number; avatar?: string } } = {};
 
       todaySales.forEach((sale: any) => {
-        const staffObj = sale.staff || staffMap[sale.staff_id];
+        const staffObj = sale.staff || staffMap[sale.staff_id] || (sale.staff_name ? staffMap[sale.staff_name] : null);
+        const rawName = sale.staff_name || staffObj?.full_name || staffObj?.name || sale.full_name || (sale.staff_id ? staffMap[sale.staff_id]?.full_name : null) || 'Sales Executive';
 
-        // Skip Company Owners in Leaderboard
-        if (staffObj?.designation === 'Company Owner') return;
+        // Completely exclude Company Owners, Admins, Directors, and Partners from Sales Leaderboard
+        const nameUpper = String(rawName).trim().toUpperCase();
+        const designationLower = String(staffObj?.designation || '').toLowerCase();
 
-        const rawName = sale.staff_name || staffObj?.full_name || staffObj?.name || sale.full_name || (sale.staff_id ? staffMap[sale.staff_id]?.full_name : null) || activeStaff?.full_name || 'Sales Executive';
+        const isExcludedUserOrRole = 
+          nameUpper.includes('SHIBILI') || 
+          nameUpper.includes('ASHIF') ||
+          designationLower.includes('owner') ||
+          designationLower.includes('admin') ||
+          designationLower.includes('director') ||
+          designationLower.includes('partner');
+
+        if (isExcludedUserOrRole) return;
+
         const staffKey = sale.staff_id || rawName;
-        const recAmount = Number(sale.received_amount || sale.amount || sale.package_amount || 0);
+        const recAmount = Number(sale.received_amount !== undefined ? sale.received_amount : (sale.amount || 0));
 
         if (recAmount <= 0) return;
 
@@ -445,12 +430,12 @@ export const SalesDashboard: React.FC = () => {
         collections[staffKey].amount += recAmount;
       });
 
-      // Sort in descending order of total amount
+      // 7. Sort Sales Executives from highest to lowest collection amount for today
       const sortedLeaderboard = Object.values(collections)
         ?.filter(item => item.amount > 0)
         ?.sort((a, b) => b.amount - a.amount);
 
-      console.log("4. FINAL LEADERBOARD ARRAY:", sortedLeaderboard);
+      console.log("Daily Leaderboard (Today IST):", sortedLeaderboard);
       setDailyLeaderboard(sortedLeaderboard);
     } catch (err) {
       console.error('Error fetching daily leaderboard:', err);
@@ -607,18 +592,59 @@ export const SalesDashboard: React.FC = () => {
 
 
   useEffect(() => {
-    if (isOwner && activeStaff?.id) {
+    if (isOwner) {
       const fetchOwnerExpenses = async () => {
-        const { data } = await supabase
-          .from('expenses')
-          .select('*')
-          .eq('staff_id', activeStaff.id)
-          .order('expense_date', { ascending: false });
-        if (data) setOwnerExpenses(data);
+        try {
+          let { data, error } = await supabase
+            .from('expenses')
+            .select('*')
+            .order('expense_date', { ascending: false });
+
+          if (error || !data || data.length === 0) {
+            const { data: fbData } = await supabase
+              .from('owner_expenses')
+              .select('*')
+              .order('expense_date', { ascending: false });
+            if (fbData && fbData.length > 0) {
+              data = fbData;
+            }
+          }
+
+          let localExp: any[] = [];
+          try {
+            const stored = localStorage.getItem('company_expenses_local_store');
+            if (stored) localExp = JSON.parse(stored);
+          } catch (e) {
+            localExp = [];
+          }
+
+          const combined = [...(data || []), ...localExp];
+          const uniqueMap = new Map<string, any>();
+          combined.forEach((item, idx) => {
+            if (item) {
+              const key = item.id || `${item.expense_date}-${item.amount}-${item.category}-${idx}`;
+              if (!uniqueMap.has(key)) uniqueMap.set(key, item);
+            }
+          });
+
+          setOwnerExpenses(Array.from(uniqueMap.values()));
+        } catch (err) {
+          console.warn('Error fetching owner expenses:', err);
+        }
       };
+
       fetchOwnerExpenses();
+
+      const handleExpensesChanged = () => {
+        fetchOwnerExpenses();
+      };
+
+      window.addEventListener('company_expenses_changed', handleExpensesChanged);
+      return () => {
+        window.removeEventListener('company_expenses_changed', handleExpensesChanged);
+      };
     }
-  }, [isOwner, activeStaff]);
+  }, [isOwner, selectedMonth]);
 
 
 
@@ -872,33 +898,8 @@ export const SalesDashboard: React.FC = () => {
 
   // Filter Sales list (For staff view)
   const filteredSales = useMemo(() => {
-    return computedMonthSales?.filter(sale => {
-      const matchesSearch = sale.client_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            sale.service_package.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesFilter = activeFilter === 'All' || sale.payment_type === activeFilter;
-      return matchesSearch && matchesFilter;
-    });
-  }, [computedMonthSales, searchQuery, activeFilter]);
-
-  // Sales totals calculator helper
-  const getSalesTotals = (salesList: any[]) => {
-    let totalPackageAmt = 0;
-    let totalRec = 0;
-    let totalBal = 0;
-    let totalClearing = 0;
-    let validWorksCount = 0;
-    salesList.forEach(s => {
-      if (s.payment_type === 'Clearance') {
-        totalClearing += s.received_amount || 0;
-      } else {
-        totalPackageAmt += s.package_amount || 0;
-        totalRec += s.received_amount || 0;
-        totalBal += Math.max(0, (s.package_amount || 0) - (s.received_amount || 0));
-        validWorksCount += 1;
-      }
-    });
-    return { totalPackageAmt, totalRec, totalBal, totalClearing, validWorksCount };
-  };
+    return computedMonthSales || [];
+  }, [computedMonthSales]);
 
   // Daily reports totals calculator helper
   const getDailyReportTotals = (reportsList: any[]) => {
@@ -1465,23 +1466,32 @@ export const SalesDashboard: React.FC = () => {
         
         {/* Header */}
         <header className="glass-panel sticky top-0 z-30 px-4 md:px-8 py-3.5 border-b border-white/5 backdrop-blur-md">
-          <div className="max-w-6xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h1 className="text-base md:text-lg font-bold text-white tracking-wide">
+          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 w-full sm:w-auto">
+              <h1 className="text-sm md:text-lg font-bold text-white tracking-wide">
                 {isAdminView ? 'Admin Control Dashboard' :  'Consultant Sales Terminal'}
               </h1>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-2.5 py-1 rounded-xl bg-slate-900 border border-white/10 text-xs font-bold text-slate-350 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
-              >
-                {getMonthOptions()?.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="px-2.5 py-1 rounded-xl bg-slate-900 border border-white/10 text-xs font-bold text-slate-350 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                >
+                  {getMonthOptions()?.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={toggleTheme}
+                  title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+                  className="p-2 rounded-xl bg-slate-900 border border-white/10 text-amber-400 hover:text-amber-300 hover:bg-slate-800 transition-all cursor-pointer shrink-0"
+                >
+                  {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4 text-indigo-400" />}
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
 
 
               {isAdminView && (
@@ -1528,29 +1538,38 @@ export const SalesDashboard: React.FC = () => {
         <main className="max-w-6xl w-full mx-auto px-4 md:px-8 mt-6 space-y-6">
           
           {activeTab === 'sales' && (
- /* sales OR admin dashboard */
-            <SalesDashboardMetrics 
-              isAdminView={isAdminView}
-              activeStaff={activeStaff}
-              isOwner={isOwner}
-              dailyLeaderboard={dailyLeaderboard}
-              todayAttendanceStats={todayAttendanceStats}
-              academyRevenue={academyRevenue}
-              totalReceived={totalReceived}
-              totalPackage={totalPackage}
-              totalBalance={totalBalance}
-              targetAmount={targetAmount}
-              targetPercent={targetPercent}
-              todayAttendance={todayAttendance}
-              monthReports={monthReports}
-              selectedMonth={selectedMonth}
-              formatTimeStr={formatTimeStr}
-              onOpenPunchModal={(type) => {
-                setPunchType(type);
-                setIsPunchModalOpen(true);
-              }}
-              getDailyReportTotals={getDailyReportTotals}
-            />
+            <div className="space-y-6">
+              <SalesDashboardMetrics 
+                isAdminView={isAdminView}
+                activeStaff={activeStaff}
+                isOwner={isOwner}
+                dailyLeaderboard={dailyLeaderboard}
+                todayAttendanceStats={todayAttendanceStats}
+                academyRevenue={academyRevenue}
+                totalReceived={totalReceived}
+                totalPackage={totalPackage}
+                totalBalance={totalBalance}
+                targetAmount={targetAmount}
+                targetPercent={targetPercent}
+                todayAttendance={todayAttendance}
+                monthReports={monthReports}
+                selectedMonth={selectedMonth}
+                formatTimeStr={formatTimeStr}
+                onOpenPunchModal={(type) => {
+                  setPunchType(type);
+                  setIsPunchModalOpen(true);
+                }}
+                getDailyReportTotals={getDailyReportTotals}
+              />
+
+              {/* Agency Notice Board Widget placed ONLY at the bottom of Sales Hub main tab */}
+              <div className="pt-4 border-t border-white/5">
+                <AgencyNoticeBoardWidget 
+                  isAdmin={isAdminView || isAdminMode}
+                  onOpenAdminNoticeModal={() => setIsNoticeBoardModalOpen(true)}
+                />
+              </div>
+            </div>
           )}
 
           {activeTab === 'staff-history' && isAdminView && (
@@ -1564,53 +1583,65 @@ export const SalesDashboard: React.FC = () => {
               <AttendanceDashboard 
                 staffId={activeStaff.id}
                 fullName={activeStaff.full_name}
-                designation={activeStaff.designation}
-                gender={activeStaff.gender}
-                avatarUrl={activeStaff.avatar_url}
+                designation={activeStaff.designation || 'Staff'}
+                gender={activeStaff.gender || 'Male'}
+                avatarUrl={activeStaff.avatar_url || null}
                 isAdmin={false}
               />
             </div>
           )}
 
-          {activeTab === 'history' && !isOwner && (
-            <DailyWorkLoggingTab
-              isCreativeRole={isCreativeRole}
-              activeStaff={activeStaff}
-              selectedMonth={selectedMonth}
-              monthReports={monthReports}
-              filteredSales={filteredSales}
-              targetAmount={targetAmount}
-              dailyWorkType={dailyWorkType}
-              setDailyWorkType={setDailyWorkType}
-              dailyWorkDesc={dailyWorkDesc}
-              setDailyWorkDesc={setDailyWorkDesc}
-              isSubmittingReport={isSubmittingReport}
-              setIsSubmittingReport={setIsSubmittingReport}
-              postersCount={postersCount}
-              setPostersCount={setPostersCount}
-              reEditsCount={reEditsCount}
-              setReEditsCount={setReEditsCount}
-              logosCount={logosCount}
-              setLogosCount={setLogosCount}
-              othersCount={othersCount}
-              setOthersCount={setOthersCount}
-              adsPlacedCount={adsPlacedCount}
-              setAdsPlacedCount={setAdsPlacedCount}
-              videoWorkCategory={videoWorkCategory}
-              setVideoWorkCategory={setVideoWorkCategory}
-              videoClientName={videoClientName}
-              setVideoClientName={setVideoClientName}
-              videoCount={videoCount}
-              setVideoCount={setVideoCount}
-              videoTravelExpense={videoTravelExpense}
-              setVideoTravelExpense={setVideoTravelExpense}
-              addDailyReport={addDailyReport}
-              renderDailyReportsTable={renderDailyReportsTable}
-              handleViewSlip={handleViewSlip}
-            />
+          {activeTab === 'history' && (
+            isOwner ? (
+              <div className="space-y-6 pt-2">
+                <SalesHistoryLog 
+                  sales={sales} 
+                  targetAmount={targetAmount} 
+                  isAdmin={true} 
+                  hideTargetProgress={true}
+                  onViewSlip={handleViewSlip} 
+                />
+              </div>
+            ) : (
+              <DailyWorkLoggingTab
+                isCreativeRole={isCreativeRole}
+                activeStaff={activeStaff}
+                selectedMonth={selectedMonth}
+                monthReports={monthReports}
+                filteredSales={filteredSales}
+                targetAmount={targetAmount}
+                dailyWorkType={dailyWorkType}
+                setDailyWorkType={setDailyWorkType}
+                dailyWorkDesc={dailyWorkDesc}
+                setDailyWorkDesc={setDailyWorkDesc}
+                isSubmittingReport={isSubmittingReport}
+                setIsSubmittingReport={setIsSubmittingReport}
+                postersCount={postersCount}
+                setPostersCount={setPostersCount}
+                reEditsCount={reEditsCount}
+                setReEditsCount={setReEditsCount}
+                logosCount={logosCount}
+                setLogosCount={setLogosCount}
+                othersCount={othersCount}
+                setOthersCount={setOthersCount}
+                adsPlacedCount={adsPlacedCount}
+                setAdsPlacedCount={setAdsPlacedCount}
+                videoWorkCategory={videoWorkCategory}
+                setVideoWorkCategory={setVideoWorkCategory}
+                videoClientName={videoClientName}
+                setVideoClientName={setVideoClientName}
+                videoCount={videoCount}
+                setVideoCount={setVideoCount}
+                videoTravelExpense={videoTravelExpense}
+                setVideoTravelExpense={setVideoTravelExpense}
+                addDailyReport={addDailyReport}
+                renderDailyReportsTable={renderDailyReportsTable}
+                handleViewSlip={handleViewSlip}
+              />
+            )
           )}
 
-          {(activeTab === 'expense_history' || (activeTab === 'history' && isOwner)) && (
+          {activeTab === 'expense_history' && (
             <ExpenseHistoryTab
               activeTab={activeTab}
               isOwner={isOwner}
@@ -1620,10 +1651,9 @@ export const SalesDashboard: React.FC = () => {
             />
           )}
 
-          {activeTab === 'leads' && (
+          {activeTab === 'leads' && activeStaff && (
             <LeadsTab
               activeStaff={activeStaff}
-              isAdminMode={isAdminMode}
               leadsList={leadsList}
               salesStaff={salesStaff}
               newLeadName={newLeadName}
@@ -1657,7 +1687,7 @@ export const SalesDashboard: React.FC = () => {
         isOwner={isOwner}
         activeStaff={activeStaff}
         addSale={addSale}
-        onExpenseLogged={fetchDashboardData}
+        onExpenseLogged={() => fetchDashboardData(activeStaff.id)}
         isPunchModalOpen={isPunchModalOpen}
         onClosePunchModal={() => setIsPunchModalOpen(false)}
         punchType={punchType}
@@ -1695,6 +1725,13 @@ export const SalesDashboard: React.FC = () => {
             />
           </div>
         </div>
+      )}
+      {/* NOTICE BOARD ADMIN MODAL */}
+      {isNoticeBoardModalOpen && (
+        <NoticeBoardAdminModal
+          staffId={activeStaff?.id}
+          onClose={() => setIsNoticeBoardModalOpen(false)}
+        />
       )}
     </div>
   );

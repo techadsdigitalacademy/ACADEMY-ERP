@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { Card } from './Card';
-import { Badge } from './Badge';
 import { Button } from './Button';
-import { AttendanceDashboard } from './AttendanceDashboard';
-import { X, Edit2 } from 'lucide-react';
+import { X } from 'lucide-react';
 import { SalesHistoryLog } from './SalesHistoryLog';
 import { EditSaleModal } from './EditSaleModal';
 
@@ -19,6 +17,7 @@ interface StaffProfile {
   weekly_off_day: string;
   avatar_url?: string;
   auth_user_id?: string;
+  monthly_target_amount?: number;
 }
 
 interface StaffProfileDrawerProps {
@@ -27,14 +26,11 @@ interface StaffProfileDrawerProps {
 }
 
 export default function StaffProfileDrawer({ profile, onClose }: StaffProfileDrawerProps) {
-  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [profileSales, setProfileSales] = useState<any[]>([]);
   const [profileReports, setProfileReports] = useState<any[]>([]);
   const [detailTab, setDetailTab] = useState<'sales' | 'attendance' | 'reports'>('sales');
 
   const [editingSale, setEditingSale] = useState<any | null>(null);
-  const [deletingSale, setDeletingSale] = useState<any | null>(null);
-        const [isUpdatingSale, setIsUpdatingSale] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -56,7 +52,6 @@ export default function StaffProfileDrawer({ profile, onClose }: StaffProfileDra
         .maybeSingle();
 
       const targetStaffId = staffRecord ? staffRecord.id : p.id;
-      setSelectedStaffId(targetStaffId);
 
       const { data: saleData } = await supabase
         .from('sales')
@@ -75,15 +70,6 @@ export default function StaffProfileDrawer({ profile, onClose }: StaffProfileDra
     } catch (err) {
       console.error('Error fetching details', err);
     }
-  };
-
-  const formatCurrency = (amount: number | null | undefined) => {
-    if (amount === null || amount === undefined) return '₹0';
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0
-    }).format(amount);
   };
 
   const getAvatarUrl = (name: string, gender: string) => {
@@ -186,16 +172,35 @@ export default function StaffProfileDrawer({ profile, onClose }: StaffProfileDra
           </div>
         )}
 
-        {detailTab === 'attendance' && (
-          <AttendanceDashboard 
-            staffId={selectedStaffId || profile.id}
-            fullName={profile.full_name}
-            designation={profile.designation}
-            gender={profile.gender}
-            avatarUrl={null}
-            isAdmin={true}
-            onOverrideSuccess={() => {}}
-          />
+        {detailTab === 'reports' && (
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-white uppercase">Daily Reports ({profileReports.length})</h4>
+            <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/20 max-h-60 overflow-y-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase">
+                    <th className="py-2.5 px-3">Date</th>
+                    <th className="py-2.5 px-3">Work Type</th>
+                    <th className="py-2.5 px-3">Description</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5 text-slate-300">
+                  {profileReports.map((r) => (
+                    <tr key={r.id}>
+                      <td className="py-2.5 px-3 font-mono text-slate-400">{r.report_date}</td>
+                      <td className="py-2.5 px-3 font-bold text-emerald-400">{r.work_type}</td>
+                      <td className="py-2.5 px-3 text-slate-300 truncate max-w-xs">{r.description || '-'}</td>
+                    </tr>
+                  ))}
+                  {profileReports.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="text-center py-6 text-slate-500 font-bold">No daily reports recorded.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
 
         <div className="mt-6 pt-2 border-t border-slate-800">

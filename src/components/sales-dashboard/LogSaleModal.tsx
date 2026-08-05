@@ -143,14 +143,41 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
     if (!ownerExpAmount || !activeStaff) return;
     setIsSubmittingOwnerExp(true);
     try {
-      const { error } = await supabase.from('expenses').insert({
+      const dbExpPayload = {
         category: ownerExpCategory,
         description: ownerExpDescription.trim(),
         amount: Number(ownerExpAmount),
         expense_date: ownerExpDate,
-        staff_id: activeStaff.id
-      });
-      if (error) throw error;
+        staff_id: activeStaff.id,
+        created_at: new Date().toISOString()
+      };
+
+      const { data: insertedData, error } = await supabase.from('expenses').insert(dbExpPayload).select().single();
+      if (error) {
+        console.error('Supabase expense insert failed:', error);
+        throw new Error(error.message || 'Failed to save expense to the cloud database. Check RLS policies.');
+      }
+
+      const localPayload = insertedData || { ...dbExpPayload, id: 'exp-' + Date.now() };
+
+      // Dual-sync to shared company_expenses_local_store and expenses keys
+      try {
+        const keys = ['company_expenses_local_store', 'expenses', 'owner_expenses'];
+        keys.forEach(k => {
+          const stored = localStorage.getItem(k);
+          const list = stored ? JSON.parse(stored) : [];
+          if (Array.isArray(list)) {
+            list.unshift(localPayload);
+            localStorage.setItem(k, JSON.stringify(list));
+          }
+        });
+      } catch (err) {
+        console.warn('LocalStorage expense save info:', err);
+      }
+
+      // Dispatch custom window event for 0ms instant UI rendering
+      window.dispatchEvent(new CustomEvent('company_expenses_changed', { detail: localPayload }));
+
       alert('Expense logged successfully!');
       
       setOwnerExpAmount('');
@@ -358,15 +385,9 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                 onChange={(e) => setOwnerExpCategory(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
               >
-                <option value="Salary">Salary</option>
-                <option value="Rent">Rent</option>
-                <option value="Electricity">Electricity</option>
-                <option value="Internet">Internet</option>
-                <option value="Software/Tools">Software/Tools</option>
-                <option value="Marketing">Marketing</option>
-                <option value="Office Supplies">Office Supplies</option>
-                <option value="Travel">Travel</option>
-                <option value="Miscellaneous">Miscellaneous</option>
+                {['Salary', 'Rent', 'Internet & Recharge', 'Food & Drinks', 'EMI', 'Repair & Maintenance', 'Stationery', 'Electricity', 'Transport', 'Fixed Asset', 'Outwork', 'Return Sales', 'Facebook Ads', 'Marketing & Ads', 'Office & Operations', 'Software & Cloud', 'Client Hospitality', 'Equipment & Hardware', 'Other Expense'].map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
               </select>
             </div>
             

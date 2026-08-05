@@ -115,10 +115,15 @@ export const StaffManagement: React.FC = () => {
         });
       }
 
-      const mergedProfs = (profs || [])?.map(p => ({
-        ...p,
-        avatar_url: avatarMap.get(p.full_name) || undefined
-      }));
+      const mergedProfs = (profs || [])
+        ?.filter(p => {
+          const desig = p.designation?.toLowerCase() || '';
+          return !desig.includes('tutor') && !desig.includes('counselor');
+        })
+        ?.map(p => ({
+          ...p,
+          avatar_url: avatarMap.get(p.full_name) || undefined
+        }));
 
       setProfiles(mergedProfs);
 
@@ -152,6 +157,18 @@ export const StaffManagement: React.FC = () => {
     setSelectedProfile(profile);
   };
 
+  // Filter profiles (strictly excluding Tutor & Academy Counselor)
+  const filteredProfiles = profiles?.filter(p => {
+    const desig = p.designation?.toLowerCase() || '';
+    if (desig.includes('tutor') || desig.includes('counselor')) return false;
+
+    return (
+      p.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.designation.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.username.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
+  
   // Add new profile
   const handleAddStaff = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -383,13 +400,6 @@ export const StaffManagement: React.FC = () => {
     const index = (sum % 20) + 1;
     return `https://avatar.iran.liara.run/public/${genderKey}?username=${encodeURIComponent(name)}&idx=${index}`;
   };
-
-  // Filter profiles
-  const filteredProfiles = profiles?.filter(p => 
-    p.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.designation.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    p.username.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex relative overflow-x-hidden">

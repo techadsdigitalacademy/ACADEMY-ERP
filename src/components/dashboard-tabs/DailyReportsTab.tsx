@@ -1,5 +1,4 @@
 import React from 'react';
-import { Card } from '../Card';
 import { Badge } from '../Badge';
 import { Edit2 } from 'lucide-react';
 

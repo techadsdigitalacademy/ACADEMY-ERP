@@ -183,19 +183,6 @@ export const PunchModal: React.FC<PunchModalProps> = ({
       } else {
         // Punch Out
         let status: 'PRESENT' | 'LATE' | 'HALF_DAY' = 'PRESENT';
-
-        // Resolve dynamic shift end time
-        let shiftEndMin = 1110; // fallback to 6:30 PM (18 * 60 + 30)
-        if (activeStaff?.shift_end_time) {
-          const parts = activeStaff.shift_end_time.split(':');
-          if (parts.length >= 2) {
-            shiftEndMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-          }
-        }
-
-        // Check if punching out early (before end time minus 30 mins)
-        // If they leave more than 30 mins early, mark as HALF_DAY? Actually, just let them punch out.
-        // Or keep the original logic (we don't strictly re-evaluate HALF_DAY on punch-out unless required).
         await punchOut(status);
         alert(`Successfully punched out! Status: ${status}`);
       }

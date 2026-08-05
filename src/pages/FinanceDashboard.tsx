@@ -222,29 +222,80 @@ export const FinanceDashboard: React.FC = () => {
       })).sort((a, b) => b.totalAmount - a.totalAmount);
       setStaffIncomesList(staffIncomesArray);
 
-      // 4. Fetch expenses for the current month
-      const { data: expData, error: expErr } = await supabase
-        .from('expenses')
-        .select('*')
-        .gte('expense_date', `${year}-${String(monthIdx).padStart(2, '0')}-01`)
-        .lte('expense_date', endOfMonthDateStr);
+      // 4. Fetch expenses for the current month from Supabase & LocalStorage
+      const currentMonthKey = selectedLedgerMonth || `${year}-${String(monthIdx).padStart(2, '0')}`;
 
-      if (expErr) throw expErr;
-      setExpensesList(expData || []);
+      let dbExpData: any[] = [];
+      try {
+        const { data, error } = await supabase
+          .from('expenses')
+          .select('*');
+        if (!error && data) dbExpData = data;
+      } catch (e) {
+        dbExpData = [];
+      }
+
+      let localExp: any[] = [];
+      const keysToTry = ['company_expenses_local_store', 'expenses', 'owner_expenses', 'expenses_list'];
+      keysToTry.forEach(k => {
+        try {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              localExp.push(...parsed);
+            }
+          }
+        } catch (e) {}
+      });
+
+      const combinedExp = [...dbExpData, ...localExp];
+
+      // Filter for active selectedLedgerMonth (currentMonthKey) and exclude seed entries
+      const filteredExp = combinedExp.filter((e: any) => {
+        if (!e) return false;
+        if (e.id && String(e.id).startsWith('seed-exp-')) return false;
+        const d = e.expense_date || e.created_at || '';
+        return d.startsWith(currentMonthKey);
+      });
+
+      const seenIds = new Set<string>();
+      const finalExpData: any[] = [];
+      filteredExp.forEach((item, idx) => {
+        if (item) {
+          const uId = item.id ? String(item.id) : `fn-exp-${idx}-${item.amount}-${item.category}`;
+          if (!seenIds.has(uId)) {
+            seenIds.add(uId);
+            finalExpData.push(item);
+          }
+        }
+      });
+
+      setExpensesList(finalExpData);
 
       // Group expenses by valid categories and calculate split
-      const validCategories = ['Salary', 'Rent', 'Internet & Recharge', 'Food & Drinks', 'EMI', 'Repair & Maintenance', 'Stationery', 'Electricity', 'Transport', 'Fixed Asset', 'Outwork', 'Return Sales', 'Facebook Ads', 'Other Expense'];
+      const validCategories = ['Salary', 'Rent', 'Internet & Recharge', 'Food & Drinks', 'EMI', 'Repair & Maintenance', 'Stationery', 'Electricity', 'Transport', 'Fixed Asset', 'Outwork', 'Return Sales', 'Facebook Ads', 'Marketing & Ads', 'Office & Operations', 'Software & Cloud', 'Client Hospitality', 'Equipment & Hardware', 'Other Expense'];
       const expCategoriesArray: ExpenseCategoryGroup[] = validCategories.map(cat => {
-        const items = (expData || []).filter((e: Expense) => e.category === cat);
+        const items = finalExpData.filter((e: any) => e.category === cat || (cat === 'Other Expense' && !validCategories.includes(e.category)));
         let ashifAmt = 0;
         let shibiliAmt = 0;
 
-        items.forEach((exp: Expense) => {
-          const loggedByName = exp.staff_id ? (staffIdToNameMap.get(exp.staff_id) || '').toUpperCase() : '';
-          if (loggedByName.includes('SHIBILI')) {
-            shibiliAmt += exp.amount;
+        items.forEach((exp: any) => {
+          const nameStr = (
+            exp.logged_by_name ||
+            (exp.staff_id ? (staffIdToNameMap.get(exp.staff_id) || '') : '') ||
+            exp.created_by ||
+            exp.description ||
+            ''
+          ).toUpperCase();
+
+          if (nameStr.includes('SHIBILI')) {
+            shibiliAmt += (Number(exp.amount) || 0);
+          } else if (nameStr.includes('ASHIF')) {
+            ashifAmt += (Number(exp.amount) || 0);
           } else {
-            ashifAmt += exp.amount;
+            // Default attribution to Shibili for owner portal logged expenses
+            shibiliAmt += (Number(exp.amount) || 0);
           }
         });
 
@@ -253,7 +304,7 @@ export const FinanceDashboard: React.FC = () => {
           totalAmount: ashifAmt + shibiliAmt,
           ashifAmount: ashifAmt,
           shibiliAmount: shibiliAmt,
-          items: items.sort((a: Expense, b: Expense) => b.expense_date.localeCompare(a.expense_date))
+          items: items.sort((a: any, b: any) => (b.expense_date || '').localeCompare(a.expense_date || ''))
         };
       });
       setExpenseCategories(expCategoriesArray);
@@ -328,17 +379,34 @@ export const FinanceDashboard: React.FC = () => {
 
     setIsAddingExpense(true);
     try {
+      const expPayload = {
+        id: 'exp-' + Date.now(),
+        category: expCategory,
+        amount: Number(expAmount),
+        expense_date: expDate,
+        description: expDescription.trim() || null,
+        staff_id: activeStaff.id,
+        created_at: new Date().toISOString()
+      };
+
       const { error } = await supabase
         .from('expenses')
-        .insert({
-          category: expCategory,
-          amount: Number(expAmount),
-          expense_date: expDate,
-          description: expDescription.trim() || null,
-          staff_id: activeStaff.id
-        });
+        .insert(expPayload);
 
-      if (error) throw error;
+      if (error) console.warn('Supabase expense insert info:', error.message);
+
+      // Dual-sync to local storage
+      try {
+        const stored = localStorage.getItem('company_expenses_local_store');
+        const list = stored ? JSON.parse(stored) : [];
+        list.unshift(expPayload);
+        localStorage.setItem('company_expenses_local_store', JSON.stringify(list));
+      } catch (err) {
+        console.warn('LocalStorage expense save info:', err);
+      }
+
+      // Instant 0ms event notification across all dashboards
+      window.dispatchEvent(new CustomEvent('company_expenses_changed', { detail: expPayload }));
 
       // Reset
       setExpAmount('');
