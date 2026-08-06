@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card } from '../Card';
 import { Badge } from '../Badge';
-import { Star, Award, Edit2, Trash2 } from 'lucide-react';
+import { Star, Edit2, Trash2 } from 'lucide-react';
 import { formatCurrency } from '../../services/mockData';
 import { supabase } from '../../services/supabase';
 import { EditExpenseModal } from '../EditExpenseModal';
@@ -94,7 +94,7 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
 }) => {
   const { activeStaff } = useApp();
   const [editingExpense, setEditingExpense] = useState<any | null>(null);
-  const [deletedExpIds, setDeletedExpIds] = useState<Set<string>>(new Set());
+  const [deletedExpIds] = useState<Set<string>>(new Set());
   // Removed local storage listener useEffect block
 
   const handleDeleteExpense = async (exp: any) => {
