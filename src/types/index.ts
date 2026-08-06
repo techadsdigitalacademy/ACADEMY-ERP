@@ -42,7 +42,7 @@ export interface Attendance {
   status: 'PRESENT' | 'ABSENT' | 'LATE' | 'HALF_DAY' | 'LEAVE';
 }
 
-export type PaymentType = 'Full' | 'Advance' | 'Clearance';
+export type PaymentType = 'Full' | 'Advance' | 'Clearance' | 'Refund';
 
 export interface Sale {
   id: string;

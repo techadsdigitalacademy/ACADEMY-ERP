@@ -29,6 +29,7 @@ export const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
     'Equipment & Hardware',
     'Salary',
     'Rent',
+    'Sales Refund',
     'Internet & Recharge',
     'Food & Drinks',
     'EMI',

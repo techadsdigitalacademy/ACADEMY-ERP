@@ -14,6 +14,7 @@ interface SalesDashboardMetricsProps {
   totalReceived: number;
   totalPackage: number;
   totalBalance: number;
+  totalRefund?: number;
   targetAmount: number;
   targetPercent: number;
   todayAttendance: any;
@@ -34,6 +35,7 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
   totalReceived,
   totalPackage,
   totalBalance,
+  totalRefund = 0,
   targetAmount,
   targetPercent,
   todayAttendance,
@@ -302,6 +304,12 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
                   <span className="text-[9px] font-semibold text-emerald-450 uppercase">Received Total</span>
                   <p className="text-sm font-extrabold text-emerald-400">{formatCurrency(totalReceived)}</p>
                 </Card>
+                {totalRefund > 0 && (
+                  <Card variant="glass" className="p-3.5 flex flex-col justify-between md:h-[55px] md:flex-row md:items-center border-rose-500/10">
+                    <span className="text-[9px] font-semibold text-rose-400 uppercase">Total Refund</span>
+                    <p className="text-sm font-extrabold text-rose-400">{formatCurrency(totalRefund)}</p>
+                  </Card>
+                )}
                 <Card variant="glass" className="p-3.5 flex flex-col justify-between md:h-[55px] md:flex-row md:items-center">
                   <span className="text-[9px] font-semibold text-amber-455 uppercase">Balance Total</span>
                   <p className="text-sm font-extrabold text-amber-400">{formatCurrency(totalBalance)}</p>

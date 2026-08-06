@@ -22,8 +22,10 @@ import {
   Edit2,
   Star,
   Sun,
-  Moon
+  Moon,
+  RotateCcw
 } from 'lucide-react';
+import { LogRefundModal } from '../components/sales-dashboard/LogRefundModal';
 
 export const SalesDashboard: React.FC = () => {
   const { 
@@ -59,8 +61,9 @@ export const SalesDashboard: React.FC = () => {
   // Owner expenses state
   const [ownerExpenses, setOwnerExpenses] = useState<any[]>([]);
   
-  // Log Sale Modal state
+  // Log Sale & Log Refund Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
   const [selectedSlipUrl, setSelectedSlipUrl] = useState<string | null>(null);
   
   // Daily Report form states
@@ -211,13 +214,38 @@ export const SalesDashboard: React.FC = () => {
             });
           }
 
-          // Fetch sales for selectedMonth to compute Achieved & Total Works
-          const { data: allSales } = await supabase
+          // Fetch sales from DB + LocalStorage fallback for selectedMonth to compute Achieved & Total Works
+          const { data: dbSales } = await supabase
             .from('sales')
-            .select('staff_id, payment_type, received_amount, created_at');
+            .select('*');
+
+          let localSalesData: any[] = [];
+          try {
+            const localStr = localStorage.getItem('company_sales_local_store') || localStorage.getItem('sales');
+            if (localStr) localSalesData = JSON.parse(localStr);
+          } catch (e) {
+            console.warn('Local sales parse info:', e);
+          }
+
+          const combinedAllSales = [...(dbSales || []), ...(Array.isArray(localSalesData) ? localSalesData : [])];
+
+          const isSaleInMonth = (s: any, monthKey: string) => {
+            if (!s) return false;
+            if (s.created_at && String(s.created_at).startsWith(monthKey)) return true;
+            if (s.date && String(s.date).startsWith(monthKey)) return true;
+            if (s.sale_date && String(s.sale_date).startsWith(monthKey)) return true;
+            if (s.sale_month) {
+              if (String(s.sale_month).startsWith(monthKey)) return true;
+              const [year, month] = monthKey.split('-');
+              const d = new Date(Number(year), Number(month) - 1, 1);
+              const monthName = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+              if (String(s.sale_month).toLowerCase() === monthName.toLowerCase()) return true;
+            }
+            return false;
+          };
 
           // Filter sales for the selectedMonth
-          const monthSalesFiltered = (allSales || [])?.filter(s => s.created_at?.startsWith(selectedMonth));
+          const monthSalesFiltered = combinedAllSales.filter(s => isSaleInMonth(s, selectedMonth));
 
           // Fetch daily reports for selectedMonth to compute total works for creative/support
           const { data: allReports } = await supabase
@@ -237,10 +265,21 @@ export const SalesDashboard: React.FC = () => {
             const target = targetMap[p.full_name] || 0;
             const avatar_url = avatarMap[p.full_name] || undefined;
             
-            // Calculate sales achievements
-            const staffSales = monthSalesFiltered?.filter(s => s.staff_id === p.id);
-            const achieved = staffSales.reduce((sum, s) => sum + (Number(s.received_amount) || 0), 0);
-            const salesWorks = staffSales?.filter(s => s.payment_type === 'Advance' || s.payment_type === 'Full').length;
+            // Calculate sales achievements (Net Received Total = Gross Collections - Refunds)
+            const staffSales = monthSalesFiltered?.filter(s => 
+              (s.staff_id && p.id && String(s.staff_id) === String(p.id)) ||
+              (s.user_id && p.id && String(s.user_id) === String(p.id)) ||
+              (s.staff_name && p.full_name && String(s.staff_name).trim().toLowerCase() === String(p.full_name).trim().toLowerCase()) ||
+              (s.full_name && p.full_name && String(s.full_name).trim().toLowerCase() === String(p.full_name).trim().toLowerCase())
+            );
+            const achieved = (staffSales || []).reduce((sum, s) => {
+              const amt = Number(s.received_amount) || 0;
+              if (s.payment_type === 'Refund') {
+                return sum - amt;
+              }
+              return sum + amt;
+            }, 0);
+            const salesWorks = staffSales?.filter(s => (s.payment_type === 'Advance' || s.payment_type === 'Full') && s.payment_type !== 'Refund').length;
 
             // Calculate creative works
             const staffReports = monthReportsFiltered?.filter(r => r.staff_id === p.id);
@@ -596,39 +635,67 @@ export const SalesDashboard: React.FC = () => {
     if (isOwner) {
       const fetchOwnerExpenses = async () => {
         try {
-          let { data, error } = await supabase
-            .from('expenses')
-            .select('*')
-            .order('expense_date', { ascending: false });
+          // Fetch from both tables and combine
+          const [expensesRes, ownerExpensesRes] = await Promise.all([
+            supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
+            supabase.from('owner_expenses').select('*').order('expense_date', { ascending: false })
+          ]);
 
-          if (error || !data || data.length === 0) {
-            const { data: fbData } = await supabase
-              .from('owner_expenses')
-              .select('*')
-              .order('expense_date', { ascending: false });
-            if (fbData && fbData.length > 0) {
-              data = fbData;
-            }
-          }
+          let combinedData = [
+            ...(expensesRes.data || []),
+            ...(ownerExpensesRes.data || [])
+          ];
 
-          let localExp: any[] = [];
+          // Fetch historical refund sales
+          let refundSalesData: any[] = [];
           try {
-            const stored = localStorage.getItem('company_expenses_local_store');
-            if (stored) localExp = JSON.parse(stored);
-          } catch (e) {
-            localExp = [];
-          }
+            const { data: rData } = await supabase
+              .from('sales')
+              .select('*')
+              .eq('payment_type', 'Refund');
+            if (rData) refundSalesData = rData;
+          } catch (e) {}
 
-          const combined = [...(data || []), ...localExp];
+          const convertedRefunds = refundSalesData.map((s: any, idx: number) => {
+            const sDate = (s.created_at || s.date || s.sale_date || s.sale_month || '').substring(0, 10);
+            return {
+              id: `converted-refund-${s.id || idx}`,
+              sale_id: s.id,
+              category: 'Sales Refund',
+              description: `Sales Refund - ${s.client_name || 'Client'}${s.notes || s.work_description ? ' (' + (s.notes || s.work_description) + ')' : ''}`,
+              amount: Number(s.received_amount) || 0,
+              expense_date: sDate,
+              created_at: s.created_at || new Date().toISOString(),
+              staff_id: s.staff_id,
+              staff_name: s.staff_name || s.full_name || 'Sales Staff',
+              logged_by_name: s.staff_name || s.full_name || 'Sales Staff'
+            };
+          });
+
+          const combined = [...combinedData, ...convertedRefunds];
           const uniqueMap = new Map<string, any>();
+          
           combined.forEach((item, idx) => {
             if (item) {
-              const key = item.id || `${item.expense_date}-${item.amount}-${item.category}-${idx}`;
+              const itemIdStr = String(item.id || '');
+              const itemCat = String(item.category || '');
+              const itemDateStr = String(item.expense_date || item.date || item.created_at || '').substring(0, 10);
+              const itemAmt = Number(item.amount || item.received_amount || 0);
+
+              const isRefundCat = itemCat === 'Sales Refund' || itemCat === 'Return Sales' || itemIdStr.startsWith('converted-refund-');
+              let key = item.id ? String(item.id) : `${item.expense_date}-${item.amount}-${item.category}-${idx}`;
+              
+              if (isRefundCat) {
+                const sRef = item.sale_id || (itemIdStr.startsWith('converted-refund-') ? itemIdStr.replace('converted-refund-', '') : '');
+                const sStaff = (item.staff_name || item.logged_by_name || item.staff_id || '').toUpperCase();
+                key = sRef ? `refund-ref-${sRef}` : `refund-sig-${itemDateStr}-${itemAmt}-${sStaff}`;
+              }
+              
               if (!uniqueMap.has(key)) uniqueMap.set(key, item);
             }
           });
 
-          setOwnerExpenses(Array.from(uniqueMap.values()));
+          setOwnerExpenses(Array.from(uniqueMap.values()).sort((a, b) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime()));
         } catch (err) {
           console.warn('Error fetching owner expenses:', err);
         }
@@ -636,13 +703,20 @@ export const SalesDashboard: React.FC = () => {
 
       fetchOwnerExpenses();
 
-      const handleExpensesChanged = () => {
-        fetchOwnerExpenses();
-      };
+      const channel = supabase.channel('company-expenses-sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => {
+          fetchOwnerExpenses();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'owner_expenses' }, () => {
+          fetchOwnerExpenses();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => {
+          fetchOwnerExpenses();
+        })
+        .subscribe();
 
-      window.addEventListener('company_expenses_changed', handleExpensesChanged);
       return () => {
-        window.removeEventListener('company_expenses_changed', handleExpensesChanged);
+        supabase.removeChannel(channel);
       };
     }
   }, [isOwner, selectedMonth]);
@@ -652,10 +726,11 @@ export const SalesDashboard: React.FC = () => {
 
 
   const handleViewSlip = (sale: any) => {
-    if (sale.payment_proof_url) {
-      setSelectedSlipUrl(sale.payment_proof_url);
+    const targetUrl = sale.payment_proof_url || sale.slip_url || sale.payment_proof || sale.proof_url;
+    if (targetUrl) {
+      setSelectedSlipUrl(targetUrl);
     } else {
-      alert('No payment proof slip was uploaded for this sale.');
+      alert('No payment proof slip was uploaded for this transaction.');
     }
   };
 
@@ -820,32 +895,58 @@ export const SalesDashboard: React.FC = () => {
   // Owner personal monthly sales calculations for their terminal cards
   const ownerMonthSales = useMemo(() => {
     return ownerPersonalSales.filter((s: any) => {
-      if (!s.created_at) {
-        const [year, month] = selectedMonth.split('-');
-        const date = new Date(Number(year), Number(month) - 1, 1);
-        const name = date.toLocaleString('default', { month: 'long', year: 'numeric' });
-        return s.sale_month === name;
+      if (!s) return false;
+      const rawDate = s.created_at || s.date || s.sale_date || s.timestamp;
+      if (rawDate) {
+        const dStr = String(rawDate).trim();
+        if (dStr.startsWith(selectedMonth)) return true;
+        try {
+          const dObj = new Date(rawDate);
+          if (!isNaN(dObj.getTime())) {
+            const y = dObj.getFullYear();
+            const m = String(dObj.getMonth() + 1).padStart(2, '0');
+            if (`${y}-${m}` === selectedMonth) return true;
+          }
+        } catch (e) {}
       }
-      return s.created_at.startsWith(selectedMonth);
+      if (s.sale_month && selectedMonth) {
+        try {
+          const [year, month] = selectedMonth.split('-');
+          const date = new Date(Number(year), Number(month) - 1, 1);
+          const name = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+          if (String(s.sale_month).toLowerCase() === name.toLowerCase()) return true;
+        } catch (e) {}
+      }
+      return false;
     });
   }, [ownerPersonalSales, selectedMonth]);
 
   const ownerTotalPackage = useMemo(() => {
-    return ownerMonthSales?.filter((s: any) => s.payment_type !== 'Clearance').reduce((sum: number, s: any) => sum + (Number(s.package_amount) || 0), 0);
+    return ownerMonthSales?.filter((s: any) => s.payment_type !== 'Clearance' && s.payment_type !== 'Refund').reduce((sum: number, s: any) => sum + (Number(s.package_amount) || 0), 0);
+  }, [ownerMonthSales]);
+
+  const ownerTotalRefund = useMemo(() => {
+    return ownerMonthSales?.filter((s: any) => s.payment_type === 'Refund').reduce((sum: number, s: any) => sum + (Number(s.received_amount) || 0), 0);
+  }, [ownerMonthSales]);
+
+  const ownerGrossReceived = useMemo(() => {
+    return ownerMonthSales?.filter((s: any) => s.payment_type !== 'Refund').reduce((sum: number, s: any) => sum + (Number(s.received_amount) || 0), 0);
   }, [ownerMonthSales]);
 
   const ownerTotalReceived = useMemo(() => {
-    return ownerMonthSales.reduce((sum: number, s: any) => sum + (Number(s.received_amount) || 0), 0);
-  }, [ownerMonthSales]);
+    return ownerGrossReceived - ownerTotalRefund;
+  }, [ownerGrossReceived, ownerTotalRefund]);
 
   const ownerTotalBalance = useMemo(() => {
-    return ownerMonthSales?.filter((s: any) => s.payment_type !== 'Clearance').reduce((sum: number, s: any) => sum + Math.max(0, (Number(s.package_amount) || 0) - (Number(s.received_amount) || 0)), 0);
+    return ownerMonthSales?.filter((s: any) => s.payment_type !== 'Clearance' && s.payment_type !== 'Refund').reduce((sum: number, s: any) => sum + Math.max(0, (Number(s.package_amount) || 0) - (Number(s.received_amount) || 0)), 0);
   }, [ownerMonthSales]);
 
   // Financial math for cards (filtered by month)
-  const totalPackage = monthSales?.filter(s => s.payment_type !== 'Clearance').reduce((sum, s) => sum + s.package_amount, 0);
-  const totalReceived = monthSales.reduce((sum, s) => sum + s.received_amount, 0);
-  const totalBalance = monthSales?.filter(s => s.payment_type !== 'Clearance').reduce((sum, s) => sum + Math.max(0, s.package_amount - s.received_amount), 0);
+  const totalPackage = monthSales?.filter(s => s.payment_type !== 'Clearance' && s.payment_type !== 'Refund').reduce((sum, s) => sum + (s.package_amount || 0), 0);
+  const totalRefund = monthSales?.filter(s => s.payment_type === 'Refund').reduce((sum, s) => sum + (s.received_amount || 0), 0);
+  const grossReceived = monthSales?.filter(s => s.payment_type !== 'Refund').reduce((sum, s) => sum + (s.received_amount || 0), 0);
+  const totalReceived = grossReceived - totalRefund;
+  const totalBalance = monthSales?.filter(s => s.payment_type !== 'Clearance' && s.payment_type !== 'Refund').reduce((sum, s) => sum + Math.max(0, (s.package_amount || 0) - (s.received_amount || 0)), 0);
 
   const resolveStaffMonthTarget = (staffObj: any, monthKey: string) => {
     if (!staffObj) return 0;
@@ -1536,6 +1637,16 @@ export const SalesDashboard: React.FC = () => {
                 </Button>
               )}
 
+              {(!isAdminView || isOwner) && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && (
+                <button
+                  onClick={() => setIsRefundModalOpen(true)}
+                  className="!py-2 !px-3 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-extrabold text-xs shadow-md shadow-rose-500/20 rounded-xl flex items-center gap-1.5 shrink-0 transition-all border border-rose-400/20 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Refund</span>
+                </button>
+              )}
+
               {!isAdminView && !isOwner && activeStaff.designation !== 'Graphic Designer' && activeStaff.designation !== 'Digital Marketer' && (
                 <Button 
                   variant="primary" 
@@ -1579,6 +1690,7 @@ export const SalesDashboard: React.FC = () => {
                 totalReceived={isOwner && !isAdminView ? ownerTotalReceived : totalReceived}
                 totalPackage={isOwner && !isAdminView ? ownerTotalPackage : totalPackage}
                 totalBalance={isOwner && !isAdminView ? ownerTotalBalance : totalBalance}
+                totalRefund={isOwner && !isAdminView ? ownerTotalRefund : totalRefund}
                 targetAmount={targetAmount}
                 targetPercent={isOwner && !isAdminView ? ownerTargetPercent : targetPercent}
                 todayAttendance={todayAttendance}
@@ -1625,10 +1737,10 @@ export const SalesDashboard: React.FC = () => {
             isOwner ? (
               <div className="space-y-6 pt-2">
                 <SalesHistoryLog 
-                  sales={ownerPersonalSales} 
+                  sales={ownerMonthSales} 
                   targetAmount={targetAmount} 
                   isAdmin={false} 
-                  hideTargetProgress={true}
+                  hideTargetProgress={false}
                   onViewSlip={handleViewSlip} 
                 />
               </div>
@@ -1756,6 +1868,14 @@ export const SalesDashboard: React.FC = () => {
           </div>
         </div>
       )}
+      {/* REFUND MODAL */}
+      <LogRefundModal
+        isOpen={isRefundModalOpen}
+        onClose={() => setIsRefundModalOpen(false)}
+        activeStaff={activeStaff}
+        onRefundLogged={() => fetchDashboardData(selectedMonth)}
+      />
+
       {/* NOTICE BOARD ADMIN MODAL */}
       {isNoticeBoardModalOpen && (
         <NoticeBoardAdminModal

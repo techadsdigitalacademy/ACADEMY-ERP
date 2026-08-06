@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '../Card';
 import { Badge } from '../Badge';
 import { Star, Award, Edit2, Trash2 } from 'lucide-react';
 import { formatCurrency } from '../../services/mockData';
 import { supabase } from '../../services/supabase';
 import { EditExpenseModal } from '../EditExpenseModal';
+import { SalesHistoryLog } from '../SalesHistoryLog';
+import { useApp } from '../../context/AppContext';
 
 const formatDateSafe = (dateVal: any) => {
   if (!dateVal) return '-';
@@ -90,7 +92,10 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
   ownerExpenses = [],
   selectedMonth
 }) => {
+  const { activeStaff } = useApp();
   const [editingExpense, setEditingExpense] = useState<any | null>(null);
+  const [deletedExpIds, setDeletedExpIds] = useState<Set<string>>(new Set());
+  // Removed local storage listener useEffect block
 
   const handleDeleteExpense = async (exp: any) => {
     if (!window.confirm(`Are you sure you want to delete this expense entry of ${formatCurrency(exp.amount || 0)} (${exp.category || 'Expense'})?`)) {
@@ -98,28 +103,45 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
     }
 
     try {
-      if (exp.id && !exp.id.startsWith('seed-exp-')) {
+      const isRefundCat = exp.category === 'Sales Refund' || exp.category === 'Return Sales' || String(exp.id || '').startsWith('converted-refund-');
+      const isConvertedRefund = String(exp.id || '').startsWith('converted-refund-');
+      const targetSaleId = isConvertedRefund ? String(exp.id).replace('converted-refund-', '') : (exp.sale_id || '');
+
+      // 1. Delete from Supabase tables
+      if (isConvertedRefund && targetSaleId && !targetSaleId.startsWith('idx-')) {
+        await supabase.from('sales').delete().eq('id', targetSaleId);
+      }
+
+      if (exp.id && !exp.id.startsWith('seed-exp-') && !isConvertedRefund) {
         await supabase.from('expenses').delete().eq('id', exp.id);
         await supabase.from('owner_expenses').delete().eq('id', exp.id);
       }
 
-      try {
-        const keys = ['company_expenses_local_store', 'expenses', 'owner_expenses', 'expenses_list'];
-        keys.forEach(k => {
-          const stored = localStorage.getItem(k);
-          if (stored) {
-            const list = JSON.parse(stored);
-            if (Array.isArray(list)) {
-              const filtered = list.filter((item: any) => item?.id !== exp.id);
-              localStorage.setItem(k, JSON.stringify(filtered));
-            }
+      if (isRefundCat) {
+        try {
+          const { data: matchingSales } = await supabase
+            .from('sales')
+            .select('id')
+            .eq('payment_type', 'Refund')
+            .eq('received_amount', exp.amount || 0);
+
+          if (matchingSales && matchingSales.length > 0) {
+            const saleIds = matchingSales.map(s => s.id);
+            await supabase.from('sales').delete().in('id', saleIds);
+            
+            // LocalStorage hacks removed
           }
-        });
-      } catch (e) {
-        console.warn('LocalStorage delete info:', e);
+        } catch (sErr) {
+          console.warn('Refund sale delete info:', sErr);
+        }
       }
 
-      window.dispatchEvent(new CustomEvent('company_expenses_changed'));
+      // 2. LocalStorage hacks removed
+
+      // 3. Dispatch global custom events
+      window.dispatchEvent(new CustomEvent('company_expenses_changed', { detail: exp }));
+      window.dispatchEvent(new CustomEvent('company_sales_changed', { detail: exp }));
+
       alert('Expense deleted successfully!');
     } catch (err: any) {
       alert('Failed to delete expense: ' + err.message);
@@ -143,61 +165,14 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
         {/* EXPENSE HISTORY TAB MODULE - Sales History Log */}
         {activeTab === 'history' && isOwner && (
           <section className="space-y-6 pt-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                  <Award className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-black text-white tracking-tight uppercase">Sales History Log</h2>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">All Staff Submissions</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="overflow-x-auto rounded-2xl border border-white/5 bg-slate-950/20">
-              <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
-                <thead>
-                  <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Staff</th>
-                    <th className="py-3 px-4">Client</th>
-                    <th className="py-3 px-4">Package</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
-                  {safeSales.length > 0 ? safeSales.map((sale: any, idx: number) => (
-                    <tr key={sale.id || idx} className="hover:bg-slate-900/10">
-                      <td className="py-3 px-4">
-                        {formatDateSafe(sale.created_at)}
-                      </td>
-                    <td className="py-3 px-4 flex items-center gap-2">
-                      {sale.staff?.avatar_url && (
-                         <img src={sale.staff.avatar_url} alt="" className="w-5 h-5 rounded-full object-cover" />
-                      )}
-                      <span>{sale.staff?.full_name || 'Staff'}</span>
-                    </td>
-                    <td className="py-3 px-4">{sale.client_name}</td>
-                    <td className="py-3 px-4"><Badge variant="info">{sale.project_name || 'Service'}</Badge></td>
-                    <td className="py-3 px-4">
-                      <Badge variant={sale.payment_type === 'Full' ? 'success' : sale.payment_type === 'Advance' ? 'warning' : 'info'}>
-                        {sale.payment_type}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-4 text-right text-emerald-400 font-bold">
-                      {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(sale.received_amount)}
-                    </td>
-                  </tr>
-                )) : (
-                  <tr><td colSpan={6} className="text-center py-8 text-slate-500 font-bold">No sales logged this month.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
+            <SalesHistoryLog 
+              sales={safeSales} 
+              targetAmount={0} 
+              isAdmin={true} 
+              hideTargetProgress={false}
+            />
+          </section>
+        )}
 
       {/* EXPENSE HISTORY TAB MODULE - Company Owner Expense Log */}
       {activeTab === 'expense_history' && (() => {
@@ -214,11 +189,22 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
 
         const activeMonth = selectedMonth || new Date().toISOString().substring(0, 7);
 
-        // Filter out Partner Withdrawals and seed entries
+        // Filter out Partner Withdrawals, seed entries, and dynamically deleted IDs / signatures
         const cleanExpenses = safeExpenses.filter(exp => {
           if (!exp) return false;
-          if (exp.id && String(exp.id).startsWith('seed-exp-')) return false;
-          const cat = String(exp.category || '').toLowerCase();
+          const expIdStr = String(exp.id || '');
+          const expSaleIdStr = String(exp.sale_id || '');
+          const expAmt = Number(exp.amount || 0);
+          const expCat = String(exp.category || '');
+          const expDateStr = String(exp.expense_date || exp.date || exp.created_at || '').substring(0, 10);
+
+          if (expIdStr && (deletedExpIds.has(expIdStr) || deletedExpIds.has(`converted-refund-${expIdStr}`))) return false;
+          if (expSaleIdStr && (deletedExpIds.has(expSaleIdStr) || deletedExpIds.has(`converted-refund-${expSaleIdStr}`))) return false;
+          if (deletedExpIds.has(`sig-${expCat}-${expAmt}`)) return false;
+          if (expDateStr && deletedExpIds.has(`sig-${expCat}-${expAmt}-${expDateStr}`)) return false;
+          if (deletedExpIds.has(`refund-amount-${expAmt}`) || deletedExpIds.has(`amt-${expAmt}`)) return false;
+
+          const cat = expCat.toLowerCase();
           const type = String(exp.type || '').toLowerCase();
           if (cat.includes('withdrawal') || type.includes('withdrawal')) {
             return false;
@@ -226,8 +212,45 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
           return true;
         });
 
-        // Strictly filter cleanExpenses by activeMonth based on expense_date (user selected date)
-        const monthFiltered = cleanExpenses.filter(exp => {
+        // Filter expenses strictly by logged-in owner to isolate owner expenses
+        const activeNameUpper = (activeStaff?.full_name || '').toUpperCase();
+        const activeIdStr = String(activeStaff?.id || '').trim();
+        const isAshif = activeNameUpper.includes('ASHIF');
+        const isShibili = activeNameUpper.includes('SHIBILI');
+
+        const ownerIsolatedExpenses = cleanExpenses.filter(exp => {
+          if (!exp) return false;
+
+          const expStaffIdStr = String(exp.staff_id || '').trim();
+          const expNameUpper = (exp.logged_by_name || exp.staff_name || exp.created_by || exp.description || '').toUpperCase();
+          const isRefundCat = exp.category === 'Sales Refund' || exp.category === 'Return Sales' || String(exp.id).startsWith('converted-refund-') || String(exp.id).startsWith('exp-refund-');
+
+          if (isShibili) {
+            // Shibili MUST ONLY see expenses explicitly created by Shibili
+            if (expNameUpper.includes('SHIBILI')) return true;
+            if (expStaffIdStr && activeIdStr && expStaffIdStr === activeIdStr) return true;
+            // Strictly reject ALL non-Shibili expenses (Ashif expenses, Sales Refunds, unassigned expenses)
+            return false;
+          }
+
+          if (isAshif) {
+            // Ashif MUST NOT see Shibili's personal expenses
+            if (expNameUpper.includes('SHIBILI')) return false;
+            
+            // Ashif sees Ashif's expenses + all automated Sales Refunds
+            if (expNameUpper.includes('ASHIF')) return true;
+            if (expStaffIdStr && activeIdStr && expStaffIdStr === activeIdStr) return true;
+            if (isRefundCat) return true;
+
+            // Default fallback for Ashif portal: reject unassigned or third-party owner expenses
+            return false;
+          }
+
+          return true;
+        });
+
+        // Strictly filter ownerIsolatedExpenses by activeMonth based on expense_date (user selected date)
+        const monthFiltered = ownerIsolatedExpenses.filter(exp => {
           const dateVal = exp.expense_date || exp.date || exp.created_at;
           return isSameMonthYear(dateVal, activeMonth);
         });
@@ -238,18 +261,45 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
         const seenIds = new Set<string>();
         const displayList: any[] = [];
         displayListToUse.forEach((exp, idx) => {
-          const uId = exp.id ? String(exp.id) : `exp-item-${idx}-${exp.amount}`;
+          const isRefundCat = exp.category === 'Sales Refund' || exp.category === 'Return Sales' || String(exp.id || '').startsWith('converted-refund-');
+          let uId = exp.id ? String(exp.id) : `exp-item-${idx}-${exp.amount}`;
+          if (isRefundCat) {
+            const sRef = exp.sale_id || (String(exp.id || '').startsWith('converted-refund-') ? String(exp.id).replace('converted-refund-', '') : '');
+            const dStr = (exp.expense_date || exp.date || exp.created_at || '').substring(0, 10);
+            const sStaff = (exp.staff_name || exp.logged_by_name || exp.staff_id || '').toUpperCase();
+            uId = sRef ? `refund-ref-${sRef}` : `refund-sig-${dStr}-${Number(exp.amount)}-${sStaff}`;
+          }
+
           if (!seenIds.has(uId)) {
             seenIds.add(uId);
             displayList.push(exp);
           }
         });
 
-        // Latest-First Sorting by selected expense_date (Descending Order)
+        const parseTimeSafe = (obj: any) => {
+          if (!obj) return 0;
+          const val = obj.created_at || obj.expense_date || obj.date;
+          if (!val) return 0;
+          const isoStr = String(val).replace(' ', 'T');
+          const t = new Date(isoStr).getTime();
+          return isNaN(t) ? 0 : t;
+        };
+
+        // Strict Descending / Top-First Sorting:
+        // 1. Newly logged local transient items (id starting with exp- or refund-) -> Rank #1 (Index 0 at top)
+        // 2. Creation / Expense timestamp descending
+        // 3. String / Primary ID descending
         displayList.sort((a, b) => {
-          const timeA = new Date(a.expense_date || a.date || a.created_at || 0).getTime();
-          const timeB = new Date(b.expense_date || b.date || b.created_at || 0).getTime();
-          return timeB - timeA;
+          const isTransientA = String(a.id || '').startsWith('exp-') || String(a.id || '').startsWith('refund-');
+          const isTransientB = String(b.id || '').startsWith('exp-') || String(b.id || '').startsWith('refund-');
+          if (isTransientA && !isTransientB) return -1;
+          if (!isTransientA && isTransientB) return 1;
+
+          const timeA = parseTimeSafe(a);
+          const timeB = parseTimeSafe(b);
+          if (timeA !== timeB) return timeB - timeA;
+
+          return String(b.id || '').localeCompare(String(a.id || ''));
         });
 
         console.log('DEBUG ExpenseHistoryTab Render displayList:', displayList);

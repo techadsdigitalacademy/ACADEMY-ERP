@@ -25,29 +25,73 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
   onViewSlip
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'All' | 'Full' | 'Advance' | 'Clearance'>('All');
+  const [activeFilter, setActiveFilter] = useState<'All' | 'Full' | 'Advance' | 'Clearance' | 'Refund'>('All');
 
   const filteredSales = useMemo(() => {
-    const list = sales.filter(s => {
-      const matchesSearch = s.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                           s.service_package?.toLowerCase().includes(searchQuery.toLowerCase());
+    const list = (sales || []).filter(s => {
+      const matchesSearch = !searchQuery ? true : (
+        s.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+        s.service_package?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.package_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.payment_type?.toLowerCase().includes(searchQuery.toLowerCase())
+      );
       const matchesFilter = activeFilter === 'All' ? true : s.payment_type === activeFilter;
       return matchesSearch && matchesFilter;
     });
 
+    const getTimestamp = (item: any) => {
+      if (item.created_at) {
+        const t = new Date(item.created_at).getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+      if (item.date) {
+        const t = new Date(item.date).getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+      if (item.sale_date) {
+        const t = new Date(item.sale_date).getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+      return 0;
+    };
+
     return [...list].sort((a, b) => {
-      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return timeB - timeA;
+      // 1. Prioritize newly logged local transient entries so they render at index 0 immediately
+      const isNewLocalA = typeof a.id === 'string' && (a.id.startsWith('refund-') || a.id.startsWith('sale-') || a.id.startsWith('temp-'));
+      const isNewLocalB = typeof b.id === 'string' && (b.id.startsWith('refund-') || b.id.startsWith('sale-') || b.id.startsWith('temp-'));
+      if (isNewLocalA && !isNewLocalB) return -1;
+      if (!isNewLocalA && isNewLocalB) return 1;
+
+      // 2. Work SL (Work Serial Number) descending
+      const slA = Number(String(a.work_sl || '').replace(/\D/g, ''));
+      const slB = Number(String(b.work_sl || '').replace(/\D/g, ''));
+      if (!isNaN(slA) && !isNaN(slB) && slA > 0 && slB > 0 && slA !== slB) {
+        return slB - slA;
+      }
+
+      // 3. Timestamp sorting (created_at descending)
+      const timeA = getTimestamp(a);
+      const timeB = getTimestamp(b);
+      if (timeA !== timeB) return timeB - timeA;
+
+      // 4. Numeric auto-increment ID sorting (newest database record first)
+      const numIdA = Number(a.id);
+      const numIdB = Number(b.id);
+      if (!isNaN(numIdA) && !isNaN(numIdB) && numIdA > 0 && numIdB > 0) {
+        if (numIdA !== numIdB) return numIdB - numIdA;
+      }
+
+      return String(b.id || '').localeCompare(String(a.id || ''));
     });
   }, [sales, searchQuery, activeFilter]);
 
-  // Pre-calculate dynamic serial numbers for non-clearance entries (1 = oldest at bottom up to N = newest at top)
+  // Pre-calculate dynamic serial numbers for non-clearance & non-refund entries
   const serialMap = useMemo(() => {
     const map = new Map<string | number, number>();
     const nonClearanceEntries = filteredSales.filter(s => {
-      const isClearance = s.payment_type === 'Clearance' || (s.package_amount === 0 && s.received_amount > 0);
-      return !isClearance;
+      const isRefund = s.payment_type === 'Refund';
+      const isClearance = s.payment_type === 'Clearance' || (s.package_amount === 0 && s.received_amount > 0 && !isRefund);
+      return !isClearance && !isRefund;
     });
 
     let currentSl = 1;
@@ -60,8 +104,12 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
 
   const getSalesTotals = (salesList: any[]) => {
     return salesList.reduce((acc, sale) => {
-      const isClearance = sale.payment_type === 'Clearance' || (sale.package_amount === 0 && sale.received_amount > 0);
-      if (!isClearance) {
+      const isRefund = sale.payment_type === 'Refund';
+      const isClearance = sale.payment_type === 'Clearance' || (sale.package_amount === 0 && sale.received_amount > 0 && !isRefund);
+      
+      if (isRefund) {
+        acc.totalRefund += (sale.received_amount || 0);
+      } else if (!isClearance) {
         acc.totalPackageAmt += (sale.package_amount || 0);
         acc.validWorksCount += 1;
         acc.totalBal += Math.max(0, (sale.package_amount || 0) - (sale.received_amount || 0));
@@ -75,13 +123,14 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
       totalRec: 0,
       totalBal: 0,
       totalClearing: 0,
+      totalRefund: 0,
       validWorksCount: 0
     });
   };
 
   const totals = getSalesTotals(filteredSales);
-  const combinedReceived = totals.totalRec + totals.totalClearing;
-  const progressPercent = targetAmount > 0 ? Math.min(100, Math.round((combinedReceived / targetAmount) * 100)) : 0;
+  const combinedReceived = totals.totalRec + totals.totalClearing - totals.totalRefund;
+  const targetPercent = targetAmount > 0 ? Math.min(100, Math.round((combinedReceived / targetAmount) * 100)) : 0;
 
   return (
     <div className="space-y-4 w-full">
@@ -98,170 +147,211 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
       )}
 
       {/* Top Overview Metric Cards */}
-      <div className={`grid grid-cols-1 ${hideTargetProgress ? 'md:grid-cols-3' : 'grid-cols-2 md:grid-cols-4'} gap-3`}>
-        <Card variant="glass" className="p-3.5 border-white/5">
-          <span className="text-[9px] font-bold text-slate-400 uppercase block tracking-wider">Total Package</span>
-          <p className="text-sm font-extrabold text-white mt-1">{formatCurrency(totals.totalPackageAmt)}</p>
-        </Card>
-        <Card variant="glass" className="p-3.5 border-white/5">
-          <span className="text-[9px] font-bold text-emerald-500 uppercase block tracking-wider">Total Received</span>
-          <p className="text-sm font-extrabold text-emerald-400 mt-1">{formatCurrency(combinedReceived)}</p>
-        </Card>
-        <Card variant="glass" className="p-3.5 border-white/5">
-          <span className="text-[9px] font-bold text-amber-500 uppercase block tracking-wider">Total Balance</span>
-          <p className="text-sm font-extrabold text-amber-400 mt-1">{formatCurrency(totals.totalBal)}</p>
-        </Card>
-        {!hideTargetProgress && (
-          <Card variant="glass" className="p-3.5 border-white/5 col-span-2 md:col-span-1">
-            <span className="text-[9px] font-bold text-indigo-500 uppercase block tracking-wider">Target Progress</span>
-            <p className="text-[10px] font-extrabold text-white mt-1.5 leading-none">
-              {formatCurrency(combinedReceived)} / {formatCurrency(targetAmount)}
-            </p>
-            <div className="w-full bg-slate-950/80 rounded-full h-1 mt-2 overflow-hidden border border-white/5">
+      {!hideTargetProgress && (
+        <div className="space-y-4">
+          <Card variant="glass" glowColor="purple" className="p-4 flex flex-col justify-between border-indigo-500/20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Target Goal Summary</p>
+                <p className="text-xs font-semibold text-slate-300 mt-1">
+                  Target: <span className="text-white font-extrabold">{targetAmount > 0 ? formatCurrency(targetAmount) : 'Not Set'}</span> &bull; 
+                  Collected: <span className="text-emerald-400 font-extrabold">{formatCurrency(combinedReceived)}</span> &bull; 
+                  Remaining: <span className="text-amber-400 font-extrabold">{targetAmount <= 0 ? '-' : combinedReceived >= targetAmount ? 'Target Achieved!' : formatCurrency(targetAmount - combinedReceived)}</span>
+                </p>
+              </div>
+              <span className="text-xs font-black text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20 self-start sm:self-center shrink-0">
+                {targetPercent}% Achieved
+              </span>
+            </div>
+            <div className="w-full bg-slate-950/80 rounded-full h-2.5 mt-3 overflow-hidden border border-white/5 p-0.5">
               <div 
-                className="bg-indigo-500 h-full rounded-full transition-all duration-300" 
-                style={{ width: `${progressPercent}%` }}
+                className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-500" 
+                style={{ width: `${targetPercent}%` }}
               ></div>
             </div>
-            <span className="text-[8px] text-indigo-400 font-bold block mt-1">{progressPercent}% Achieved</span>
           </Card>
-        )}
-      </div>
 
-      {/* Filters & Search */}
-      <div className="flex flex-col md:flex-row gap-3 mt-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
-          <input 
-            type="text" 
-            placeholder="Search client or service package..." 
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-900/60 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none"
-          />
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card variant="glass" glowColor="indigo" className="p-4 flex flex-col justify-between">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Package Cost</p>
+                <h3 className="text-xl font-black text-white mt-1">{formatCurrency(totals.totalPackageAmt)}</h3>
+              </div>
+              <span className="text-[10px] font-bold text-indigo-400 mt-2 block">{totals.validWorksCount} Works Logged</span>
+            </Card>
+
+            <Card variant="glass" glowColor="emerald" className="p-4 flex flex-col justify-between">
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Net Received Total</p>
+                <h3 className="text-xl font-black text-emerald-400 mt-1">{formatCurrency(combinedReceived)}</h3>
+              </div>
+              <span className="text-[10px] text-slate-400 font-medium mt-2 block">
+                Rec: {formatCurrency(totals.totalRec)} | Clear: {formatCurrency(totals.totalClearing)}
+              </span>
+            </Card>
+
+            <Card variant="glass" className="p-4 flex flex-col justify-between border-rose-500/20 bg-rose-950/10">
+              <div>
+                <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wider">Total Refunded</p>
+                <h3 className="text-xl font-black text-rose-400 mt-1">{formatCurrency(totals.totalRefund)}</h3>
+              </div>
+              <span className="text-[10px] text-slate-400 font-medium mt-2 block">Deducted from Received Total</span>
+            </Card>
+
+            <Card variant="glass" className="p-4 flex flex-col justify-between border-amber-500/20 bg-amber-950/10">
+              <div>
+                <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Total Balance Due</p>
+                <h3 className="text-xl font-black text-amber-500 mt-1">{formatCurrency(totals.totalBal)}</h3>
+              </div>
+              <span className="text-[10px] text-slate-400 font-medium mt-2 block">Outstanding Balances</span>
+            </Card>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2 shrink-0 items-center">
-          {['All', 'Full', 'Advance', 'Clearance']?.map((filter) => (
-            <button
-              key={filter}
-              type="button"
-              onClick={() => setActiveFilter(filter as any)}
-              className={`px-3 py-1.5 rounded-xl text-[9px] font-bold uppercase tracking-wider border transition-all duration-300 ${
-                activeFilter === filter
-                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-500/20'
-                  : 'bg-slate-900/60 border-white/5 text-slate-450 hover:text-slate-200 hover:bg-slate-800'
-              }`}
-            >
-              {filter}
-            </button>
-          ))}
+      )}
+
+      {/* Main Table Card */}
+      <Card variant="glass" className="p-0 overflow-hidden">
+        {/* Controls */}
+        <div className="p-4 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search client or package..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-slate-950/60 border border-white/5 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-all"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1 md:pb-0">
+            {(['All', 'Full', 'Advance', 'Clearance', 'Refund'] as const).map(filter => (
+              <button
+                key={filter}
+                onClick={() => setActiveFilter(filter)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                  activeFilter === filter
+                    ? filter === 'Refund' 
+                      ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
+                      : 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
+                    : 'bg-slate-950/40 text-slate-400 hover:text-white border border-white/5'
+                }`}
+              >
+                {filter === 'All' ? 'ALL' : filter.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto rounded-2xl border border-white/5 bg-slate-950/20">
-        <table className="w-full text-left border-collapse text-xs">
-          <thead>
-            <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-              <th className="py-3 px-4">Work SL</th>
-              <th className="py-3 px-4">Date</th>
-              <th className="py-3 px-4">Company Name</th>
-              <th className="py-3 px-4">Package</th>
-              <th className="py-3 px-4">Payment Method</th>
-              <th className="py-3 px-4 text-right">Package Cost</th>
-              <th className="py-3 px-4 text-center">Type</th>
-              <th className="py-3 px-4 text-right">Received Amount</th>
-              <th className="py-3 px-4 text-right">Balance Amount</th>
-              <th className="py-3 px-4 text-right">Balance Clearing</th>
-              <th className="py-3 px-4 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
-            {filteredSales?.map((sale, index) => {
-              const isClearance = sale.payment_type === 'Clearance' || (sale.package_amount === 0 && sale.received_amount > 0);
-              const balance = isClearance ? 0 : Math.max(0, (sale.package_amount || 0) - (sale.received_amount || 0));
-              const dateStr = sale.created_at 
-                ? new Date(sale.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) 
-                : (sale.date || sale.sale_date || sale.sale_month || '');
-              
-              let displaySl: string | number = '-';
-              if (sale.work_sl) {
-                displaySl = String(sale.work_sl).replace(/^#/, '');
-              } else if (!isClearance) {
-                displaySl = serialMap.get(sale.id) || (filteredSales.length - index);
-              }
-
-              return (
-                <tr key={sale.id} className="hover:bg-slate-900/10">
-                  <td className="py-3 px-4 font-extrabold text-indigo-400">{displaySl}</td>
-                  <td className="py-3 px-4 text-slate-500">{dateStr}</td>
-                  <td className="py-3 px-4 text-white font-bold">{sale.client_name}</td>
-                  <td className="py-3 px-4 text-slate-400">{sale.service_package}</td>
-                  <td className="py-3 px-4 text-slate-400">{sale.payment_method || 'Bank Transfer'}</td>
-                  <td className="py-3 px-4 text-right">
-                    {isClearance ? '-' : formatCurrency(sale.package_amount)}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <Badge variant={sale.payment_type === 'Full' ? 'success' : sale.payment_type === 'Advance' ? 'info' : 'purple'}>
-                      {sale.payment_type}
-                    </Badge>
-                  </td>
-                  <td className="py-3 px-4 text-right text-emerald-400">
-                    {isClearance ? '-' : formatCurrency(sale.received_amount)}
-                  </td>
-                  <td className="py-3 px-4 text-right text-amber-500">
-                    {isClearance ? '-' : formatCurrency(balance)}
-                  </td>
-                  <td className="py-3 px-4 text-right text-purple-400">
-                    {isClearance ? formatCurrency(sale.received_amount) : '-'}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <div className="flex items-center justify-center gap-1.5">
-                      {onViewSlip && (
-                        <Button 
-                          variant="glass" 
-                          size="sm" 
-                          className="!py-1 !px-2 text-[10px] border-white/5"
-                          onClick={() => onViewSlip(sale)}
-                        >
-                          View Slip
-                        </Button>
-                      )}
-                      {isAdmin && onEdit && (
-                        <Button
-                          variant="glass"
-                          size="sm"
-                          className="!py-1 !px-2 text-[10px] border-white/5 hover:text-indigo-400"
-                          onClick={() => onEdit(sale)}
-                          title="Edit Sale Entry"
-                        >
-                          <Edit2 className="w-3 h-3" />
-                        </Button>
-                      )}
-                      {isAdmin && onDelete && (
-                        <Button
-                          variant="glass"
-                          size="sm"
-                          className="!py-1 !px-2 text-[10px] border-white/5 hover:text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/20"
-                          onClick={() => onDelete(sale)}
-                          title="Delete Sale Entry"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {filteredSales.length === 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-950/60 text-slate-400 font-bold uppercase text-[9.5px] tracking-wider border-b border-white/5">
               <tr>
-                <td colSpan={11} className="text-center py-8 text-slate-600 font-semibold">No sales recorded.</td>
+                <th className="py-3 px-4">WORK SL</th>
+                <th className="py-3 px-4">DATE</th>
+                <th className="py-3 px-4">COMPANY NAME</th>
+                <th className="py-3 px-4">PACKAGE</th>
+                <th className="py-3 px-4">PAYMENT METHOD</th>
+                <th className="py-3 px-4 text-right">PACKAGE COST</th>
+                <th className="py-3 px-4 text-center">TYPE</th>
+                <th className="py-3 px-4 text-right">RECEIVED AMOUNT</th>
+                <th className="py-3 px-4 text-right">BALANCE AMOUNT</th>
+                <th className="py-3 px-4 text-right">BALANCE CLEARING</th>
+                <th className="py-3 px-4 text-center">ACTIONS</th>
               </tr>
-            )}
-          </tbody>
-          {filteredSales.length > 0 && (() => {
-            return (
+            </thead>
+            <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+              {filteredSales?.map((sale, index) => {
+                const isRefund = sale.payment_type === 'Refund';
+                const isClearance = sale.payment_type === 'Clearance' || (sale.package_amount === 0 && sale.received_amount > 0 && !isRefund);
+                const balance = (isClearance || isRefund) ? 0 : Math.max(0, (sale.package_amount || 0) - (sale.received_amount || 0));
+                const dateStr = sale.created_at 
+                  ? new Date(sale.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) 
+                  : (sale.date || sale.sale_date || sale.sale_month || '');
+                
+                let displaySl: string | number = '-';
+                if (sale.work_sl) {
+                  displaySl = String(sale.work_sl).replace(/^#/, '');
+                } else if (!isClearance && !isRefund) {
+                  displaySl = serialMap.get(sale.id) || (filteredSales.length - index);
+                }
+
+                return (
+                  <tr key={sale.id} className={isRefund ? "bg-rose-950/10 hover:bg-rose-900/20" : "hover:bg-slate-900/10"}>
+                    <td className="py-3 px-4 font-extrabold text-indigo-400">{displaySl}</td>
+                    <td className="py-3 px-4 text-slate-500">{dateStr}</td>
+                    <td className="py-3 px-4 text-white font-bold">{sale.client_name}</td>
+                    <td className="py-3 px-4 text-slate-400">{sale.service_package || sale.package_name || '-'}</td>
+                    <td className="py-3 px-4 text-slate-400">{sale.payment_method || 'Bank Transfer'}</td>
+                    <td className="py-3 px-4 text-right">
+                      {(isClearance || isRefund) ? '-' : formatCurrency(sale.package_amount)}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {isRefund ? (
+                        <span className="px-2.5 py-0.5 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 font-extrabold text-[10px]">
+                          Refund
+                        </span>
+                      ) : (
+                        <Badge variant={sale.payment_type === 'Full' ? 'success' : sale.payment_type === 'Advance' ? 'info' : 'purple'}>
+                          {sale.payment_type}
+                        </Badge>
+                      )}
+                    </td>
+                    <td className={`py-3 px-4 text-right font-extrabold ${isRefund ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      {isRefund ? `- ${formatCurrency(sale.received_amount)}` : isClearance ? '-' : formatCurrency(sale.received_amount)}
+                    </td>
+                    <td className="py-3 px-4 text-right text-amber-500">
+                      {(isClearance || isRefund) ? '-' : formatCurrency(balance)}
+                    </td>
+                    <td className="py-3 px-4 text-right text-purple-400">
+                      {isClearance ? formatCurrency(sale.received_amount) : '-'}
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {onViewSlip && (
+                          <Button 
+                            variant="glass" 
+                            size="sm" 
+                            className="!py-1 !px-2 text-[10px] border-white/5"
+                            onClick={() => onViewSlip(sale)}
+                          >
+                            View Slip
+                          </Button>
+                        )}
+                        {isAdmin && onEdit && !isRefund && (
+                          <Button
+                            variant="glass"
+                            size="sm"
+                            className="!py-1 !px-2 text-[10px] border-white/5 hover:text-indigo-400"
+                            onClick={() => onEdit(sale)}
+                            title="Edit Sale Entry"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </Button>
+                        )}
+                        {isAdmin && onDelete && (
+                          <Button
+                            variant="glass"
+                            size="sm"
+                            className="!py-1 !px-2 text-[10px] border-white/5 hover:text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/20"
+                            onClick={() => onDelete(sale)}
+                            title="Delete Transaction"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filteredSales.length === 0 && (
+                <tr>
+                  <td colSpan={11} className="text-center py-8 text-slate-600 font-semibold">No sales recorded.</td>
+                </tr>
+              )}
+            </tbody>
+            {filteredSales.length > 0 && (
               <tfoot className="border-t border-white/10 bg-slate-950/40 text-white font-extrabold">
                 <tr>
                   <td className="py-3.5 px-4 text-left text-indigo-400 font-bold text-[9px] uppercase tracking-wider">
@@ -276,10 +366,10 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
                   <td></td>
                 </tr>
               </tfoot>
-            );
-          })()}
-        </table>
-      </div>
+            )}
+          </table>
+        </div>
+      </Card>
     </div>
   );
 };

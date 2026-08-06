@@ -174,14 +174,14 @@ export const FinanceDashboard: React.FC = () => {
 
       (profilesData || []).forEach(p => {
         profilesMap.set(p.id, { name: p.full_name, desig: p.designation || 'Staff' });
-        staffIdToNameMap.set(p.id, p.full_name);
-        staffIdToDesigMap.set(p.id, p.designation || 'Staff');
+        staffIdToNameMap.set(String(p.id), p.full_name);
+        staffIdToDesigMap.set(String(p.id), p.designation || 'Staff');
       });
 
       (staffData || []).forEach(s => {
-        if (!staffIdToNameMap.has(s.id)) {
-          staffIdToNameMap.set(s.id, s.full_name);
-          staffIdToDesigMap.set(s.id, 'Staff');
+        if (!staffIdToNameMap.has(String(s.id))) {
+          staffIdToNameMap.set(String(s.id), s.full_name);
+          staffIdToDesigMap.set(String(s.id), 'Staff');
         }
       });
       setStaffProfilesMap(profilesMap);
@@ -193,30 +193,40 @@ export const FinanceDashboard: React.FC = () => {
         .gte('created_at', startOfMonthStr)
         .lte('created_at', endOfMonthStr);
 
-      if (salesErr) throw salesErr;
+      if (salesErr) console.warn('Sales fetch error:', salesErr);
       setSalesList(salesData || []);
 
-      // Group sales by staff member (Income Left Column)
-      const incomeGroupMap = new Map<string, { total: number; count: number; name: string; desig: string }>();
-      (salesData || []).forEach((sale: any) => {
-        const staffId = sale.staff_id;
-        const name = sale.staff?.full_name || staffIdToNameMap.get(staffId) || 'Rahul Sharma';
-        const desig = staffIdToDesigMap.get(staffId) || 'Sales Executive';
-        
-        // Exclude Company Owners from the Global Leaderboard / Staff Incomes List
-        // Owners are now included in the leaderboard
-        // if (desig === 'Company Owner') return;
+      // Process monthly sales by staff
+      const staffIncomesMap: Record<string, { staffId: string; fullName: string; designation: string; total: number; count: number }> = {};
 
-        const existing = incomeGroupMap.get(staffId) || { total: 0, count: 0, name, desig };
-        existing.total += sale.received_amount || 0;
-        existing.count += 1;
-        incomeGroupMap.set(staffId, existing);
+      (salesData || []).forEach(sale => {
+        let sId = sale.staff_id || sale.user_id || 'unassigned';
+        let sName = sale.staff_name || (sale.staff?.full_name) || staffIdToNameMap.get(String(sId)) || 'Unassigned Staff';
+        let sDesig = staffIdToDesigMap.get(String(sId)) || 'Sales Executive';
+
+        if (!staffIncomesMap[sId]) {
+          staffIncomesMap[sId] = {
+            staffId: String(sId),
+            fullName: sName,
+            designation: sDesig,
+            total: 0,
+            count: 0
+          };
+        }
+
+        const amt = Number(sale.received_amount) || 0;
+        if (sale.payment_type === 'Refund') {
+          staffIncomesMap[sId].total -= amt;
+        } else {
+          staffIncomesMap[sId].total += amt;
+          staffIncomesMap[sId].count += 1;
+        }
       });
 
-      const staffIncomesArray: StaffIncome[] = Array.from(incomeGroupMap.entries()).map(([id, info]) => ({
-        staffId: id,
-        fullName: info.name,
-        designation: info.desig,
+      const staffIncomesArray = Object.values(staffIncomesMap).map(info => ({
+        staffId: info.staffId,
+        fullName: info.fullName,
+        designation: info.designation,
         totalAmount: info.total,
         count: info.count
       })).sort((a, b) => b.totalAmount - a.totalAmount);
@@ -249,7 +259,55 @@ export const FinanceDashboard: React.FC = () => {
         } catch (e) {}
       });
 
-      const combinedExp = [...dbExpData, ...localExp];
+      // 4b. Fetch historical sales refunds for active month (payment_type === 'Refund')
+      let refundSalesData: any[] = [];
+      try {
+        const { data: rData } = await supabase
+          .from('sales')
+          .select('*, staff(full_name)')
+          .eq('payment_type', 'Refund');
+        if (rData) refundSalesData = rData;
+      } catch (e) {}
+
+      let localSalesRefunds: any[] = [];
+      try {
+        const rawSales = localStorage.getItem('company_sales_local_store') || localStorage.getItem('sales');
+        if (rawSales) {
+          const parsedSales = JSON.parse(rawSales);
+          if (Array.isArray(parsedSales)) {
+            localSalesRefunds = parsedSales.filter((s: any) => s.payment_type === 'Refund');
+          }
+        }
+      } catch (e) {}
+
+      const allRefundSales = [...refundSalesData, ...localSalesRefunds];
+      
+      const convertedRefundExpenses = allRefundSales.map((s: any, idx: number) => {
+        const sDate = s.created_at || s.date || s.sale_date || s.sale_month || '';
+        const realStaffName = 
+          s.staff_name || 
+          s.full_name || 
+          s.staff?.full_name || 
+          (s.staff_id ? staffIdToNameMap.get(String(s.staff_id)) : '') || 
+          (s.user_id ? staffIdToNameMap.get(String(s.user_id)) : '') || 
+          'Staff';
+
+        return {
+          id: `converted-refund-${s.id || idx}`,
+          sale_id: s.id,
+          category: 'Sales Refund',
+          description: `Sales Refund - ${s.client_name || 'Client'}${s.notes || s.work_description ? ' (' + (s.notes || s.work_description) + ')' : ''}`,
+          amount: Number(s.received_amount) || 0,
+          expense_date: sDate,
+          created_at: s.created_at || new Date().toISOString(),
+          staff_id: s.staff_id,
+          staff_name: realStaffName,
+          logged_by_name: realStaffName,
+          created_by: realStaffName
+        };
+      });
+
+      const combinedExp = [...dbExpData, ...localExp, ...convertedRefundExpenses];
 
       // Filter for active selectedLedgerMonth (currentMonthKey) and exclude seed entries
       const filteredExp = combinedExp.filter((e: any) => {
@@ -263,7 +321,15 @@ export const FinanceDashboard: React.FC = () => {
       const finalExpData: any[] = [];
       filteredExp.forEach((item, idx) => {
         if (item) {
-          const uId = item.id ? String(item.id) : `fn-exp-${idx}-${item.amount}-${item.category}`;
+          const isRefundCat = item.category === 'Sales Refund' || item.category === 'Return Sales' || String(item.id || '').startsWith('converted-refund-');
+          let uId = item.id ? String(item.id) : `fn-exp-${idx}-${item.amount}-${item.category}`;
+          if (isRefundCat) {
+            const sRef = item.sale_id || (String(item.id || '').startsWith('converted-refund-') ? String(item.id).replace('converted-refund-', '') : '');
+            const dStr = (item.expense_date || item.date || item.created_at || '').substring(0, 10);
+            const sStaff = (item.staff_name || item.logged_by_name || item.staff_id || '').toUpperCase();
+            uId = sRef ? `refund-ref-${sRef}` : `refund-sig-${dStr}-${Number(item.amount)}-${sStaff}`;
+          }
+
           if (!seenIds.has(uId)) {
             seenIds.add(uId);
             finalExpData.push(item);
@@ -274,7 +340,7 @@ export const FinanceDashboard: React.FC = () => {
       setExpensesList(finalExpData);
 
       // Group expenses by valid categories and calculate split
-      const validCategories = ['Salary', 'Rent', 'Internet & Recharge', 'Food & Drinks', 'EMI', 'Repair & Maintenance', 'Stationery', 'Electricity', 'Transport', 'Fixed Asset', 'Outwork', 'Return Sales', 'Facebook Ads', 'Marketing & Ads', 'Office & Operations', 'Software & Cloud', 'Client Hospitality', 'Equipment & Hardware', 'Other Expense'];
+      const validCategories = ['Salary', 'Rent', 'Sales Refund', 'Internet & Recharge', 'Food & Drinks', 'EMI', 'Repair & Maintenance', 'Stationery', 'Electricity', 'Transport', 'Fixed Asset', 'Outwork', 'Return Sales', 'Facebook Ads', 'Marketing & Ads', 'Office & Operations', 'Software & Cloud', 'Client Hospitality', 'Equipment & Hardware', 'Other Expense'];
       const expCategoriesArray: ExpenseCategoryGroup[] = validCategories.map(cat => {
         const items = finalExpData.filter((e: any) => e.category === cat || (cat === 'Other Expense' && !validCategories.includes(e.category)));
         let ashifAmt = 0;
@@ -283,7 +349,8 @@ export const FinanceDashboard: React.FC = () => {
         items.forEach((exp: any) => {
           const nameStr = (
             exp.logged_by_name ||
-            (exp.staff_id ? (staffIdToNameMap.get(exp.staff_id) || '') : '') ||
+            exp.staff_name ||
+            (exp.staff_id ? (staffIdToNameMap.get(String(exp.staff_id)) || '') : '') ||
             exp.created_by ||
             exp.description ||
             ''
@@ -293,9 +360,11 @@ export const FinanceDashboard: React.FC = () => {
             shibiliAmt += (Number(exp.amount) || 0);
           } else if (nameStr.includes('ASHIF')) {
             ashifAmt += (Number(exp.amount) || 0);
+          } else if (exp.category === 'Sales Refund' || exp.category === 'Return Sales' || String(exp.id).startsWith('converted-refund-')) {
+            // Automated Sales Refunds processed by marketing/sales executives route directly to Ashif's column
+            ashifAmt += (Number(exp.amount) || 0);
           } else {
-            // Default attribution to Shibili for owner portal logged expenses
-            shibiliAmt += (Number(exp.amount) || 0);
+            ashifAmt += (Number(exp.amount) || 0);
           }
         });
 
@@ -379,13 +448,15 @@ export const FinanceDashboard: React.FC = () => {
 
     setIsAddingExpense(true);
     try {
-      const expPayload = {
+      const expPayload: any = {
         id: 'exp-' + Date.now(),
         category: expCategory,
         amount: Number(expAmount),
         expense_date: expDate,
         description: expDescription.trim() || null,
         staff_id: activeStaff.id,
+        staff_name: activeStaff.full_name,
+        logged_by_name: activeStaff.full_name,
         created_at: new Date().toISOString()
       };
 
@@ -393,7 +464,13 @@ export const FinanceDashboard: React.FC = () => {
         .from('expenses')
         .insert(expPayload);
 
-      if (error) console.warn('Supabase expense insert info:', error.message);
+      if (error) {
+        console.warn('Supabase expense insert info:', error.message);
+        const fallbackPayload = { ...expPayload };
+        delete fallbackPayload.logged_by_name;
+        delete fallbackPayload.staff_name;
+        await supabase.from('expenses').insert(fallbackPayload);
+      }
 
       // Dual-sync to local storage
       try {
@@ -425,22 +502,68 @@ export const FinanceDashboard: React.FC = () => {
   };
 
 
-  // Delete Expense
-  const handleDeleteExpense = async (id: string, category: string, amount: number) => {
+  // Delete Expense with Comprehensive Two-Way Cascade Synchronization
+  const handleDeleteExpense = async (id: string, category: string, amount: number, itemRef?: any) => {
     if (!confirm(`Are you sure you want to delete this ${category} entry of ${formatCurrency(amount)}?`)) return;
 
     try {
-      const { error } = await supabase
-        .from('expenses')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
+      const isRefundCategory = category === 'Sales Refund' || category === 'Return Sales' || String(id).startsWith('converted-refund-') || String(id).startsWith('exp-refund-');
+      const isConvertedRefund = String(id).startsWith('converted-refund-');
       
+      let targetSaleId = itemRef?.sale_id || '';
+      if (isConvertedRefund) {
+        targetSaleId = id.replace('converted-refund-', '');
+      }
+
+      const itemDate = itemRef?.expense_date || itemRef?.date || '';
+
+      // 1. Delete from Supabase tables
+      if (targetSaleId && !targetSaleId.startsWith('idx-')) {
+        await supabase.from('sales').delete().eq('id', targetSaleId);
+      }
+      
+      if (id && !id.startsWith('seed-exp-') && !isConvertedRefund) {
+        await supabase.from('expenses').delete().eq('id', id);
+        await supabase.from('owner_expenses').delete().eq('id', id);
+      }
+
+      if (itemRef?.sale_id) {
+        await supabase.from('expenses').delete().eq('sale_id', itemRef.sale_id);
+        await supabase.from('owner_expenses').delete().eq('sale_id', itemRef.sale_id);
+      }
+
+      // If this is a refund expense entry, also search and delete matching sales refund row from 'sales' table
+      if (isRefundCategory) {
+        try {
+          const { data: matchingSales } = await supabase
+            .from('sales')
+            .select('id')
+            .eq('payment_type', 'Refund')
+            .eq('received_amount', amount);
+
+          if (matchingSales && matchingSales.length > 0) {
+            const saleIdsToDelete = matchingSales.map(s => s.id);
+            await supabase.from('sales').delete().in('id', saleIdsToDelete);
+          }
+        } catch (sErr) {
+          console.warn('Cascade refund sale delete warning:', sErr);
+        }
+      }
+
+      // LocalStorage hacks removed: Sync is now handled by Supabase Realtime Subscriptions
+
+      // 3. Dispatch global custom events for 0ms instant UI sync across all owner terminals and sales logs
+      const eventDetail = { id, targetSaleId: targetSaleId || itemRef?.sale_id, category, amount, itemDate };
+      window.dispatchEvent(new Event('company_expenses_changed'));
+      window.dispatchEvent(new CustomEvent('company_expenses_changed', { detail: eventDetail }));
+      window.dispatchEvent(new Event('company_sales_changed'));
+      window.dispatchEvent(new CustomEvent('company_sales_changed', { detail: eventDetail }));
+      window.dispatchEvent(new Event('storage'));
+
       // Update drill-down modal items dynamically
       if (drilldownCategory) {
-        const updatedItems = drilldownCategory.items.filter(item => item.id !== id);
-        const updatedTotal = updatedItems.reduce((sum, item) => sum + item.amount, 0);
+        const updatedItems = drilldownCategory.items.filter((i: any) => i.id !== id && i.sale_id !== targetSaleId);
+        const updatedTotal = updatedItems.reduce((sum, i) => sum + i.amount, 0);
         setDrilldownCategory({
           ...drilldownCategory,
           totalAmount: updatedTotal,
@@ -1097,7 +1220,7 @@ export const FinanceDashboard: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-white/5 text-[11px]">
                   {drilldownCategory.items.map(item => {
-                    const loggedByName = staffProfilesMap.get(item.staff_id || '')?.name || 'Admin';
+                    const loggedByName = (item as any).staff_name || (item as any).logged_by_name || (item as any).created_by || staffProfilesMap.get(item.staff_id || '')?.name || 'Staff';
                     return (
                       <tr key={item.id} className="hover:bg-slate-850/50 transition-colors">
                         <td className="py-2 px-3 text-slate-500 font-medium">{item.expense_date}</td>
@@ -1106,7 +1229,7 @@ export const FinanceDashboard: React.FC = () => {
                         <td className="py-2 px-3 text-right font-bold text-rose-400">{formatCurrency(item.amount)}</td>
                         <td className="py-2 px-3 text-center">
                           <button
-                            onClick={() => handleDeleteExpense(item.id, item.category, item.amount)}
+                            onClick={() => handleDeleteExpense(item.id, item.category, item.amount, item)}
                             className="p-1 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/25 transition-all cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />

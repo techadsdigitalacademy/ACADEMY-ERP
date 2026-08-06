@@ -143,19 +143,33 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
     if (!ownerExpAmount || !activeStaff) return;
     setIsSubmittingOwnerExp(true);
     try {
-      const dbExpPayload = {
+      const dbExpPayload: any = {
         category: ownerExpCategory,
         description: ownerExpDescription.trim(),
         amount: Number(ownerExpAmount),
         expense_date: ownerExpDate,
         staff_id: activeStaff.id,
+        staff_name: activeStaff.full_name,
+        logged_by_name: activeStaff.full_name,
         created_at: new Date().toISOString()
       };
 
-      const { data: insertedData, error } = await supabase.from('expenses').insert(dbExpPayload).select().single();
+      let insertedData: any = null;
+      const { data, error } = await supabase.from('expenses').insert(dbExpPayload).select().maybeSingle();
       if (error) {
-        console.error('Supabase expense insert failed:', error);
-        throw new Error(error.message || 'Failed to save expense to the cloud database. Check RLS policies.');
+        console.warn('Initial expense insert info:', error.message);
+        const fallbackPayload = { ...dbExpPayload };
+        delete fallbackPayload.logged_by_name;
+        delete fallbackPayload.staff_name;
+
+        const { data: fbData, error: fbErr } = await supabase.from('expenses').insert(fallbackPayload).select().maybeSingle();
+        if (fbErr) {
+          console.error('Supabase expense insert failed:', fbErr);
+          throw new Error(fbErr.message || 'Failed to save expense to the cloud database. Check RLS policies.');
+        }
+        insertedData = fbData;
+      } else {
+        insertedData = data;
       }
 
       const localPayload = insertedData || { ...dbExpPayload, id: 'exp-' + Date.now() };

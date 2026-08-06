@@ -162,13 +162,59 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
       setNewTargetInput(activeTarget > 0 ? activeTarget.toString() : '');
 
       // Fetch Sales & filter strictly for monthFilter
-      const { data: saleData } = await supabase
+      const { data: allSalesData } = await supabase
         .from('sales')
         .select('*')
-        .eq('staff_id', targetStaffId)
         .order('created_at', { ascending: false });
 
-      const filteredSales = (saleData || []).filter(s => s.created_at?.startsWith(monthFilter));
+      const targetIdStr = String(targetStaffId || '').trim();
+      const pIdStr = String(p.id || '').trim();
+      const pNameTrim = String(p.full_name || staffRecord?.full_name || '').trim().toLowerCase();
+      const pFirstName = pNameTrim ? pNameTrim.split(' ')[0] : '';
+
+      const matchedSales = (allSalesData || []).filter((s: any) => {
+        if (!s) return false;
+        const sStaffId = String(s.staff_id || '').trim();
+        const sUserId = String(s.user_id || '').trim();
+        const sStaffName = String(s.staff_name || '').trim().toLowerCase();
+        const sFullName = String(s.full_name || '').trim().toLowerCase();
+        const sLoggedBy = String(s.logged_by_name || s.created_by || '').trim().toLowerCase();
+
+        if (targetIdStr && (sStaffId === targetIdStr || sUserId === targetIdStr)) return true;
+        if (pIdStr && (sStaffId === pIdStr || sUserId === pIdStr)) return true;
+        if (pNameTrim && (sStaffName === pNameTrim || sFullName === pNameTrim || sLoggedBy === pNameTrim)) return true;
+        if (pFirstName && pFirstName.length >= 3) {
+          if (sStaffName.includes(pFirstName) || sFullName.includes(pFirstName) || sLoggedBy.includes(pFirstName)) return true;
+        }
+
+        return false;
+      });
+
+      const filteredSales = matchedSales.filter((s: any) => {
+        if (!monthFilter) return true;
+        const rawDate = s.created_at || s.date || s.sale_date || s.timestamp;
+        if (rawDate) {
+          const dStr = String(rawDate).trim();
+          if (dStr.startsWith(monthFilter)) return true;
+          try {
+            const dObj = new Date(rawDate);
+            if (!isNaN(dObj.getTime())) {
+              const y = dObj.getFullYear();
+              const m = String(dObj.getMonth() + 1).padStart(2, '0');
+              if (`${y}-${m}` === monthFilter) return true;
+            }
+          } catch (e) {}
+        }
+        if (s.sale_month && monthFilter) {
+          try {
+            const [year, month] = monthFilter.split('-');
+            const d = new Date(Number(year), Number(month) - 1, 1);
+            const monthName = d.toLocaleString('default', { month: 'long', year: 'numeric' });
+            if (String(s.sale_month).toLowerCase() === monthName.toLowerCase()) return true;
+          } catch (e) {}
+        }
+        return false;
+      });
 
       // Fetch Daily Reports & filter strictly for monthFilter
       const { data: reportData } = await supabase
