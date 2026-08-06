@@ -138,11 +138,27 @@ export const AssetLibrary: React.FC = () => {
         .select('*, staff:staff_id(full_name)')
         .order('asset_date', { ascending: false });
 
-      if (error) throw error;
-      setAssets(data || []);
+      if (error) {
+        console.warn('Primary asset fetch warning, attempting fallback:', error);
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('marketing_assets')
+          .select('*')
+          .order('created_at', { ascending: false });
+        
+        if (fallbackError) {
+          console.warn('Fallback asset fetch warning:', fallbackError);
+          setAssets([]);
+          setDbError(fallbackError.message);
+        } else {
+          setAssets(fallbackData || []);
+        }
+      } else {
+        setAssets(data || []);
+      }
     } catch (err: any) {
-      console.error(err);
-      setDbError(err.message);
+      console.error('Error fetching assets:', err);
+      setAssets([]);
+      setDbError(err?.message || 'Error loading assets');
     } finally {
       setLoading(false);
     }

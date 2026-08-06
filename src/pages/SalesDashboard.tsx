@@ -23,7 +23,8 @@ import {
   Star,
   Sun,
   Moon,
-  RotateCcw
+  RotateCcw,
+  Menu
 } from 'lucide-react';
 import { LogRefundModal } from '../components/sales-dashboard/LogRefundModal';
 
@@ -149,85 +150,68 @@ export const SalesDashboard: React.FC = () => {
 
 
 
-  // Fetch summaries for Admin View
+  // Fetch summaries for Admin View (Optimized parallel fetching)
   useEffect(() => {
     if (isAdminView && (activeTab === 'sales' || activeTab === 'staff-history')) {
-      const fetchTodayAttendanceSummary = async () => {
+      const loadAdminDashboardData = async () => {
         try {
           const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-          const { data } = await supabase
-            .from('attendance')
-            .select('status')
-            .eq('attendance_date', todayStr);
-          
-          let present = 0;
-          let late = 0;
-          let halfDay = 0;
-          let leave = 0;
 
-          data?.forEach(a => {
+          const [
+            attendanceRes,
+            paymentsRes,
+            profilesRes,
+            targetsRes,
+            salesRes,
+            reportsRes,
+            monthAttRes
+          ] = await Promise.all([
+            supabase.from('attendance').select('status').eq('attendance_date', todayStr),
+            supabase.from('academy_student_payments').select('amount'),
+            supabase.from('staff_profiles').select('*').order('created_at', { ascending: false }),
+            supabase.from('staff').select('id, monthly_target_amount, monthly_targets, full_name, avatar_url'),
+            supabase.from('sales').select('*'),
+            supabase.from('daily_reports').select('*'),
+            supabase.from('attendance').select('staff_id, status, attendance_date')
+          ]);
+
+          // 1. Process Today Attendance
+          let present = 0, late = 0, halfDay = 0, leave = 0;
+          attendanceRes.data?.forEach(a => {
             if (a.status === 'PRESENT') present++;
             if (a.status === 'LATE') late++;
             if (a.status === 'HALF_DAY') halfDay++;
             if (a.status === 'LEAVE') leave++;
           });
-
           setTodayAttendanceStats({ present, late, halfDay, leave });
-        } catch (err) {
-          console.error("Error fetching today stats:", err);
-        }
-      };
 
-      const fetchAcademyRevenue = async () => {
-        try {
-          const { data, error } = await supabase
-            .from('academy_student_payments')
-            .select('amount');
-          if (error) throw error;
-          const sum = data?.reduce((acc, p) => acc + p.amount, 0) || 0;
-          setAcademyRevenue(sum);
-        } catch (err) {
-          console.error("Error fetching Academy payments:", err);
-        }
-      };
+          // 2. Process Academy Revenue
+          const sumRev = paymentsRes.data?.reduce((acc, p) => acc + p.amount, 0) || 0;
+          setAcademyRevenue(sumRev);
 
-      const fetchStaffProfiles = async () => {
-        try {
-          const { data: profiles, error: err1 } = await supabase
-            .from('staff_profiles')
-            .select('*')
-            .order('created_at', { ascending: false });
-          if (err1) throw err1;
+          // 3. Process Staff Profiles & Performance Stats
+          const profiles = profilesRes.data || [];
+          const targets = targetsRes.data || [];
+          const dbSales = salesRes.data || [];
+          const allReports = reportsRes.data || [];
+          const monthAttendanceFiltered = (monthAttRes.data || []).filter(a => a.attendance_date?.startsWith(selectedMonth));
 
-          const { data: targets, error: err2 } = await supabase
-            .from('staff')
-            .select('id, monthly_target_amount, monthly_targets, full_name, avatar_url');
-          
           const targetMap: { [key: string]: number } = {};
           const avatarMap: { [key: string]: string } = {};
-          if (!err2 && targets) {
-            targets.forEach(t => {
-              if (t.full_name) {
-                targetMap[t.full_name] = resolveStaffMonthTarget(t, selectedMonth);
-                if (t.avatar_url) avatarMap[t.full_name] = t.avatar_url;
-              }
-            });
-          }
-
-          // Fetch sales from DB + LocalStorage fallback for selectedMonth to compute Achieved & Total Works
-          const { data: dbSales } = await supabase
-            .from('sales')
-            .select('*');
+          targets.forEach(t => {
+            if (t.full_name) {
+              targetMap[t.full_name] = resolveStaffMonthTarget(t, selectedMonth);
+              if (t.avatar_url) avatarMap[t.full_name] = t.avatar_url;
+            }
+          });
 
           let localSalesData: any[] = [];
           try {
             const localStr = localStorage.getItem('company_sales_local_store') || localStorage.getItem('sales');
             if (localStr) localSalesData = JSON.parse(localStr);
-          } catch (e) {
-            console.warn('Local sales parse info:', e);
-          }
+          } catch (e) {}
 
-          const combinedAllSales = [...(dbSales || []), ...(Array.isArray(localSalesData) ? localSalesData : [])];
+          const combinedAllSales = [...dbSales, ...(Array.isArray(localSalesData) ? localSalesData : [])];
 
           const isSaleInMonth = (s: any, monthKey: string) => {
             if (!s) return false;
@@ -244,45 +228,28 @@ export const SalesDashboard: React.FC = () => {
             return false;
           };
 
-          // Filter sales for the selectedMonth
           const monthSalesFiltered = combinedAllSales.filter(s => isSaleInMonth(s, selectedMonth));
+          const monthReportsFiltered = (allReports || []).filter(r => r.report_date?.startsWith(selectedMonth));
 
-          // Fetch daily reports for selectedMonth to compute total works for creative/support
-          const { data: allReports } = await supabase
-            .from('daily_reports')
-            .select('*');
-          
-          const monthReportsFiltered = (allReports || [])?.filter(r => r.report_date?.startsWith(selectedMonth));
-
-          // Fetch attendance for selectedMonth to compute P/L
-          const { data: allAttendance } = await supabase
-            .from('attendance')
-            .select('staff_id, status, attendance_date');
-
-          const monthAttendanceFiltered = (allAttendance || [])?.filter(a => a.attendance_date?.startsWith(selectedMonth));
-
-          const merged = (profiles || [])?.map(p => {
+          const merged = profiles.map(p => {
             const target = targetMap[p.full_name] || 0;
             const avatar_url = avatarMap[p.full_name] || undefined;
             
-            // Calculate sales achievements (Net Received Total = Gross Collections - Refunds)
-            const staffSales = monthSalesFiltered?.filter(s => 
+            const staffSales = monthSalesFiltered.filter(s => 
               (s.staff_id && p.id && String(s.staff_id) === String(p.id)) ||
               (s.user_id && p.id && String(s.user_id) === String(p.id)) ||
               (s.staff_name && p.full_name && String(s.staff_name).trim().toLowerCase() === String(p.full_name).trim().toLowerCase()) ||
               (s.full_name && p.full_name && String(s.full_name).trim().toLowerCase() === String(p.full_name).trim().toLowerCase())
             );
-            const achieved = (staffSales || []).reduce((sum, s) => {
+
+            const achieved = staffSales.reduce((sum, s) => {
               const amt = Number(s.received_amount) || 0;
-              if (s.payment_type === 'Refund') {
-                return sum - amt;
-              }
+              if (s.payment_type === 'Refund') return sum - amt;
               return sum + amt;
             }, 0);
-            const salesWorks = staffSales?.filter(s => (s.payment_type === 'Advance' || s.payment_type === 'Full') && s.payment_type !== 'Refund').length;
+            const salesWorks = staffSales.filter(s => (s.payment_type === 'Advance' || s.payment_type === 'Full') && s.payment_type !== 'Refund').length;
 
-            // Calculate creative works
-            const staffReports = monthReportsFiltered?.filter(r => r.staff_id === p.id);
+            const staffReports = monthReportsFiltered.filter(r => r.staff_id === p.id);
             let creativeWorks = 0;
             if (p.designation === 'Graphic Designer') {
               creativeWorks = staffReports.reduce((sum, r) => sum + (r.posters_count || 0) + (r.re_edits_count || 0) + (r.logos_count || 0) + (r.others_count || 0), 0);
@@ -294,10 +261,9 @@ export const SalesDashboard: React.FC = () => {
               creativeWorks = staffReports.length;
             }
 
-            // Calculate attendance P/L
-            const staffAtt = monthAttendanceFiltered?.filter(a => a.staff_id === p.id);
-            const pCount = staffAtt?.filter(a => a.status === 'PRESENT' || a.status === 'LATE' || a.status === 'HALF_DAY').length;
-            const lCount = staffAtt?.filter(a => a.status === 'LATE').length;
+            const staffAtt = monthAttendanceFiltered.filter(a => a.staff_id === p.id);
+            const pCount = staffAtt.filter(a => a.status === 'PRESENT' || a.status === 'LATE' || a.status === 'HALF_DAY').length;
+            const lCount = staffAtt.filter(a => a.status === 'LATE').length;
 
             return {
               ...p,
@@ -308,19 +274,17 @@ export const SalesDashboard: React.FC = () => {
               creativeWorksCount: creativeWorks,
               attendancePCount: pCount,
               attendanceLCount: lCount,
-              attendanceTotalCount: staffAtt?.length || 0,
+              attendanceTotalCount: staffAtt.length,
             };
           });
 
           setStaffProfiles(merged);
         } catch (err) {
-          console.error("Error fetching staff profiles:", err);
+          console.error("Error loading admin dashboard data:", err);
         }
       };
 
-      fetchTodayAttendanceSummary();
-      fetchAcademyRevenue();
-      fetchStaffProfiles();
+      loadAdminDashboardData();
     }
   }, [isAdminView, activeTab, selectedMonth]);
 
@@ -332,47 +296,27 @@ export const SalesDashboard: React.FC = () => {
     try {
       const clientToUse = supabaseAdmin || supabase;
 
-      // 1. Fetch sales from Supabase DB (Unjoined query for 100% RLS compatibility across all staff sessions)
-      let dbSales: any[] = [];
-      try {
-        const { data: salesRows, error: salesErr } = await clientToUse
-          .from('sales')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(300);
+      // 1. Parallel fetch sales, staff, and profiles for instant calculation
+      const [salesRes, staffRes, profilesRes] = await Promise.all([
+        clientToUse.from('sales').select('*').order('created_at', { ascending: false }).limit(300),
+        clientToUse.from('staff').select('id, full_name, avatar_url, designation'),
+        clientToUse.from('staff_profiles').select('id, full_name')
+      ]);
 
-        if (salesErr) {
-          console.error('LEADERBOARD DB FETCH ERROR:', salesErr);
-        } else if (salesRows) {
-          dbSales = salesRows;
-        }
-      } catch (err) {
-        console.warn('Supabase leaderboard fetch warning:', err);
-      }
+      const dbSales = salesRes.data || [];
+      const staffRows = staffRes.data || [];
+      const profiles = profilesRes.data || [];
 
-      // 2. Fetch staff & profiles map for name/avatar resolution
       const staffMap: { [id: string]: any } = {};
-      try {
-        const { data: staffRows } = await clientToUse
-          .from('staff')
-          .select('id, full_name, avatar_url, designation');
-        (staffRows || []).forEach(s => {
-          if (s.id) staffMap[s.id] = s;
-          if (s.full_name) staffMap[s.full_name] = s;
-        });
+      staffRows.forEach(s => {
+        if (s.id) staffMap[s.id] = s;
+        if (s.full_name) staffMap[s.full_name] = s;
+      });
+      profiles.forEach(p => {
+        if (p.id) staffMap[p.id] = p;
+        if (p.full_name) staffMap[p.full_name] = p;
+      });
 
-        const { data: profiles } = await clientToUse
-          .from('staff_profiles')
-          .select('id, full_name');
-        (profiles || []).forEach(p => {
-          if (p.id) staffMap[p.id] = p;
-          if (p.full_name) staffMap[p.full_name] = p;
-        });
-      } catch (err) {
-        console.warn('Staff map fetch info:', err);
-      }
-
-      // 3. Multi-source deduplicated merge: Supabase DB + AppContext sales + LocalStorage
       let localSales: any[] = [];
       try {
         const stored = localStorage.getItem('company_sales_local_store');
@@ -397,13 +341,10 @@ export const SalesDashboard: React.FC = () => {
       });
       const combinedSales = Array.from(deduppedMap.values());
 
-      // 4. Determine CURRENT calendar day in Indian Standard Time (Asia/Kolkata)
       const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
-      // Robust YYYY-MM-DD extractor prioritizing created_at timestamp FIRST
       const parseToYYYYMMDD = (item: any): string => {
         if (!item) return '';
-        // Check created_at ISO timestamp converted to IST date
         if (item.created_at) {
           try {
             const d = new Date(item.created_at);
@@ -412,7 +353,6 @@ export const SalesDashboard: React.FC = () => {
             }
           } catch (e) {}
         }
-        // Fallback to timestamp or date fields
         const val = item.timestamp || item.date || item.sale_date;
         if (val) {
           const str = String(val).trim();
@@ -428,20 +368,17 @@ export const SalesDashboard: React.FC = () => {
         return '';
       };
 
-      // 5. Strictly filter sales created on TODAY'S calendar date ONLY (No carryover or accumulation from previous days)
       const todaySales = combinedSales.filter(sale => {
         const itemDate = parseToYYYYMMDD(sale);
         return itemDate === todayIST;
       });
 
-      // 6. Aggregate collections per Sales Executive for TODAY (Excluding Owners & Admins)
       const collections: { [staffKey: string]: { name: string; amount: number; avatar?: string } } = {};
 
       todaySales.forEach((sale: any) => {
         const staffObj = sale.staff || staffMap[sale.staff_id] || (sale.staff_name ? staffMap[sale.staff_name] : null);
         const rawName = sale.staff_name || staffObj?.full_name || staffObj?.name || sale.full_name || (sale.staff_id ? staffMap[sale.staff_id]?.full_name : null) || 'Sales Executive';
 
-        // Completely exclude Company Owners, Admins, Directors, and Partners from Sales Leaderboard
         const nameUpper = String(rawName).trim().toUpperCase();
         const designationLower = String(staffObj?.designation || '').toLowerCase();
 
@@ -470,12 +407,10 @@ export const SalesDashboard: React.FC = () => {
         collections[staffKey].amount += recAmount;
       });
 
-      // 7. Sort Sales Executives from highest to lowest collection amount for today
       const sortedLeaderboard = Object.values(collections)
         ?.filter(item => item.amount > 0)
         ?.sort((a, b) => b.amount - a.amount);
 
-      console.log("Daily Leaderboard (Today IST):", sortedLeaderboard);
       setDailyLeaderboard(sortedLeaderboard);
     } catch (err) {
       console.error('Error fetching daily leaderboard:', err);
@@ -485,7 +420,6 @@ export const SalesDashboard: React.FC = () => {
   useEffect(() => {
     fetchDailyLeaderboard();
 
-    // Supabase Realtime Channel listener for live leaderboard updates
     const salesChannel = supabase
       .channel('public:sales:leaderboard')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => {
@@ -496,7 +430,7 @@ export const SalesDashboard: React.FC = () => {
     return () => {
       supabase.removeChannel(salesChannel);
     };
-  }, [sales, selectedMonth]);
+  }, [selectedMonth]);
 
 
 
@@ -1596,17 +1530,27 @@ export const SalesDashboard: React.FC = () => {
       <div className="flex-1 md:pl-64 flex flex-col min-w-0 pb-24 md:pb-8">
         
         {/* Header */}
-        <header className="glass-panel sticky top-0 z-30 px-4 md:px-8 py-3.5 border-b border-white/5 backdrop-blur-md">
-          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 w-full sm:w-auto">
-              <h1 className="text-sm md:text-lg font-bold text-white tracking-wide">
-                {isAdminView ? 'Admin Control Dashboard' :  'Consultant Sales Terminal'}
-              </h1>
-              <div className="flex items-center gap-2">
+        <header className="glass-panel sticky top-0 z-30 px-3 sm:px-6 md:px-8 py-2.5 sm:py-3.5 border-b border-white/5 backdrop-blur-md">
+          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-4">
+            <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4 w-full sm:w-auto">
+              <div className="flex items-center gap-2 min-w-0">
+                <button 
+                  onClick={() => window.dispatchEvent(new CustomEvent('toggle_mobile_sidebar'))}
+                  className="md:hidden p-1.5 rounded-xl bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center shrink-0"
+                  title="Open Navigation Menu"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
+                <h1 className="text-xs sm:text-sm md:text-lg font-bold text-white tracking-wide truncate">
+                  {isAdminView ? 'Admin Control Dashboard' :  'Consultant Sales Terminal'}
+                </h1>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="px-2.5 py-1 rounded-xl bg-slate-900 border border-white/10 text-xs font-bold text-slate-350 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                  className="px-2 py-1 rounded-xl bg-slate-900 border border-white/10 text-[11px] sm:text-xs font-bold text-slate-350 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
                 >
                   {getMonthOptions()?.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -1615,24 +1559,22 @@ export const SalesDashboard: React.FC = () => {
                 <button
                   onClick={toggleTheme}
                   title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
-                  className="p-2 rounded-xl bg-slate-900 border border-white/10 text-amber-400 hover:text-amber-300 hover:bg-slate-800 transition-all cursor-pointer shrink-0"
+                  className="p-1.5 sm:p-2 rounded-xl bg-slate-900 border border-white/10 text-amber-400 hover:text-amber-300 hover:bg-slate-800 transition-all cursor-pointer shrink-0"
                 >
-                  {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4 text-indigo-400" />}
+                  {theme === 'dark' ? <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" />}
                 </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
-
-
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
               {isAdminView && (
                 <Button 
                   variant="glass" 
                   size="sm" 
-                  className="!py-2 !px-3 border border-indigo-500/20 hover:bg-slate-800 text-xs font-bold text-indigo-400 flex items-center gap-1.5" 
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 border border-indigo-500/20 hover:bg-slate-800 text-[11px] sm:text-xs font-bold text-indigo-400 flex items-center gap-1 shrink-0" 
                   onClick={() => setIsClosingReportOpen(true)}
                 >
-                  <Star className="w-3.5 h-3.5" />
+                  <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   <span>Closing Reports</span>
                 </Button>
               )}
@@ -1640,9 +1582,9 @@ export const SalesDashboard: React.FC = () => {
               {(!isAdminView || isOwner) && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && (
                 <button
                   onClick={() => setIsRefundModalOpen(true)}
-                  className="!py-2 !px-3 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-extrabold text-xs shadow-md shadow-rose-500/20 rounded-xl flex items-center gap-1.5 shrink-0 transition-all border border-rose-400/20 cursor-pointer"
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-extrabold text-[11px] sm:text-xs shadow-md shadow-rose-500/20 rounded-xl flex items-center gap-1 shrink-0 transition-all border border-rose-400/20 cursor-pointer"
                 >
-                  <RotateCcw className="w-3.5 h-3.5" />
+                  <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   <span>Refund</span>
                 </button>
               )}
@@ -1651,9 +1593,9 @@ export const SalesDashboard: React.FC = () => {
                 <Button 
                   variant="primary" 
                   size="sm" 
-                  className="!py-2 !px-3 shadow-md rounded-xl text-xs font-bold shrink-0 animate-pulse" 
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-xl text-[11px] sm:text-xs font-bold shrink-0 animate-pulse" 
                   onClick={() => setIsModalOpen(true)}
-                  icon={<Plus className="w-3.5 h-3.5" />}
+                  icon={<Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
                 >
                   Log Sale
                 </Button>
@@ -1663,20 +1605,19 @@ export const SalesDashboard: React.FC = () => {
                 <Button 
                   variant="primary" 
                   size="sm" 
-                  className="!py-2 !px-3 shadow-md rounded-xl text-xs font-bold shrink-0 animate-pulse" 
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-xl text-[11px] sm:text-xs font-bold shrink-0 animate-pulse" 
                   onClick={() => setIsModalOpen(true)}
-                  icon={<Plus className="w-3.5 h-3.5" />}
+                  icon={<Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
                 >
                   Log Transaction
                 </Button>
               )}
-  
             </div>
           </div>
         </header>
 
         {/* Main Content Area */}
-        <main className="max-w-6xl w-full mx-auto px-4 md:px-8 mt-6 space-y-6">
+        <main className="max-w-6xl w-full mx-auto px-3 sm:px-6 md:px-8 mt-4 sm:mt-6 space-y-4 sm:space-y-6">
           
           {activeTab === 'sales' && (
             <div className="space-y-6">

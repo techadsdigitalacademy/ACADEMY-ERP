@@ -240,30 +240,37 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
       // Fetch Owner Expenses, Partner Withdrawals & LocalStorage with Seed Fallback
       let rawCombined: any[] = [];
       try {
-        const { data: exp1, error: err1 } = await supabase
-          .from('expenses')
-          .select('*')
-          .eq('staff_id', targetStaffId)
-          .order('expense_date', { ascending: false });
+        let exp1: any[] = [];
+        let exp2: any[] = [];
+        let exp3: any[] = [];
 
-        if (err1) console.error("SUPABASE FETCH ERROR [expenses]:", err1, "DATA:", exp1);
-        console.log(`RAW DB EXPENSES (All):`, exp1);
+        if (targetStaffId) {
+          const { data: res1 } = await supabase
+            .from('expenses')
+            .select('*')
+            .eq('staff_id', targetStaffId)
+            .order('expense_date', { ascending: false });
+          if (res1) exp1 = res1;
 
-        const { data: exp2, error: err2 } = await supabase
-          .from('owner_expenses')
-          .select('*')
-          .eq('staff_id', targetStaffId)
-          .order('created_at', { ascending: false });
+          const { data: res2 } = await supabase
+            .from('owner_expenses')
+            .select('*')
+            .eq('staff_id', targetStaffId)
+            .order('created_at', { ascending: false });
+          if (res2) exp2 = res2;
+        }
 
-        if (err2) console.error("SUPABASE FETCH ERROR [owner_expenses]:", err2, "DATA:", exp2);
-
-        const { data: exp3, error: err3 } = await supabase
-          .from('partner_withdrawals')
-          .select('*')
-          .or(`partner_id.eq.${targetStaffId},partner_name.eq.${p.full_name}`)
-          .order('withdrawal_date', { ascending: false });
-
-        if (err3) console.error("SUPABASE FETCH ERROR [partner_withdrawals]:", err3, "DATA:", exp3);
+        const pNameStr = p?.full_name || '';
+        let pwQuery = supabase.from('partner_withdrawals').select('*');
+        if (targetStaffId && pNameStr) {
+          pwQuery = pwQuery.or(`partner_id.eq.${targetStaffId},partner_name.eq.${pNameStr}`);
+        } else if (targetStaffId) {
+          pwQuery = pwQuery.eq('partner_id', targetStaffId);
+        } else if (pNameStr) {
+          pwQuery = pwQuery.eq('partner_name', pNameStr);
+        }
+        const { data: res3 } = await pwQuery.order('withdrawal_date', { ascending: false });
+        if (res3) exp3 = res3;
 
         let localExp: any[] = [];
         const keysToTry = ['company_expenses_local_store', 'expenses', 'owner_expenses', 'expenses_list'];
@@ -304,8 +311,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
           ownerExpensesCount: exp2?.length || 0,
           withdrawalsCount: exp3?.length || 0,
           localExpCount: localExp.length,
-          totalRaw: rawCombined.length,
-          err1: err1?.message
+          totalRaw: rawCombined.length
         });
         console.log(`📦 [LocalStorage Expense Items]:`, localExp);
       } catch (e) {

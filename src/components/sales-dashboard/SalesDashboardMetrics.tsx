@@ -49,7 +49,7 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
   const showAdminLayout = isAdminView && !isOwner;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5 sm:space-y-6">
       {/* Leaderboard Marquee - Displayed for Sales Team & Admin Overview */}
       {isSalesRoleOrAdmin && (
         <DailyLeaderboardMarquee dailyLeaderboard={dailyLeaderboard} />
@@ -57,13 +57,13 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
 
       {/* ADMIN VIEW LAYOUT (Only for Non-Owner Admins) */}
       {showAdminLayout && (
-        <div className="space-y-6">
+        <div className="space-y-3.5 sm:space-y-6">
 
           {/* Overhauled Admin Metrics Row */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-6">
             
             {/* Card 1: Revenue Month Agency & Academy separately */}
-            <Card variant="glass" glowColor="indigo" className="p-5 flex flex-col justify-between min-h-[160px] border-indigo-500/10">
+            <Card variant="glass" glowColor="indigo" className="p-3.5 sm:p-5 flex flex-col justify-between min-h-[150px] sm:min-h-[160px] border-indigo-500/10">
               <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">Month's Revenue Stream</span>
               <div className="space-y-3.5 mt-3">
                 <div className="bg-slate-950/40 p-2.5 rounded-xl border border-white/5 flex justify-between items-center">

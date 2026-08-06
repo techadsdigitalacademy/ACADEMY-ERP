@@ -34,6 +34,21 @@ export const Sidebar: React.FC = () => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
+  React.useEffect(() => {
+    const handleToggle = () => setIsMobileOpen(prev => !prev);
+    const handleClose = () => setIsMobileOpen(false);
+    window.addEventListener('toggle_mobile_sidebar', handleToggle);
+    window.addEventListener('close_mobile_sidebar', handleClose);
+    return () => {
+      window.removeEventListener('toggle_mobile_sidebar', handleToggle);
+      window.removeEventListener('close_mobile_sidebar', handleClose);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    setIsMobileOpen(false);
+  }, [activeTab]);
+
   if (!activeStaff) return null;
 
   const isOwner = activeStaff.full_name === 'SHIBILI' || activeStaff.full_name === 'ASHIF' || activeStaff.designation?.toLowerCase().includes('owner');
@@ -58,6 +73,7 @@ export const Sidebar: React.FC = () => {
   const handleNavClick = (tab: any) => {
     setActiveTab(tab);
     setIsMobileOpen(false);
+    window.dispatchEvent(new CustomEvent('close_mobile_sidebar'));
   };
 
   const renderNavLinks = () => (
