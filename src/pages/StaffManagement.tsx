@@ -402,7 +402,7 @@ export const StaffManagement: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex relative overflow-x-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row relative w-full overflow-x-hidden">
       
       {/* Background Decorative Glows */}
       <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/10 blur-[120px] pointer-events-none"></div>
@@ -412,10 +412,10 @@ export const StaffManagement: React.FC = () => {
       <Sidebar />
 
       {/* Main Content Area */}
-      <div className="flex-1 md:pl-64 flex flex-col min-w-0 pb-24 md:pb-8 animate-fade-in">
+      <div className="flex-1 md:pl-64 flex flex-col min-w-0 pt-14 md:pt-0 pb-24 md:pb-8 animate-fade-in">
         
         {/* Header Section */}
-        <header className="glass-panel sticky top-0 z-30 px-4 md:px-8 py-3.5 border-b border-white/5 backdrop-blur-md">
+        <header className="glass-panel sticky top-14 md:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-white/5 backdrop-blur-md">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <h1 className="text-base md:text-xl font-bold text-white tracking-wide flex items-center gap-2">
               Staff Management Hub

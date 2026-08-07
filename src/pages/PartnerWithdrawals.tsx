@@ -157,13 +157,13 @@ export const PartnerWithdrawals: React.FC = () => {
   const totalWithdrawn = filteredWithdrawals.reduce((sum, w) => sum + w.amount, 0);
 
   return (
-    <div className="min-h-screen bg-[#020817] text-slate-200 font-sans selection:bg-indigo-500/30 flex">
+    <div className="min-h-screen bg-[#020817] text-slate-200 font-sans flex flex-col md:flex-row relative w-full overflow-x-hidden selection:bg-indigo-500/30">
       {/* Global Sidebar */}
       <Sidebar />
       {/* Main Content */}
-      <div className="flex-1 md:pl-64 flex flex-col min-w-0 pb-24 md:pb-8">
+      <div className="flex-1 md:pl-64 flex flex-col min-w-0 pt-14 md:pt-0 pb-24 md:pb-8">
         {/* Header */}
-        <header className="flex-shrink-0 px-4 md:px-8 py-6 border-b border-white/5 bg-slate-950/50 backdrop-blur-xl sticky top-0 z-20 flex justify-between items-center">
+        <header className="flex-shrink-0 px-4 md:px-8 py-6 border-b border-white/5 bg-slate-950/50 backdrop-blur-xl sticky top-14 md:top-0 z-20 flex justify-between items-center">
           <div>
             <h2 className="text-xl md:text-2xl font-black text-white tracking-tight flex items-center gap-3">
               <Star className="w-6 h-6 text-purple-400" />

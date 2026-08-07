@@ -281,9 +281,6 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Top Header Spacer */}
-      <div className="h-14 md:hidden w-full shrink-0" />
-
       {/* Mobile Drawer Overlay / Backdrop */}
       {isMobileOpen && (
         <div 

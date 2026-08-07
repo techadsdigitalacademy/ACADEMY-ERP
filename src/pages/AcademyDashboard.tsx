@@ -620,9 +620,9 @@ export const AcademyDashboard: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-[#020617] font-sans selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-[#020617] text-slate-100 font-sans flex flex-col md:flex-row relative w-full overflow-x-hidden selection:bg-indigo-500/30">
       <Sidebar />
-      <div className="flex-1 md:pl-64 flex flex-col min-w-0 overflow-y-auto custom-scrollbar relative">
+      <div className="flex-1 md:pl-64 flex flex-col min-w-0 pt-14 md:pt-0 pb-24 md:pb-8 relative">
         <main className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 w-full">
           
           {/* Header */}
