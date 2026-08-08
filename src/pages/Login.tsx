@@ -33,7 +33,7 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 relative overflow-hidden font-sans">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 py-8 relative overflow-x-clip font-sans">
       
       {/* Decorative Blur Background Circles */}
       <div className="absolute top-[-20%] left-[-20%] w-[70vw] h-[70vw] rounded-full bg-indigo-900/20 blur-[150px] pointer-events-none"></div>

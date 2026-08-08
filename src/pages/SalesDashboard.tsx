@@ -1517,7 +1517,7 @@ export const SalesDashboard: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row relative w-full overflow-x-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-clip">
       
       {/* Dynamic background lighting */}
       <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/15 blur-[130px] pointer-events-none"></div>
@@ -1527,16 +1527,16 @@ export const SalesDashboard: React.FC = () => {
       <Sidebar />
 
       {/* Main Container */}
-      <div className="flex-1 md:pl-64 flex flex-col min-w-0 pt-14 md:pt-0 pb-24 md:pb-8">
+      <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-24 md:pb-8">
         
         {/* Header */}
-        <header className="glass-panel sticky top-14 md:top-0 z-30 px-3 sm:px-6 md:px-8 py-2.5 sm:py-3.5 border-b border-white/5 backdrop-blur-md">
+        <header className="glass-panel sticky top-14 lg:top-0 z-30 px-3 sm:px-6 md:px-8 py-2.5 sm:py-3.5 border-b border-white/5 backdrop-blur-md">
           <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-4">
             <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4 w-full sm:w-auto">
               <div className="flex items-center gap-2 min-w-0">
                 <button 
                   onClick={() => window.dispatchEvent(new CustomEvent('toggle_mobile_sidebar'))}
-                  className="md:hidden p-1.5 rounded-xl bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center shrink-0"
+                  className="lg:hidden p-1.5 rounded-xl bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center shrink-0"
                   title="Open Navigation Menu"
                 >
                   <Menu className="w-5 h-5" />

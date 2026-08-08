@@ -245,7 +245,7 @@ export const Sidebar: React.FC = () => {
   return (
     <>
       {/* Mobile Top Sticky Navigation Bar */}
-      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-slate-900/90 backdrop-blur-xl border-b border-white/10 z-40 px-4 flex items-center justify-between">
+      <div className="lg:hidden fixed top-0 left-0 right-0 h-14 bg-slate-900/90 backdrop-blur-xl border-b border-white/10 z-40 px-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button 
             onClick={() => setIsMobileOpen(!isMobileOpen)}
@@ -285,13 +285,13 @@ export const Sidebar: React.FC = () => {
       {isMobileOpen && (
         <div 
           onClick={() => setIsMobileOpen(false)} 
-          className="md:hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 transition-opacity duration-300"
+          className="lg:hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 transition-opacity duration-300"
         />
       )}
 
       {/* Mobile Drawer Navigation Panel (Slide-out) */}
       <aside 
-        className={`md:hidden fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-slate-900/95 backdrop-blur-2xl border-r border-white/10 z-50 p-5 flex flex-col justify-between transform transition-transform duration-300 ease-in-out shadow-2xl ${
+        className={`lg:hidden fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-slate-900/95 backdrop-blur-2xl border-r border-white/10 z-50 p-5 flex flex-col justify-between transform transition-transform duration-300 ease-in-out shadow-2xl ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -321,7 +321,7 @@ export const Sidebar: React.FC = () => {
       </aside>
 
       {/* Desktop Fixed Left Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-white/5 bg-slate-900/20 backdrop-blur-lg fixed inset-y-0 left-0 z-40 p-5 justify-between">
+      <aside className="hidden lg:flex flex-col w-64 border-r border-white/5 bg-slate-900/20 backdrop-blur-lg fixed inset-y-0 left-0 z-40 p-5 justify-between">
         <div className="space-y-6">
           <div className="flex items-center gap-2.5 px-2">
             <div className="p-2 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 text-white shadow-md shadow-indigo-500/20">

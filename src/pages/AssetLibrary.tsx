@@ -348,14 +348,14 @@ export const AssetLibrary: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col md:flex-row relative w-full overflow-x-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-clip">
       {/* Background Lighting Glows */}
       <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/15 blur-[130px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-20%] w-[80vw] h-[80vw] rounded-full bg-pink-900/10 blur-[130px] pointer-events-none"></div>
 
       <Sidebar />
 
-      <main className="flex-1 p-4 md:p-8 ml-0 md:ml-64 lg:ml-72 transition-all duration-300 z-10 min-h-screen flex flex-col pt-18 md:pt-8 relative">
+      <main className="flex-1 p-4 md:p-8 ml-0 lg:ml-64 transition-all duration-300 z-10 min-h-screen flex flex-col pt-18 lg:pt-8 relative">
         <div className="max-w-7xl mx-auto w-full flex-1">
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 animate-fade-in">
