@@ -123,7 +123,8 @@ export const PunchModal: React.FC<PunchModalProps> = ({
       if (canvasRef.current && videoRef.current) {
         const context = canvasRef.current.getContext('2d');
         if (context) {
-          context.drawImage(videoRef.current, 0, 0, 640, 480);
+          // Crop center to 1:1 aspect ratio (480x480 out of 640x480)
+          context.drawImage(videoRef.current, 80, 0, 480, 480, 0, 0, 480, 480);
           selfieBase64 = canvasRef.current.toDataURL('image/jpeg', 0.85);
         }
       }
@@ -203,21 +204,21 @@ export const PunchModal: React.FC<PunchModalProps> = ({
   const isOutOfRange = distance === null || distance > 20000; // 20km for testing? Should normally be smaller
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-      <Card variant="glass" className="w-full max-w-sm p-6 border-white/10 relative space-y-4 text-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+      <Card className="w-full max-w-[400px] p-6 relative space-y-6 text-center max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
         {/* Close Button */}
         <button 
           onClick={handleClose}
-          className="absolute top-4 right-4 p-2 rounded-lg bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+          className="absolute top-4 right-4 p-2 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Title / Header */}
         <div>
-          <h3 className="font-bold text-white text-base tracking-wide flex items-center justify-center gap-2">
-            <Camera className="w-5 h-5 text-indigo-400" />
-            <span>Punch {punchType} Camera Feed</span>
+          <h3 className="font-bold text-slate-800 dark:text-white text-base tracking-wide flex items-center justify-center gap-2">
+            <Camera className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+            <span>Punch {punchType} Selfie</span>
           </h3>
         </div>
 
@@ -238,7 +239,7 @@ export const PunchModal: React.FC<PunchModalProps> = ({
         )}
 
         {/* Webcam Live Feed */}
-        <div className="relative aspect-video w-full rounded-2xl overflow-hidden bg-black border border-white/5 shadow-inner">
+        <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-slate-950 shadow-inner">
           {cameraError ? (
             <div className="absolute inset-0 flex items-center justify-center text-center p-4 text-rose-400 text-xs font-semibold">
               {cameraError}
@@ -254,7 +255,7 @@ export const PunchModal: React.FC<PunchModalProps> = ({
         </div>
 
         {/* Hidden canvas for snapshot */}
-        <canvas ref={canvasRef} className="hidden" width={640} height={480} />
+        <canvas ref={canvasRef} className="hidden" width={480} height={480} />
 
         {/* Confirmation action */}
         <div className="pt-2">
