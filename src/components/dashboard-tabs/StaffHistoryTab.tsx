@@ -134,8 +134,17 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
     }
   };
 
-  const salesTeam = staffProfiles?.filter(p => p.designation === 'Sales Executive');
-  const creativeTeam = staffProfiles?.filter(p => p.designation !== 'Sales Executive');
+  // Filter out extra academy-specific roles (Tutor and Academy Counselor)
+  const validStaffProfiles = (staffProfiles || []).filter(p => {
+    const desig = String(p?.designation || '').toLowerCase().trim();
+    const rName = String(p?.role_name || p?.role || '').toLowerCase().trim();
+    const isTutor = desig === 'tutor' || desig.includes('tutor') || rName === 'tutor' || rName.includes('tutor');
+    const isCounselor = desig === 'academy counselor' || desig.includes('academy counselor') || rName === 'academy counselor' || rName.includes('academy counselor');
+    return !isTutor && !isCounselor;
+  });
+
+  const salesTeam = validStaffProfiles.filter(p => p.designation === 'Sales Executive');
+  const creativeTeam = validStaffProfiles.filter(p => p.designation !== 'Sales Executive');
 
   // Safe Month-Specific Target Resolver
   const resolveMonthTarget = (staffRecord: any, monthKey: string) => {
@@ -182,7 +191,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
           if (r.full_name) dbStaffMap[r.full_name] = r;
         });
 
-        staffProfiles?.forEach(staff => {
+        validStaffProfiles.forEach(staff => {
           if (map[staff.id] !== undefined) return;
           const match = dbStaffMap[staff.full_name];
           if (match) {
@@ -1171,7 +1180,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             Staff Performance Registers
           </h2>
           <span className="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded-lg border border-slate-700 font-bold">
-            {staffProfiles.length} Accounts ({activeMonthStr})
+            {validStaffProfiles.length} Accounts ({activeMonthStr})
           </span>
         </div>
 
