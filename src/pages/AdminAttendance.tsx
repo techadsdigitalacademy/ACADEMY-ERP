@@ -272,24 +272,251 @@ export const AdminAttendance: React.FC = () => {
   };
 
   const downloadReportCSV = () => {
+    handleExportCustomReportExcel();
+  };
+
+  const handleExportCustomReportExcel = () => {
     if (reportData.length === 0) return;
-    
-    let csvContent = "data:text/csv;charset=utf-8,";
-    // Add header row at the very top indicating selected date range
-    csvContent += `Report Period: ${reportFromDate} to ${reportToDate}\n`;
-    csvContent += "Staff Name,Designation,Present,Late,Half Day,Leave\n";
-    
-    reportData.forEach(row => {
-      csvContent += `"${row.full_name}","${row.designation}",${row.present},${row.late},${row.halfDay},${row.leave}\n`;
-    });
-    
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `attendance_report_${reportFromDate}_to_${reportToDate}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const csvRows: any[][] = [];
+      csvRows.push([`Tech Ads ERP - Custom Date Range Attendance Report`]);
+      csvRows.push([`Report Period: ${reportFromDate} to ${reportToDate}`, `Total Employees: ${reportData.length}`]);
+      csvRows.push([]);
+      csvRows.push(['Staff Name', 'Designation', 'Present Days', 'Late Days', 'Half Days', 'Leave Days']);
+
+      reportData.forEach(row => {
+        csvRows.push([
+          row.full_name,
+          row.designation,
+          row.present,
+          row.late,
+          row.halfDay,
+          row.leave
+        ]);
+      });
+
+      const BOM = "\uFEFF";
+      const csvContent = BOM + csvRows.map(r => r.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Attendance_Custom_Report_${reportFromDate}_to_${reportToDate}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e: any) {
+      alert('Error exporting Custom Report Excel: ' + e.message);
+    }
+  };
+
+  const handleExportCustomReportPDF = () => {
+    if (reportData.length === 0) return;
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to export PDF');
+        return;
+      }
+
+      const rowsHtml = reportData.map(row => `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 8px; font-weight: bold;">${row.full_name}</td>
+          <td style="padding: 8px; color: #475569;">${row.designation}</td>
+          <td style="padding: 8px; text-align: center; font-weight: bold; color: #059669;">${row.present}</td>
+          <td style="padding: 8px; text-align: center; font-weight: bold; color: #d97706;">${row.late}</td>
+          <td style="padding: 8px; text-align: center; font-weight: bold; color: #6366f1;">${row.halfDay}</td>
+          <td style="padding: 8px; text-align: center; font-weight: bold; color: #2563eb;">${row.leave}</td>
+        </tr>
+      `).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Custom Attendance Report (${reportFromDate} to ${reportToDate})</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; }
+              h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+              th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+              th.center { text-align: center; }
+            </style>
+          </head>
+          <body>
+            <h1>Tech Ads ERP - Custom Date Range Attendance Report</h1>
+            <p>Report Period: <strong>${reportFromDate}</strong> to <strong>${reportToDate}</strong> &bull; Total Staff: <strong>${reportData.length}</strong></p>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Staff Member</th>
+                  <th>Designation</th>
+                  <th class="center">Present Days</th>
+                  <th class="center">Late Days</th>
+                  <th class="center">Half Days</th>
+                  <th class="center">Leave Days</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+            <script>
+              window.onload = function() { window.print(); };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (e: any) {
+      alert('Error exporting Custom Report PDF: ' + e.message);
+    }
+  };
+
+  const handleExportDailyRegistryExcel = () => {
+    try {
+      const todayDisplayDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      const csvRows: any[][] = [];
+      csvRows.push([`Tech Ads ERP - Daily Staff Attendance Registry`]);
+      csvRows.push([`Registry Date: ${todayDisplayDate}`, `Total Staff: ${filteredStaff.length}`]);
+      csvRows.push([]);
+      csvRows.push(['Staff Name', 'Staff Code', 'Designation', 'Department', 'Punch In', 'Punch Out', 'Status', 'GPS Verified', 'Selfie Verified']);
+
+      filteredStaff.forEach(staff => {
+        const isPunchIn = staff.todayRecord?.punch_in || '-';
+        const isPunchOut = staff.todayRecord?.punch_out || '-';
+        let status = 'ABSENT';
+        if (staff.todayRecord) {
+          status = staff.todayRecord.status || 'ABSENT';
+          if (status === 'PRESENT' && staff.todayRecord.punch_in && staff.todayRecord.punch_in > '09:30:00') {
+            status = 'LATE';
+          }
+        }
+        const hasGps = (staff.todayRecord?.lat && staff.todayRecord?.lng) ? 'Yes' : 'No';
+        const hasSelfie = staff.todayRecord?.selfie_url ? 'Yes' : 'No';
+
+        csvRows.push([
+          staff.full_name,
+          staff.staff_code,
+          staff.designation || staff.role_name || 'Staff',
+          staff.department_name || 'Sales & Growth',
+          isPunchIn,
+          isPunchOut,
+          status,
+          hasGps,
+          hasSelfie
+        ]);
+      });
+
+      const BOM = "\uFEFF";
+      const csvContent = BOM + csvRows.map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Daily_Attendance_Registry_${todayStr}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e: any) {
+      alert('Error exporting Daily Registry Excel: ' + e.message);
+    }
+  };
+
+  const handleExportDailyRegistryPDF = () => {
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to export PDF');
+        return;
+      }
+
+      const todayDisplayDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+      
+      const rowsHtml = filteredStaff.map(staff => {
+        const isPunchIn = staff.todayRecord?.punch_in || '-';
+        const isPunchOut = staff.todayRecord?.punch_out || '-';
+        let status = 'ABSENT';
+        if (staff.todayRecord) {
+          status = staff.todayRecord.status || 'ABSENT';
+          if (status === 'PRESENT' && staff.todayRecord.punch_in && staff.todayRecord.punch_in > '09:30:00') {
+            status = 'LATE';
+          }
+        }
+        const hasSelfie = staff.todayRecord?.selfie_url ? 'Yes' : 'No';
+
+        return `
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px; font-weight: bold;">${staff.full_name} <span style="font-size: 10px; color: #64748b;">(${staff.staff_code})</span></td>
+            <td style="padding: 8px; color: #475569;">${staff.designation || staff.role_name || 'Staff'}</td>
+            <td style="padding: 8px; font-weight: bold;">${isPunchIn}</td>
+            <td style="padding: 8px;">${isPunchOut}</td>
+            <td style="padding: 8px; text-align: center; font-weight: bold; color: ${status === 'PRESENT' ? '#059669' : status === 'LATE' ? '#d97706' : status === 'HALF_DAY' ? '#6366f1' : '#e11d48'};">${status}</td>
+            <td style="padding: 8px; text-align: center;">${hasSelfie}</td>
+          </tr>
+        `;
+      }).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Daily Staff Attendance Registry - ${todayDisplayDate}</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; }
+              h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
+              .metrics { display: flex; gap: 10px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
+              .metric-item { flex: 1; text-align: center; }
+              .metric-label { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+              .metric-val { font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+              th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+              th.center { text-align: center; }
+            </style>
+          </head>
+          <body>
+            <h1>Tech Ads ERP - Daily Staff Attendance Registry</h1>
+            <p>Registry Date: <strong>${todayDisplayDate}</strong> &bull; Total Filtered Staff: <strong>${filteredStaff.length}</strong></p>
+            
+            <div class="metrics">
+              <div class="metric-item"><div class="metric-label">Total Staff</div><div class="metric-val">${totalStaffCount}</div></div>
+              <div class="metric-item"><div class="metric-label">Present</div><div class="metric-val" style="color: #059669;">${presentCount}</div></div>
+              <div class="metric-item"><div class="metric-label">Late</div><div class="metric-val" style="color: #d97706;">${lateCount}</div></div>
+              <div class="metric-item"><div class="metric-label">Half Day</div><div class="metric-val" style="color: #6366f1;">${halfDayCount}</div></div>
+              <div class="metric-item"><div class="metric-label">On Leave</div><div class="metric-val" style="color: #2563eb;">${leaveCount}</div></div>
+              <div class="metric-item"><div class="metric-label">In Office</div><div class="metric-val" style="color: #4f46e5;">${inOfficeCount}</div></div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Staff Member</th>
+                  <th>Designation</th>
+                  <th>Punch In</th>
+                  <th>Punch Out</th>
+                  <th class="center">Status</th>
+                  <th class="center">Selfie Verified</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+            <script>
+              window.onload = function() { window.print(); };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (e: any) {
+      alert('Error exporting Daily Registry PDF: ' + e.message);
+    }
   };
 
   // Fetch all staff and today's attendance records
@@ -580,14 +807,32 @@ export const AdminAttendance: React.FC = () => {
               {/* TAB 1: DAILY REGISTRY */}
               {adminTab === 'registry' && (
                 <section className="space-y-4 pt-2 animate-fade-in">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <h2 className="text-base md:text-lg font-extrabold text-white tracking-wide flex items-center gap-2">
                       <UserCheck className="w-5 h-5 text-indigo-400" />
                       Daily Staff Registry
                     </h2>
-                    <div className="flex items-center gap-1 text-[11px] text-slate-400 font-semibold bg-slate-900 border border-white/5 py-1 px-2.5 rounded-lg">
-                      <Calendar className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Today: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleExportDailyRegistryExcel}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                        title="Export Today's Registry to Excel / CSV"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Export Excel</span>
+                      </button>
+                      <button
+                        onClick={handleExportDailyRegistryPDF}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                        title="Export Today's Registry to PDF"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Export PDF</span>
+                      </button>
+                      <div className="flex items-center gap-1 text-[11px] text-slate-400 font-semibold bg-slate-900 border border-white/5 py-1 px-2.5 rounded-lg">
+                        <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                        <span>Today: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -890,24 +1135,33 @@ export const AdminAttendance: React.FC = () => {
                       />
                     </div>
 
-                    <div className="flex gap-2 w-full sm:w-auto">
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                       <Button
                         variant="primary"
                         onClick={generateReport}
                         isLoading={isGeneratingReport}
-                        className="flex-1 sm:flex-none font-bold text-xs px-5 py-3"
+                        className="font-bold text-xs px-4 py-2.5"
                       >
                         Generate Report
                       </Button>
-                      <Button
-                        variant="glass"
-                        onClick={downloadReportCSV}
+                      <button
+                        onClick={handleExportCustomReportExcel}
                         disabled={reportData.length === 0}
-                        className="flex-1 sm:flex-none font-bold text-xs px-5 py-3 flex items-center gap-1.5 border border-white/10"
+                        className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Export Custom Report to Excel"
                       >
-                        <Download className="w-4 h-4" />
-                        Export CSV
-                      </Button>
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Export Excel</span>
+                      </button>
+                      <button
+                        onClick={handleExportCustomReportPDF}
+                        disabled={reportData.length === 0}
+                        className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Export Custom Report to PDF"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Export PDF</span>
+                      </button>
                     </div>
                   </div>
 
