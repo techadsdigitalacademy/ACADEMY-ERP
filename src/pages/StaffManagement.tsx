@@ -682,8 +682,20 @@ export const StaffManagement: React.FC = () => {
                 {/* Team Grid list */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   {loading ? (
-                    <div className="col-span-2 text-center py-12 text-slate-500 text-xs font-bold animate-pulse">
-                      Syncing team list from Supabase...
+                    <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3.5 w-full">
+                      {[...Array(6)].map((_, i) => (
+                        <div key={i} className="animate-pulse bg-slate-900/60 p-4 rounded-2xl border border-white/5 h-28 w-full flex items-center gap-4">
+                          <div className="w-14 h-14 bg-slate-800 rounded-2xl"></div>
+                          <div className="flex-1 space-y-2">
+                            <div className="h-4 bg-slate-800 rounded w-1/2"></div>
+                            <div className="h-3 bg-slate-800 rounded w-1/3"></div>
+                            <div className="flex gap-2 pt-2">
+                               <div className="h-6 w-16 bg-slate-800 rounded-lg"></div>
+                               <div className="h-6 w-16 bg-slate-800 rounded-lg"></div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : filteredProfiles.length > 0 ? (
                     filteredProfiles?.map(profile => (

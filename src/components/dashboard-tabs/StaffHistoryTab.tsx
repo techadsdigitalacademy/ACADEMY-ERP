@@ -128,8 +128,8 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
     }
   }, [selectedProfile, activeMonthStr]);
 
-  const fetchProfileDetails = async (p: any, monthFilter: string) => {
-    setIsLoadingDetails(true);
+  const fetchProfileDetails = async (p: any, monthFilter: string, isBackground = false) => {
+    if (!isBackground) setIsLoadingDetails(true);
     try {
       let staffRecord: any = null;
       try {
@@ -401,16 +401,25 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
   const handleConfirmDelete = async () => {
     if (!deletingSale) return;
     setIsDeletingSale(true);
+    
+    // Optimistic UI Update
+    const saleIdToDelete = deletingSale.id;
+    setProfileSales(prev => prev.filter(s => s.id !== saleIdToDelete));
+    
     try {
       const { error } = await supabase
         .from('sales')
         .delete()
-        .eq('id', deletingSale.id);
+        .eq('id', saleIdToDelete);
 
-      if (error) throw error;
+      if (error) {
+        // Rollback on error
+        if (selectedProfile) fetchProfileDetails(selectedProfile, activeMonthStr, true);
+        throw error;
+      }
       setDeletingSale(null);
       if (selectedProfile) {
-        fetchProfileDetails(selectedProfile, activeMonthStr);
+        fetchProfileDetails(selectedProfile, activeMonthStr, true);
       }
     } catch (err: any) {
       alert('Failed to delete sale entry: ' + err.message);
@@ -587,7 +596,16 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
 
         {/* SUB-TAB CONTENTS */}
         {isLoadingDetails ? (
-          <div className="p-12 text-center text-xs text-slate-500 font-bold">Loading staff details for {activeMonthStr}...</div>
+          <div className="space-y-4 p-4 animate-pulse">
+            <div className="flex gap-4 mb-6">
+              <div className="w-1/4 h-24 bg-slate-800/50 rounded-2xl border border-white/5"></div>
+              <div className="w-1/4 h-24 bg-slate-800/50 rounded-2xl border border-white/5"></div>
+              <div className="w-1/4 h-24 bg-slate-800/50 rounded-2xl border border-white/5"></div>
+              <div className="w-1/4 h-24 bg-slate-800/50 rounded-2xl border border-white/5"></div>
+            </div>
+            <div className="w-full h-12 bg-slate-800/50 rounded-xl mb-4 border border-white/5"></div>
+            <div className="w-full h-64 bg-slate-800/30 rounded-2xl border border-white/5"></div>
+          </div>
         ) : (
           <>
             {/* SALES LOG SUB-TAB */}
@@ -614,6 +632,9 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                     sale={editingSale}
                     onClose={() => setEditingSale(null)}
                     onSave={async (id, data) => {
+                      // Optimistic UI Update
+                      setProfileSales(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
+                      
                       const { error } = await supabase
                         .from('sales')
                         .update({
@@ -628,9 +649,12 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                         })
                         .eq('id', id);
 
-                      if (error) throw error;
+                      if (error) {
+                         if (selectedProfile) fetchProfileDetails(selectedProfile, activeMonthStr, true);
+                         throw error;
+                      }
                       setEditingSale(null);
-                      fetchProfileDetails(selectedProfile, activeMonthStr);
+                      fetchProfileDetails(selectedProfile, activeMonthStr, true);
                     }}
                   />
                 )}

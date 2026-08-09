@@ -33,7 +33,9 @@ function DashboardContainer() {
 function App() {
   return (
     <AppProvider>
-      <DashboardContainer />
+      <div className="w-full max-w-[100vw] overflow-x-hidden">
+        <DashboardContainer />
+      </div>
     </AppProvider>
   );
 }
