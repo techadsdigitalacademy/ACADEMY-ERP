@@ -201,13 +201,29 @@ export const FinanceDashboard: React.FC = () => {
       const staffIncomesMap: Record<string, { staffId: string; fullName: string; designation: string; total: number; count: number }> = {};
 
       (salesData || []).forEach(sale => {
-        let sId = sale.staff_id || sale.user_id || 'unassigned';
-        let sName = sale.staff_name || (sale.staff?.full_name) || staffIdToNameMap.get(String(sId)) || 'Unassigned Staff';
-        let sDesig = staffIdToDesigMap.get(String(sId)) || 'Sales Executive';
+        let sId = sale.staff_id || sale.user_id;
 
-        if (!staffIncomesMap[sId]) {
-          staffIncomesMap[sId] = {
-            staffId: String(sId),
+        // Check if the sale maps to an ACTIVE staff profile currently in staff_profiles or staff
+        const isCurrentActiveStaff = Boolean(sId && staffIdToNameMap.has(String(sId)));
+
+        let mapKey = '';
+        let sName = '';
+        let sDesig = '';
+
+        if (isCurrentActiveStaff) {
+          mapKey = String(sId);
+          sName = staffIdToNameMap.get(String(sId)) || 'Staff';
+          sDesig = staffIdToDesigMap.get(String(sId)) || 'Sales Executive';
+        } else {
+          // Deleted or unlinked staff sales are safely consolidated under "Unassigned / Archived Staff"
+          mapKey = 'unassigned_archived';
+          sName = 'Unassigned / Archived Staff';
+          sDesig = 'Archived Account';
+        }
+
+        if (!staffIncomesMap[mapKey]) {
+          staffIncomesMap[mapKey] = {
+            staffId: mapKey,
             fullName: sName,
             designation: sDesig,
             total: 0,
@@ -217,10 +233,10 @@ export const FinanceDashboard: React.FC = () => {
 
         const amt = Number(sale.received_amount) || 0;
         if (sale.payment_type === 'Refund') {
-          staffIncomesMap[sId].total -= amt;
+          staffIncomesMap[mapKey].total -= amt;
         } else {
-          staffIncomesMap[sId].total += amt;
-          staffIncomesMap[sId].count += 1;
+          staffIncomesMap[mapKey].total += amt;
+          staffIncomesMap[mapKey].count += 1;
         }
       });
 
@@ -646,7 +662,9 @@ export const FinanceDashboard: React.FC = () => {
       csvRows.push(['--- DETAILED SALES LOGS ---']);
       csvRows.push(['Date', 'Staff', 'Client Name', 'Service Package', 'Payment Type', 'Received Amount (₹)', 'Payment Method']);
       (salesList || []).forEach(sale => {
-        const staffName = sale.staff?.full_name || sale.staff_name || 'Staff';
+        const staffName = (sale.staff_id && staffIdToNameMap.has(String(sale.staff_id))) 
+          ? (staffIdToNameMap.get(String(sale.staff_id)) || sale.staff_name || 'Staff')
+          : 'Unassigned / Archived Staff';
         csvRows.push([
           sale.created_at ? new Date(sale.created_at).toLocaleDateString() : '-',
           staffName,
