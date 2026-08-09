@@ -1579,7 +1579,7 @@ export const SalesDashboard: React.FC = () => {
                 </Button>
               )}
 
-              {(!isAdminView || isOwner) && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && (
+              {(!isAdminView || isOwner) && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && activeStaff?.designation !== 'Videographer' && (
                 <button
                   onClick={() => setIsRefundModalOpen(true)}
                   className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-extrabold text-[11px] sm:text-xs shadow-md shadow-rose-500/20 rounded-xl flex items-center gap-1 shrink-0 transition-all border border-rose-400/20 cursor-pointer"
@@ -1589,7 +1589,7 @@ export const SalesDashboard: React.FC = () => {
                 </button>
               )}
 
-              {!isAdminView && !isOwner && activeStaff.designation !== 'Graphic Designer' && activeStaff.designation !== 'Digital Marketer' && (
+              {!isAdminView && !isOwner && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && activeStaff?.designation !== 'Videographer' && (
                 <Button 
                   variant="primary" 
                   size="sm" 

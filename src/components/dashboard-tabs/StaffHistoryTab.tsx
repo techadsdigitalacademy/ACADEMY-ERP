@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Star, ArrowLeft, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Star, ArrowLeft, MessageSquare, AlertTriangle, Edit2, Trash2, X } from 'lucide-react';
 import { Card } from '../Card';
 import { Badge } from '../Badge';
 import { Button } from '../Button';
@@ -39,6 +39,100 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
   // Target setter states
   const [newTargetInput, setNewTargetInput] = useState('');
   const [isUpdatingTarget, setIsUpdatingTarget] = useState(false);
+
+  // Daily Reports Edit & Delete states
+  const [editingReport, setEditingReport] = useState<any | null>(null);
+  const [deletingReport, setDeletingReport] = useState<any | null>(null);
+  const [isSavingReport, setIsSavingReport] = useState(false);
+  const [isDeletingReport, setIsDeletingReport] = useState(false);
+
+  // Edit fields state
+  const [editReportWorkType, setEditReportWorkType] = useState('');
+  const [editReportPosters, setEditReportPosters] = useState<number | string>(0);
+  const [editReportReEdits, setEditReportReEdits] = useState<number | string>(0);
+  const [editReportLogos, setEditReportLogos] = useState<number | string>(0);
+  const [editReportOthers, setEditReportOthers] = useState<number | string>(0);
+  const [editReportAdsPlaced, setEditReportAdsPlaced] = useState<number | string>(0);
+  const [editReportVideos, setEditReportVideos] = useState<number | string>(0);
+  const [editReportTravel, setEditReportTravel] = useState<number | string>(0);
+  const [editReportDesc, setEditReportDesc] = useState('');
+
+  const openEditReportModal = (report: any) => {
+    setEditingReport(report);
+    setEditReportWorkType(report.work_type || 'Creative Work');
+    setEditReportPosters(report.posters_count || 0);
+    setEditReportReEdits(report.re_edits_count || 0);
+    setEditReportLogos(report.logos_count || 0);
+    setEditReportOthers(report.others_count || 0);
+    setEditReportAdsPlaced(report.ads_placed_count || 0);
+    setEditReportVideos(report.videos_count || 0);
+    setEditReportTravel(report.travel_expense || 0);
+    setEditReportDesc(report.description || '');
+  };
+
+  const handleSaveReportEdit = async () => {
+    if (!editingReport) return;
+    setIsSavingReport(true);
+    try {
+      const pCount = Number(editReportPosters) || 0;
+      const rCount = Number(editReportReEdits) || 0;
+      const lCount = Number(editReportLogos) || 0;
+      const oCount = Number(editReportOthers) || 0;
+      const apCount = Number(editReportAdsPlaced) || 0;
+      const vCount = Number(editReportVideos) || 0;
+      const tExp = Number(editReportTravel) || 0;
+
+      const { error } = await supabase
+        .from('daily_reports')
+        .update({
+          work_type: editReportWorkType,
+          posters_count: pCount,
+          re_edits_count: rCount,
+          logos_count: lCount,
+          others_count: oCount,
+          ads_placed_count: apCount,
+          videos_count: vCount,
+          travel_expense: tExp,
+          description: editReportDesc.trim()
+        })
+        .eq('id', editingReport.id);
+
+      if (error) throw error;
+
+      alert('Work report updated successfully!');
+      setEditingReport(null);
+      if (selectedProfile) {
+        fetchProfileDetails(selectedProfile, activeMonthStr, true);
+      }
+    } catch (err: any) {
+      alert('Failed to update report: ' + err.message);
+    } finally {
+      setIsSavingReport(false);
+    }
+  };
+
+  const handleDeleteReportConfirm = async () => {
+    if (!deletingReport) return;
+    setIsDeletingReport(true);
+    try {
+      const { error } = await supabase
+        .from('daily_reports')
+        .delete()
+        .eq('id', deletingReport.id);
+
+      if (error) throw error;
+
+      alert('Work report deleted successfully!');
+      setDeletingReport(null);
+      if (selectedProfile) {
+        fetchProfileDetails(selectedProfile, activeMonthStr, true);
+      }
+    } catch (err: any) {
+      alert('Failed to delete report: ' + err.message);
+    } finally {
+      setIsDeletingReport(false);
+    }
+  };
 
   const salesTeam = staffProfiles?.filter(p => p.designation === 'Sales Executive');
   const creativeTeam = staffProfiles?.filter(p => p.designation !== 'Sales Executive');
@@ -826,6 +920,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                         <th className="py-3 px-4">Category</th>
                         <th className="py-3 px-4">Work Details / Badges</th>
                         <th className="py-3 px-4">Task Description</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
@@ -852,12 +947,30 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                               )}
                             </td>
                             <td className="py-3 px-4 text-slate-200">{report.description}</td>
+                            <td className="py-3 px-4 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => openEditReportModal(report)}
+                                  className="p-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 transition-colors cursor-pointer"
+                                  title="Edit Report"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => setDeletingReport(report)}
+                                  className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer"
+                                  title="Delete Report"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}
                       {profileReports.length === 0 && (
                         <tr>
-                          <td colSpan={4} className="text-center py-8 text-slate-600 font-semibold">No daily work reports logged for {activeMonthStr}.</td>
+                          <td colSpan={5} className="text-center py-8 text-slate-600 font-semibold">No daily work reports logged for {activeMonthStr}.</td>
                         </tr>
                       )}
                     </tbody>
@@ -878,6 +991,170 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                 />
               );
             })()}
+            {/* DELETE REPORT CONFIRMATION MODAL */}
+            {deletingReport && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+                <Card className="w-full max-w-md p-6 relative space-y-5 text-center bg-slate-900 border border-rose-500/20 shadow-2xl">
+                  <button 
+                    onClick={() => setDeletingReport(null)}
+                    className="absolute top-4 right-4 p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                      <AlertTriangle className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white text-base">Delete Work Report?</h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Are you sure you want to delete the log for <span className="text-slate-200 font-semibold">{deletingReport.report_date}</span>? This action cannot be undone.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 pt-2">
+                    <Button 
+                      variant="outline" 
+                      className="w-1/2 border-slate-700 text-slate-300 hover:bg-slate-800"
+                      onClick={() => setDeletingReport(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      variant="danger" 
+                      className="w-1/2 bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                      onClick={handleDeleteReportConfirm}
+                      disabled={isDeletingReport}
+                    >
+                      {isDeletingReport ? 'Deleting...' : 'Yes, Delete'}
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {/* EDIT REPORT MODAL */}
+            {editingReport && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+                <Card className="w-full max-w-lg p-6 relative space-y-5 bg-slate-900 border border-slate-800 shadow-2xl max-h-[90vh] overflow-y-auto">
+                  <button 
+                    onClick={() => setEditingReport(null)}
+                    className="absolute top-4 right-4 p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+
+                  <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+                    <Edit2 className="w-5 h-5 text-indigo-400" />
+                    <h3 className="font-bold text-white text-base">Edit Work Report ({editingReport.report_date})</h3>
+                  </div>
+
+                  <div className="space-y-4 text-xs">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Category / Work Type</label>
+                      <input 
+                        type="text" 
+                        value={editReportWorkType}
+                        onChange={(e) => setEditReportWorkType(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-medium"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Posters</label>
+                        <input 
+                          type="number" 
+                          min="0"
+                          value={editReportPosters}
+                          onChange={(e) => setEditReportPosters(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Re-edits</label>
+                        <input 
+                          type="number" 
+                          min="0"
+                          value={editReportReEdits}
+                          onChange={(e) => setEditReportReEdits(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Logos</label>
+                        <input 
+                          type="number" 
+                          min="0"
+                          value={editReportLogos}
+                          onChange={(e) => setEditReportLogos(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Ads Placed</label>
+                        <input 
+                          type="number" 
+                          min="0"
+                          value={editReportAdsPlaced}
+                          onChange={(e) => setEditReportAdsPlaced(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Videos</label>
+                        <input 
+                          type="number" 
+                          min="0"
+                          value={editReportVideos}
+                          onChange={(e) => setEditReportVideos(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Travel Expense (₹)</label>
+                        <input 
+                          type="number" 
+                          min="0"
+                          value={editReportTravel}
+                          onChange={(e) => setEditReportTravel(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Task Description / Work Notes</label>
+                      <textarea 
+                        rows={3}
+                        value={editReportDesc}
+                        onChange={(e) => setEditReportDesc(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-medium resize-none"
+                        placeholder="Enter detailed description of tasks completed..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                    <Button 
+                      variant="outline" 
+                      className="border-slate-700 text-slate-300 hover:bg-slate-800"
+                      onClick={() => setEditingReport(null)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      variant="primary" 
+                      className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
+                      onClick={handleSaveReportEdit}
+                      disabled={isSavingReport}
+                    >
+                      {isSavingReport ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+            )}
           </>
         )}
       </div>
