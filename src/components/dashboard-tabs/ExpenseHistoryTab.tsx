@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card } from '../Card';
 import { Badge } from '../Badge';
-import { Star, Edit2, Trash2 } from 'lucide-react';
+import { Star, Edit2, Trash2, Download, FileText } from 'lucide-react';
 import { formatCurrency } from '../../services/mockData';
 import { supabase } from '../../services/supabase';
 import { EditExpenseModal } from '../EditExpenseModal';
@@ -306,7 +306,132 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
 
         const totalExpensesSum = displayList.reduce((sum, exp) => sum + (Number(exp?.amount) || 0), 0);
 
-        return (
+        const handleExportExcel = (displayList: any[], totalExpensesSum: number, selectedMonth?: string) => {
+    try {
+      const csvRows: any[][] = [];
+      const titleMonth = selectedMonth || 'All';
+
+      csvRows.push([`Tech Ads ERP - Company Owner Expense History Log`]);
+      csvRows.push([`Period: ${titleMonth}`, `Total Items: ${displayList.length}`, `Total Expenses: ₹${totalExpensesSum.toLocaleString()}`]);
+      csvRows.push([]);
+      csvRows.push(['Date', 'Category', 'Description', 'Amount (₹)']);
+
+      displayList.forEach(exp => {
+        const dateStr = formatDateSafe(exp.expense_date || exp.created_at);
+        csvRows.push([
+          dateStr,
+          exp.category || 'General',
+          exp.description || '-',
+          Number(exp.amount || 0)
+        ]);
+      });
+
+      csvRows.push([]);
+      csvRows.push(['Total Expenses Summary', '', '', totalExpensesSum]);
+
+      const BOM = "\uFEFF";
+      const csvContent = BOM + csvRows.map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Expense_History_Log_${titleMonth.replace(/\s+/g, '_')}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err: any) {
+      alert('Failed to export Expense History to Excel: ' + err.message);
+    }
+  };
+
+  const handleExportPDF = (displayList: any[], totalExpensesSum: number, selectedMonth?: string) => {
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to export PDF');
+        return;
+      }
+
+      const titleMonth = selectedMonth || 'All';
+
+      const rowsHtml = displayList.map(exp => {
+        const dateStr = formatDateSafe(exp.expense_date || exp.created_at);
+        return `
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px; color: #475569;">${dateStr}</td>
+            <td style="padding: 8px; font-weight: bold; color: #e11d48;">${exp.category || 'General'}</td>
+            <td style="padding: 8px;">${exp.description || '-'}</td>
+            <td style="padding: 8px; text-align: right; font-weight: bold; color: #e11d48;">₹${Number(exp.amount || 0).toLocaleString()}</td>
+          </tr>
+        `;
+      }).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Company Owner Expense History Report - ${titleMonth}</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; }
+              h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
+              .metrics { display: flex; gap: 12px; margin-bottom: 20px; background: #fff1f2; padding: 12px; border-radius: 8px; border: 1px solid #fecdd3; }
+              .metric-item { flex: 1; }
+              .metric-label { font-size: 10px; font-weight: 700; color: #9f1239; text-transform: uppercase; }
+              .metric-val { font-size: 16px; font-weight: 800; color: #e11d48; margin-top: 2px; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+              th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+              th.right { text-align: right; }
+            </style>
+          </head>
+          <body>
+            <h1>Tech Ads ERP - Company Owner Expense History Report</h1>
+            <p>Period: <strong>${titleMonth}</strong> &bull; Generated: <strong>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</strong></p>
+
+            <div class="metrics">
+              <div class="metric-item">
+                <div class="metric-label">Total Expenses</div>
+                <div class="metric-val">₹${totalExpensesSum.toLocaleString()}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Total Expense Entries</div>
+                <div class="metric-val" style="color: #0f172a;">${displayList.length} Items</div>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th class="right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml || '<tr><td colspan="4" style="padding: 10px; text-align: center; color: #94a3b8;">No expense records logged.</td></tr>'}
+              </tbody>
+              <tfoot>
+                <tr style="font-weight: bold; border-top: 2px solid #cbd5e1;">
+                  <td colspan="3" style="padding: 10px; text-align: right; text-transform: uppercase;">Total Expenses:</td>
+                  <td style="padding: 10px; text-align: right; color: #e11d48; font-size: 13px;">₹${totalExpensesSum.toLocaleString()}</td>
+                </tr>
+              </tfoot>
+            </table>
+            <script>
+              window.onload = function() { window.print(); };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (err: any) {
+      alert('Failed to export Expense History to PDF: ' + err.message);
+    }
+  };
+
+  return (
           <section className="space-y-6 pt-2">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
               <div className="flex items-center gap-3">
@@ -319,16 +444,37 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
                 </div>
               </div>
 
-              {/* Total Expenses Summary Card */}
-              <Card variant="glass" className="p-4 border-rose-500/20 min-w-[220px] flex items-center justify-between bg-slate-900/60">
-                <div>
-                  <span className="text-[9px] font-bold text-rose-400 uppercase tracking-wider block">Total Expenses</span>
-                  <p className="text-lg font-black text-rose-400 mt-0.5">{formatCurrency(totalExpensesSum)}</p>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 border-r border-white/10 pr-3">
+                  <button
+                    onClick={() => handleExportExcel(displayList, totalExpensesSum, selectedMonth)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                    title="Export Expense History to Excel / CSV"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export Excel</span>
+                  </button>
+                  <button
+                    onClick={() => handleExportPDF(displayList, totalExpensesSum, selectedMonth)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                    title="Export Expense History to PDF"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Export PDF</span>
+                  </button>
                 </div>
-                <span className="text-[10px] text-slate-400 font-bold bg-slate-950 px-2.5 py-1 rounded-lg border border-white/5">
-                  {displayList.length} Items
-                </span>
-              </Card>
+
+                {/* Total Expenses Summary Card */}
+                <Card variant="glass" className="p-3.5 border-rose-500/20 min-w-[200px] flex items-center justify-between bg-slate-900/60">
+                  <div>
+                    <span className="text-[9px] font-bold text-rose-400 uppercase tracking-wider block">Total Expenses</span>
+                    <p className="text-base font-black text-rose-400 mt-0.5">{formatCurrency(totalExpensesSum)}</p>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-bold bg-slate-950 px-2 py-0.5 rounded-lg border border-white/5">
+                    {displayList.length} Items
+                  </span>
+                </Card>
+              </div>
             </div>
 
             <div className="overflow-x-auto rounded-2xl border border-white/5 bg-slate-950/20 mt-4">
