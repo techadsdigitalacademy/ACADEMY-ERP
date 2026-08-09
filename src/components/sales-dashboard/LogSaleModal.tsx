@@ -41,6 +41,10 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
   const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [isLoggingSale, setIsLoggingSale] = useState(false);
 
+  // Form Validation State
+  const [errors, setErrors] = useState<{ [key: string]: boolean }>({});
+  const [shakeForm, setShakeForm] = useState(false);
+
   if (!isOpen) return null;
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,14 +103,28 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
   const handleLogSale = async (e: React.FormEvent) => {
     e.preventDefault();
     const isClearance = paymentType === 'Clearance';
-    if (!clientName || !servicePackage || (!isClearance && !packageAmount) || !receivedAmount) return;
+    
+    // Strict Validation Check
+    const newErrors: { [key: string]: boolean } = {};
+    if (!clientName.trim()) newErrors.clientName = true;
+    if (!servicePackage.trim()) newErrors.servicePackage = true;
+    if (!isClearance && (!packageAmount || Number(packageAmount) <= 0)) newErrors.packageAmount = true;
+    if (!receivedAmount || Number(receivedAmount) < 0) newErrors.receivedAmount = true;
 
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setShakeForm(true);
+      setTimeout(() => setShakeForm(false), 500);
+      return;
+    }
+
+    setErrors({});
     setIsLoggingSale(true);
     try {
       const currentISTDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
       await addSale({
-        clientName,
+        clientName: clientName.trim(),
         servicePackage,
         paymentType,
         packageAmount: isClearance ? 0 : Number(packageAmount),
@@ -140,7 +158,20 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
 
   const handleOwnerSubmitExpense = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ownerExpAmount || !activeStaff) return;
+
+    const newErrors: { [key: string]: boolean } = {};
+    if (!ownerExpAmount || Number(ownerExpAmount) <= 0) newErrors.ownerExpAmount = true;
+    if (!ownerExpDescription.trim()) newErrors.ownerExpDescription = true;
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setShakeForm(true);
+      setTimeout(() => setShakeForm(false), 500);
+      return;
+    }
+
+    setErrors({});
+    if (!activeStaff) return;
     setIsSubmittingOwnerExp(true);
     try {
       const dbExpPayload: any = {
@@ -207,9 +238,20 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
-      <Card variant="solid" className="w-full max-w-sm p-6 bg-slate-900 border border-slate-800 relative animate-scale-up max-h-[90vh] overflow-y-auto">
+      <style>{`
+        @keyframes modalShake {
+          0%, 100% { transform: translateX(0); }
+          20%, 60% { transform: translateX(-6px); }
+          40%, 80% { transform: translateX(6px); }
+        }
+      `}</style>
+      <Card 
+        variant="solid" 
+        className="w-full max-w-sm p-6 bg-slate-900 border border-slate-800 relative animate-scale-up max-h-[90vh] overflow-y-auto"
+        style={shakeForm ? { animation: 'modalShake 0.4s ease-in-out' } : {}}
+      >
         <button 
-          onClick={onClose}
+          onClick={() => { setErrors({}); onClose(); }}
           className="absolute top-4 right-4 text-slate-400 hover:text-white font-bold"
         >
           <X className="w-4.5 h-4.5" />
@@ -226,7 +268,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
           <div className="flex p-1 bg-slate-950/50 rounded-xl border border-white/5 w-full mb-4">
             <button
               type="button"
-              onClick={() => setOwnerTransactionType('Expense')}
+              onClick={() => { setErrors({}); setOwnerTransactionType('Expense'); }}
               className={`flex-1 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${
                 ownerTransactionType === 'Expense' 
                   ? 'bg-rose-500 text-white shadow-lg' 
@@ -237,7 +279,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => setOwnerTransactionType('Income')}
+              onClick={() => { setErrors({}); setOwnerTransactionType('Income'); }}
               className={`flex-1 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${
                 ownerTransactionType === 'Income' 
                   ? 'bg-indigo-500 text-white shadow-lg' 
@@ -250,25 +292,55 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
         )}
 
         {(!isOwner || ownerTransactionType === 'Income') ? (
-          <form onSubmit={handleLogSale} className="space-y-3.5">
+          <form onSubmit={handleLogSale} noValidate className="space-y-3.5">
+            {Object.keys(errors).length > 0 && (
+              <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[11px] text-rose-400 font-bold flex items-center gap-1.5 animate-pulse">
+                ⚠️ Please fill in all required fields highlighted in red below.
+              </div>
+            )}
+
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Client / Company Name</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+                <span>Client / Company Name</span>
+                <span className="text-rose-400 font-extrabold">*</span>
+              </label>
               <input 
                 type="text" 
-                required
                 placeholder="e.g. Acme Tech Solutions"
                 value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                onChange={(e) => {
+                  setClientName(e.target.value);
+                  if (errors.clientName) setErrors(prev => ({ ...prev, clientName: false }));
+                }}
+                className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-xs text-slate-200 focus:outline-none transition-all ${
+                  errors.clientName 
+                    ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/20' 
+                    : 'border-slate-800 focus:border-indigo-500'
+                }`}
               />
+              {errors.clientName && (
+                <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
+                  ⚠️ Client / Company Name is required
+                </p>
+              )}
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Service Package</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+                <span>Service Package</span>
+                <span className="text-rose-400 font-extrabold">*</span>
+              </label>
               <select
                 value={servicePackage}
-                onChange={(e) => setServicePackage(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                onChange={(e) => {
+                  setServicePackage(e.target.value);
+                  if (errors.servicePackage) setErrors(prev => ({ ...prev, servicePackage: false }));
+                }}
+                className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-xs text-slate-200 focus:outline-none transition-all ${
+                  errors.servicePackage 
+                    ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/20' 
+                    : 'border-slate-800 focus:border-indigo-500'
+                }`}
               >
                 <option value="">Select Package</option>
                 <option value="CEO Pack">CEO Pack</option>
@@ -280,6 +352,11 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                 <option value="Poster">Poster</option>
                 <option value="E-Commerce">E-Commerce</option>
               </select>
+              {errors.servicePackage && (
+                <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
+                  ⚠️ Service Package selection is required
+                </p>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -291,8 +368,10 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                   setPaymentType(val);
                   if (val === 'Clearance') {
                     setPackageAmount('0');
+                    if (errors.packageAmount) setErrors(prev => ({ ...prev, packageAmount: false }));
                   } else if (val === 'Full') {
                     setReceivedAmount(packageAmount);
+                    if (errors.receivedAmount) setErrors(prev => ({ ...prev, receivedAmount: false }));
                   }
                 }}
                 className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
@@ -305,10 +384,12 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
 
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Package Price (₹)</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+                  <span>Package Price (₹)</span>
+                  {paymentType !== 'Clearance' && <span className="text-rose-400 font-extrabold">*</span>}
+                </label>
                 <input 
                   type="number" 
-                  required={paymentType !== 'Clearance'}
                   disabled={paymentType === 'Clearance'}
                   placeholder="e.g. 50000"
                   value={paymentType === 'Clearance' ? '0' : packageAmount}
@@ -317,21 +398,46 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                     setPackageAmount(val);
                     if (paymentType === 'Full') {
                       setReceivedAmount(val);
+                      if (errors.receivedAmount) setErrors(prev => ({ ...prev, receivedAmount: false }));
                     }
+                    if (errors.packageAmount) setErrors(prev => ({ ...prev, packageAmount: false }));
                   }}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none disabled:opacity-50"
+                  className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-xs text-slate-200 focus:outline-none disabled:opacity-50 transition-all ${
+                    errors.packageAmount 
+                      ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/20' 
+                      : 'border-slate-800 focus:border-indigo-500'
+                  }`}
                 />
+                {errors.packageAmount && (
+                  <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
+                    ⚠️ Price required
+                  </p>
+                )}
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Received Amount (₹)</label>
+                <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+                  <span>Received Amount (₹)</span>
+                  <span className="text-rose-400 font-extrabold">*</span>
+                </label>
                 <input 
                   type="number" 
-                  required
                   placeholder="e.g. 20000"
                   value={receivedAmount}
-                  onChange={(e) => setReceivedAmount(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                  onChange={(e) => {
+                    setReceivedAmount(e.target.value);
+                    if (errors.receivedAmount) setErrors(prev => ({ ...prev, receivedAmount: false }));
+                  }}
+                  className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-xs text-slate-200 focus:outline-none transition-all ${
+                    errors.receivedAmount 
+                      ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/20' 
+                      : 'border-slate-800 focus:border-indigo-500'
+                  }`}
                 />
+                {errors.receivedAmount && (
+                  <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
+                    ⚠️ Received required
+                  </p>
+                )}
               </div>
             </div>
 
@@ -384,14 +490,20 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
             </div>
 
             <div className="flex gap-2.5 pt-2">
-              <Button variant="secondary" fullWidth onClick={onClose}>Cancel</Button>
+              <Button variant="secondary" fullWidth onClick={() => { setErrors({}); onClose(); }}>Cancel</Button>
               <Button type="submit" variant="primary" fullWidth disabled={isLoggingSale || isUploadingProof}>
                 {isLoggingSale ? 'Saving...' : 'Register Sale'}
               </Button>
             </div>
           </form>
         ) : (
-          <form onSubmit={handleOwnerSubmitExpense} className="space-y-4 mt-2">
+          <form onSubmit={handleOwnerSubmitExpense} noValidate className="space-y-4 mt-2">
+            {Object.keys(errors).length > 0 && (
+              <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[11px] text-rose-400 font-bold flex items-center gap-1.5 animate-pulse">
+                ⚠️ Please fill in all required fields highlighted in red below.
+              </div>
+            )}
+
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase">Expense Category</label>
               <select
@@ -406,34 +518,61 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
             </div>
             
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Amount (₹)</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+                <span>Amount (₹)</span>
+                <span className="text-rose-400 font-extrabold">*</span>
+              </label>
               <input 
                 type="number" 
-                required
                 placeholder="e.g. 5000"
                 value={ownerExpAmount}
-                onChange={(e) => setOwnerExpAmount(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+                onChange={(e) => {
+                  setOwnerExpAmount(e.target.value);
+                  if (errors.ownerExpAmount) setErrors(prev => ({ ...prev, ownerExpAmount: false }));
+                }}
+                className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-xs text-slate-200 focus:outline-none transition-all ${
+                  errors.ownerExpAmount 
+                    ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/20' 
+                    : 'border-slate-800 focus:border-rose-500'
+                }`}
               />
+              {errors.ownerExpAmount && (
+                <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
+                  ⚠️ Expense Amount is required
+                </p>
+              )}
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Description</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+                <span>Description</span>
+                <span className="text-rose-400 font-extrabold">*</span>
+              </label>
               <input 
                 type="text" 
-                required
                 placeholder="e.g. Office electricity bill"
                 value={ownerExpDescription}
-                onChange={(e) => setOwnerExpDescription(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+                onChange={(e) => {
+                  setOwnerExpDescription(e.target.value);
+                  if (errors.ownerExpDescription) setErrors(prev => ({ ...prev, ownerExpDescription: false }));
+                }}
+                className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-xs text-slate-200 focus:outline-none transition-all ${
+                  errors.ownerExpDescription 
+                    ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/20' 
+                    : 'border-slate-800 focus:border-rose-500'
+                }`}
               />
+              {errors.ownerExpDescription && (
+                <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
+                  ⚠️ Description is required
+                </p>
+              )}
             </div>
 
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase">Date</label>
               <input 
                 type="date" 
-                required
                 value={ownerExpDate}
                 onChange={(e) => setOwnerExpDate(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-rose-500"
@@ -441,7 +580,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
             </div>
 
             <div className="flex gap-2.5 pt-2">
-              <Button variant="secondary" fullWidth onClick={onClose}>Cancel</Button>
+              <Button variant="secondary" fullWidth onClick={() => { setErrors({}); onClose(); }}>Cancel</Button>
               <Button type="submit" variant="primary" className="!bg-rose-500 hover:!bg-rose-600 border-rose-500" fullWidth disabled={isSubmittingOwnerExp}>
                 {isSubmittingOwnerExp ? 'Logging...' : 'Log Expense'}
               </Button>
