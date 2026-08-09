@@ -3,7 +3,7 @@ import { supabase } from '../../services/supabase';
 import { Card } from '../Card';
 import { Button } from '../Button';
 import { Badge } from '../Badge';
-import { X, Download, Eye } from 'lucide-react';
+import { X, Download, Eye, FileText } from 'lucide-react';
 import { formatCurrency } from '../../services/mockData';
 
 interface ClosingReportModalProps {
@@ -178,6 +178,130 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
       alert('Failed to generate report: ' + err.message);
     }
   };
+  const handleDownloadAgencyReportPDF = async () => {
+    try {
+      const localTodayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+      const { data: salesData, error } = await supabase
+        .from('sales')
+        .select('*, staff:staff_id(full_name)')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to export PDF');
+        return;
+      }
+
+      const rowsHtml = (salesData || []).map(s => {
+        const saleLocalDate = s.created_at ? new Date(s.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) : '';
+        const isToday = saleLocalDate === localTodayStr;
+        const staffName = s.staff?.full_name || s.staff_name || 'Staff';
+
+        let utrNum = s.utr_number || s.utr || s.transaction_id || s.payment_ref;
+        if (!utrNum && s.work_description) {
+          const match = s.work_description.match(/(?:Txn Ref|UTR|Txn ID):\s*([^\s)]+)/i);
+          if (match) utrNum = match[1];
+        }
+        utrNum = utrNum || '-';
+
+        const dateObj = s.created_at ? new Date(s.created_at) : null;
+        const timeIST = dateObj ? dateObj.toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+
+        return `
+          <tr style="border-bottom: 1px solid #e2e8f0; ${isToday ? 'background: #f0fdf4;' : ''}">
+            <td style="padding: 6px; font-weight: bold; color: ${isToday ? '#15803d' : '#64748b'};">${isToday ? '⭐️ TODAY' : '-'}</td>
+            <td style="padding: 6px; font-weight: bold;">${staffName}</td>
+            <td style="padding: 6px;">${s.client_name || '-'}</td>
+            <td style="padding: 6px;">${s.service_package || '-'}</td>
+            <td style="padding: 6px; text-align: center;">${s.payment_type || '-'}</td>
+            <td style="padding: 6px; text-align: right;">${s.payment_type === 'Clearance' ? '-' : '₹' + Number(s.package_amount || 0).toLocaleString()}</td>
+            <td style="padding: 6px; text-align: right; font-weight: bold; color: #059669;">₹${Number(s.received_amount || 0).toLocaleString()}</td>
+            <td style="padding: 6px;">${s.payment_method || 'UPI'}</td>
+            <td style="padding: 6px; font-family: monospace; font-size: 10px;">${utrNum}</td>
+            <td style="padding: 6px;">${s.sale_month || '-'}</td>
+            <td style="padding: 6px; font-size: 10px;">${saleLocalDate} ${timeIST}</td>
+          </tr>
+        `;
+      }).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Master Sales & Daily Closing Report</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; }
+              h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
+              .metrics { display: flex; gap: 12px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
+              .metric-item { flex: 1; }
+              .metric-label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+              .metric-val { font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+              table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 10px; }
+              th { background: #f1f5f9; padding: 6px; text-align: left; font-size: 9px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+              th.right { text-align: right; }
+              th.center { text-align: center; }
+            </style>
+          </head>
+          <body>
+            <h1>Tech Ads Agency - Master Sales & Daily Closing Report</h1>
+            <p>Report Date: <strong>${localTodayStr}</strong> &bull; Generated: <strong>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</strong></p>
+            
+            <div class="metrics">
+              <div class="metric-item">
+                <div class="metric-label">Today's Sales Revenue</div>
+                <div class="metric-val" style="color: #059669;">₹${todaySummary.agencySalesAmount.toLocaleString()}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Today's Sales Tally</div>
+                <div class="metric-val">${todaySummary.agencySalesCount} logs</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Academy Tuition Collected</div>
+                <div class="metric-val" style="color: #4f46e5;">₹${todaySummary.academyFeesAmount.toLocaleString()}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Total Daily Revenue</div>
+                <div class="metric-val" style="color: #2563eb;">₹${(todaySummary.agencySalesAmount + todaySummary.academyFeesAmount).toLocaleString()}</div>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Entry</th>
+                  <th>Staff</th>
+                  <th>Client Name</th>
+                  <th>Service Package</th>
+                  <th class="center">Type</th>
+                  <th class="right">Package Cost</th>
+                  <th class="right">Received</th>
+                  <th>Method</th>
+                  <th>UTR / Ref</th>
+                  <th>Month</th>
+                  <th>Logged Date & Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+            <script>
+              window.onload = function() {
+                window.print();
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (err: any) {
+      alert('Failed to generate PDF report: ' + err.message);
+    }
+  };
 
   const handleDownloadAcademyReport = async () => {
     try {
@@ -270,23 +394,33 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
                   <span className="text-sm font-extrabold text-slate-200">{todaySummary.agencySalesCount} logs</span>
                 </div>
               </div>
-              <div className="pt-2 flex flex-col sm:flex-row gap-2">
+              <div className="pt-2 flex flex-col gap-2">
                 <Button 
                   variant="secondary" 
                   onClick={() => setShowTodayTransactions(true)}
-                  className="flex-1 py-2.5 flex items-center justify-center gap-1.5 font-bold text-[10px] uppercase tracking-wider text-indigo-300 border-indigo-500/20 hover:border-indigo-500/40"
+                  className="w-full py-2.5 flex items-center justify-center gap-1.5 font-bold text-[10px] uppercase tracking-wider text-indigo-300 border-indigo-500/20 hover:border-indigo-500/40"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   <span>View Today's Logs</span>
                 </Button>
-                <Button 
-                  variant="primary" 
-                  onClick={handleDownloadAgencyReport}
-                  className="flex-1 py-2.5 flex items-center justify-center gap-1.5 font-bold text-[10px] uppercase tracking-wider animate-scale-up"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Export Sales</span>
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="primary" 
+                    onClick={handleDownloadAgencyReport}
+                    className="flex-1 py-2.5 flex items-center justify-center gap-1.5 font-bold text-[10px] uppercase tracking-wider"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export Excel</span>
+                  </Button>
+                  <Button 
+                    variant="danger" 
+                    onClick={handleDownloadAgencyReportPDF}
+                    className="flex-1 py-2.5 flex items-center justify-center gap-1.5 font-bold text-[10px] uppercase tracking-wider bg-rose-600 hover:bg-rose-500 text-white"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Export PDF</span>
+                  </Button>
+                </div>
               </div>
             </div>
 

@@ -13,6 +13,7 @@ import {
   Plus, 
   X, 
   Download,
+  FileText,
   
   ArrowUpRight,
   ArrowDownRight,
@@ -596,98 +597,230 @@ export const FinanceDashboard: React.FC = () => {
     }
   };
 
-  // Export Entire Monthly Ledger layout to CSV
-  const handleExportLedger = async () => {
+  // Export Master Financial Report to Excel (CSV with BOM)
+  const handleExportFinanceExcel = () => {
     try {
-      const isAllTime = window.confirm("Do you want to export the ALL-TIME Master Ledger? \n\nClick 'OK' for All-Time history.\nClick 'Cancel' for the selected month only.");
-      
-      let exportSales = salesList;
-      let exportExpenses = expensesList;
-      let exportWithdrawals = withdrawalsList;
-      
-      let titleMonth = selectedLedgerMonth;
-      
-      if (isAllTime) {
-        titleMonth = "ALL TIME";
-        const [salesRes, expRes, withRes] = await Promise.all([
-          supabase.from('sales').select('*, staff(full_name)').order('created_at', { ascending: true }),
-          supabase.from('expenses').select('*').order('expense_date', { ascending: true }),
-          supabase.from('partner_withdrawals').select('*').order('withdrawal_date', { ascending: true })
+      const totalIncome = (salesList || []).reduce((sum, s) => sum + (Number(s.received_amount) || 0), 0);
+      const totalExpenses = (expenseCategories || []).reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
+      const netProfit = totalIncome - totalExpenses;
+      const totalWithdrawals = (withdrawalsList || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+      const currentBalance = openingBalance + totalIncome - totalExpenses - totalWithdrawals;
+
+      const csvRows: any[][] = [];
+      const titleMonth = selectedLedgerMonth || 'Current Month';
+
+      csvRows.push([`Tech Ads ERP - Master Financial Control Center Report`]);
+      csvRows.push([`Report Month: ${titleMonth}`, `Generated: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`]);
+      csvRows.push([]);
+
+      // Section 1: FINANCIAL OVERVIEW SUMMARY
+      csvRows.push(['--- FINANCIAL OVERVIEW SUMMARY ---']);
+      csvRows.push(['Opening Balance (Carry over)', openingBalance]);
+      csvRows.push(['Total Sales Income', totalIncome]);
+      csvRows.push(['Total Expenses', totalExpenses]);
+      csvRows.push(['Net Profit / Loss', netProfit]);
+      csvRows.push(['Partner Withdrawals', totalWithdrawals]);
+      csvRows.push(['Current Remaining Balance', currentBalance]);
+      csvRows.push([]);
+
+      // Section 2: INCOME BREAKDOWN (SALES BY STAFF)
+      csvRows.push(['--- INCOME BREAKDOWN (SALES BY STAFF) ---']);
+      csvRows.push(['Staff Name', 'Designation', 'Sales Count', 'Received Revenue Amount (₹)']);
+      staffIncomesList.forEach(s => {
+        csvRows.push([s.fullName, s.designation, s.count, s.totalAmount]);
+      });
+      csvRows.push(['Total Sales Income', '', '', totalIncome]);
+      csvRows.push([]);
+
+      // Section 3: EXPENSE CATEGORY LEDGER
+      csvRows.push(['--- EXPENSE CATEGORY LEDGER ---']);
+      csvRows.push(['Category', 'Ashif Paid (₹)', 'Shibili Paid (₹)', 'Total Category Amount (₹)', 'Share %']);
+      expenseCategories.forEach(c => {
+        const pct = totalExpenses > 0 ? ((c.totalAmount / totalExpenses) * 100).toFixed(1) + '%' : '0%';
+        csvRows.push([c.category, c.ashifAmount, c.shibiliAmount, c.totalAmount, pct]);
+      });
+      csvRows.push(['Total Expenses', '', '', totalExpenses, '100%']);
+      csvRows.push([]);
+
+      // Section 4: DETAILED SALES LOGS
+      csvRows.push(['--- DETAILED SALES LOGS ---']);
+      csvRows.push(['Date', 'Staff', 'Client Name', 'Service Package', 'Payment Type', 'Received Amount (₹)', 'Payment Method']);
+      (salesList || []).forEach(sale => {
+        const staffName = sale.staff?.full_name || sale.staff_name || 'Staff';
+        csvRows.push([
+          sale.created_at ? new Date(sale.created_at).toLocaleDateString() : '-',
+          staffName,
+          sale.client_name || '-',
+          sale.service_package || '-',
+          sale.payment_type || '-',
+          sale.received_amount || 0,
+          sale.payment_method || 'UPI'
         ]);
-        exportSales = salesRes.data || [];
-        exportExpenses = expRes.data || [];
-        exportWithdrawals = withRes.data || [];
-      }
-
-      const csvRows = [];
-      csvRows.push([`Tech Ads Master Finance Ledger - ${titleMonth}`]);
-      csvRows.push([`Historical Opening Balance`, historicalBalance]);
-      if (!isAllTime) {
-        csvRows.push([`Opening Balance (Carry over)`, openingBalance]);
-      }
-      csvRows.push([]);
-
-      // Section 1: DETAILED INCOME
-      csvRows.push(['--- DETAILED INCOME LOGS ---']);
-      csvRows.push(['Date', 'Client Name', 'Service Package', 'Payment Type', 'Payment Method', 'Amount', 'Logged By']);
-      exportSales.forEach(sale => {
-        const loggedBy = sale.staff?.full_name || staffProfilesMap.get(sale.staff_id)?.name || 'Unknown';
-        const date = new Date(sale.created_at).toLocaleDateString();
-        csvRows.push([date, sale.client_name, sale.service_package, sale.payment_type || '-', sale.payment_method || 'UPI', sale.received_amount, loggedBy]);
       });
-      const exportTotalIncome = exportSales.reduce((sum, s) => sum + (Number(s.received_amount) || 0), 0);
-      csvRows.push(['Total Income', '', '', '', '', exportTotalIncome, '']);
       csvRows.push([]);
 
-      // Section 2: DETAILED EXPENSES
+      // Section 5: DETAILED EXPENSE LOGS
       csvRows.push(['--- DETAILED EXPENSE LOGS ---']);
-      csvRows.push(['Date', 'Category', 'Description', 'Amount', 'Logged By']);
-      exportExpenses.forEach(exp => {
-        const loggedBy = exp.staff_id ? (staffProfilesMap.get(exp.staff_id)?.name || 'Unknown') : 'Unknown';
-        csvRows.push([exp.expense_date, exp.category, exp.description, exp.amount, loggedBy]);
+      csvRows.push(['Date', 'Category', 'Description / Payer', 'Amount (₹)']);
+      expensesList.forEach(exp => {
+        csvRows.push([
+          exp.expense_date || '-',
+          exp.category || '-',
+          exp.description || exp.staff_name || exp.logged_by_name || '-',
+          exp.amount || 0
+        ]);
       });
-      const exportTotalExpenses = exportExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
-      csvRows.push(['Total Expenses', '', '', exportTotalExpenses, '']);
-      csvRows.push([]);
 
-      // Section 3: PARTNER WITHDRAWALS
-      csvRows.push(['--- PARTNER WITHDRAWALS ---']);
-      csvRows.push(['Date', 'Partner Name', 'Description', 'Amount']);
-      exportWithdrawals.forEach(w => {
-        csvRows.push([w.withdrawal_date, w.partner_name, w.description, w.amount]);
-      });
-      const exportTotalWithdrawals = exportWithdrawals.reduce((sum, w) => sum + (Number(w.amount) || 0), 0);
-      csvRows.push(['Total Partner Withdrawals', '', '', exportTotalWithdrawals]);
-      csvRows.push([]);
-
-      // Summary Recap
-      csvRows.push(['--- SUMMARY CALCULATIONS ---']);
-      csvRows.push(['Historical Opening Balance', historicalBalance]);
-      if (!isAllTime) {
-        csvRows.push(['Opening Balance (Start of Month)', openingBalance]);
-      }
-      csvRows.push(['Total Income', exportTotalIncome]);
-      csvRows.push(['Total Expenses', exportTotalExpenses]);
-      csvRows.push(['Net Profit / Loss', exportTotalIncome - exportTotalExpenses]);
-      csvRows.push(['Total Withdrawals', exportTotalWithdrawals]);
-      
-      const calcBalance = isAllTime 
-        ? (historicalBalance + exportTotalIncome - exportTotalExpenses - exportTotalWithdrawals)
-        : (openingBalance + exportTotalIncome - exportTotalExpenses - exportTotalWithdrawals);
-      csvRows.push(['Current Remaining Balance', calcBalance]);
-
-      const csvContent = csvRows.map(row => row.map(val => `"${val}"`).join(',')).join('\n');
+      const BOM = "\uFEFF";
+      const csvContent = BOM + csvRows.map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `Master_Ledger_Dashboard_${selectedLedgerMonth}.csv`);
+      link.setAttribute('download', `Master_Financial_Report_${titleMonth}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (err: any) {
-      alert('Failed to export monthly ledger: ' + err.message);
+      alert('Failed to export Excel report: ' + err.message);
+    }
+  };
+
+  // Export Master Financial Report to PDF
+  const handleExportFinancePDF = () => {
+    try {
+      const totalIncome = (salesList || []).reduce((sum, s) => sum + (Number(s.received_amount) || 0), 0);
+      const totalExpenses = (expenseCategories || []).reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
+      const netProfit = totalIncome - totalExpenses;
+      const totalWithdrawals = (withdrawalsList || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+      const currentBalance = openingBalance + totalIncome - totalExpenses - totalWithdrawals;
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to export PDF');
+        return;
+      }
+
+      const titleMonth = selectedLedgerMonth || 'Current Month';
+
+      // Staff Incomes HTML
+      const staffRowsHtml = staffIncomesList.map(s => `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 8px; font-weight: bold;">${s.fullName}</td>
+          <td style="padding: 8px; color: #64748b;">${s.designation}</td>
+          <td style="padding: 8px; text-align: center;">${s.count}</td>
+          <td style="padding: 8px; text-align: right; font-weight: bold; color: #059669;">₹${s.totalAmount.toLocaleString()}</td>
+        </tr>
+      `).join('');
+
+      // Expense Categories HTML
+      const expCatRowsHtml = expenseCategories.filter(c => c.totalAmount > 0).map(c => {
+        const pct = totalExpenses > 0 ? ((c.totalAmount / totalExpenses) * 100).toFixed(1) : '0';
+        return `
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px; font-weight: bold;">${c.category}</td>
+            <td style="padding: 8px; text-align: right; color: #4f46e5;">₹${c.ashifAmount.toLocaleString()}</td>
+            <td style="padding: 8px; text-align: right; color: #9333ea;">₹${c.shibiliAmount.toLocaleString()}</td>
+            <td style="padding: 8px; text-align: right; font-weight: bold; color: #e11d48;">₹${c.totalAmount.toLocaleString()}</td>
+            <td style="padding: 8px; text-align: right; font-weight: bold;">${pct}%</td>
+          </tr>
+        `;
+      }).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Financial Control Center Report - ${titleMonth}</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 24px; color: #0f172a; }
+              h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+              h2 { font-size: 14px; font-weight: 800; color: #1e293b; margin-top: 24px; margin-bottom: 10px; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }
+              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 20px; }
+              .metrics { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 24px; background: #f8fafc; padding: 14px; border-radius: 10px; border: 1px solid #e2e8f0; }
+              .metric-item { text-align: left; }
+              .metric-label { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+              .metric-val { font-size: 15px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 8px; }
+              th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+              th.right { text-align: right; }
+              th.center { text-align: center; }
+            </style>
+          </head>
+          <body>
+            <h1>Tech Ads ERP - Master Financial Control Center Report</h1>
+            <p>Ledger Month: <strong>${titleMonth}</strong> &bull; Generated On: <strong>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</strong></p>
+            
+            <div class="metrics">
+              <div class="metric-item">
+                <div class="metric-label">Opening Balance</div>
+                <div class="metric-val">₹${openingBalance.toLocaleString()}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Total Sales Income</div>
+                <div class="metric-val" style="color: #059669;">₹${totalIncome.toLocaleString()}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Total Expenses</div>
+                <div class="metric-val" style="color: #e11d48;">₹${totalExpenses.toLocaleString()}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Net Profit / Loss</div>
+                <div class="metric-val" style="color: ${netProfit >= 0 ? '#059669' : '#e11d48'};">₹${netProfit.toLocaleString()}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Withdrawals</div>
+                <div class="metric-val" style="color: #9333ea;">₹${totalWithdrawals.toLocaleString()}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Current Balance</div>
+                <div class="metric-val" style="color: #2563eb;">₹${currentBalance.toLocaleString()}</div>
+              </div>
+            </div>
+
+            <h2>1. Income Breakdown (Sales by Staff)</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Staff Name</th>
+                  <th>Designation</th>
+                  <th class="center">Sales Count</th>
+                  <th class="right">Received Revenue Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${staffRowsHtml || '<tr><td colspan="4" style="padding: 10px; text-align: center; color: #94a3b8;">No sales records logged for this period.</td></tr>'}
+              </tbody>
+            </table>
+
+            <h2>2. Expense Category Ledger</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Expense Category</th>
+                  <th class="right">Ashif Paid</th>
+                  <th class="right">Shibili Paid</th>
+                  <th class="right">Category Total</th>
+                  <th class="right">Share %</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${expCatRowsHtml || '<tr><td colspan="5" style="padding: 10px; text-align: center; color: #94a3b8;">No expense records logged for this period.</td></tr>'}
+              </tbody>
+            </table>
+            
+            <script>
+              window.onload = function() {
+                window.print();
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (err: any) {
+      alert('Failed to export PDF report: ' + err.message);
     }
   };
 
@@ -766,24 +899,40 @@ export const FinanceDashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportFinanceExcel}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-extrabold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                title="Export Master Financial Report to Excel / CSV"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Excel</span>
+              </button>
+              <button
+                onClick={handleExportFinancePDF}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-extrabold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                title="Export Master Financial Report to PDF"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Export PDF</span>
+              </button>
               <Button
                 variant="secondary"
                 size="sm"
-                className="!py-2 !px-3.5 shadow-md rounded-xl text-xs font-bold shrink-0 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/10"
+                className="!py-1.5 !px-3 shadow-md rounded-xl text-xs font-bold shrink-0 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/10"
                 onClick={() => setIsAnalyticsModalOpen(true)}
                 icon={<Activity className="w-3.5 h-3.5" />}
               >
-                View Analytics
+                Analytics
               </Button>
               <Button 
                 variant="primary" 
                 size="sm" 
-                className="!py-2 !px-3.5 shadow-md rounded-xl text-xs font-bold shrink-0" 
+                className="!py-1.5 !px-3 shadow-md rounded-xl text-xs font-bold shrink-0" 
                 onClick={() => setIsEntryDrawerOpen(true)}
                 icon={<Plus className="w-3.5 h-3.5" />}
               >
-                Log Transaction
+                Log Entry
               </Button>
             </div>
           </div>
@@ -971,14 +1120,22 @@ export const FinanceDashboard: React.FC = () => {
               </div>
 
               {/* Bottom Exporter Controls */}
-              <div className="pt-4 flex justify-end">
+              <div className="pt-4 flex items-center justify-end gap-2">
                 <Button 
                   variant="glass" 
-                  onClick={handleExportLedger}
-                  className="flex items-center gap-2 font-bold text-xs uppercase text-indigo-400 border-indigo-500/20 hover:bg-slate-800"
+                  onClick={handleExportFinanceExcel}
+                  className="flex items-center gap-2 font-bold text-xs uppercase text-emerald-400 border-emerald-500/20 hover:bg-slate-800"
                   icon={<Download className="w-4 h-4" />}
                 >
-                  Download Ledger (CSV)
+                  Export Excel
+                </Button>
+                <Button 
+                  variant="glass" 
+                  onClick={handleExportFinancePDF}
+                  className="flex items-center gap-2 font-bold text-xs uppercase text-rose-400 border-rose-500/20 hover:bg-slate-800"
+                  icon={<FileText className="w-4 h-4" />}
+                >
+                  Export PDF
                 </Button>
               </div>
             </>

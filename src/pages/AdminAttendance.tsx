@@ -26,9 +26,8 @@ import {
   ExternalLink,
   
   Download,
-  
-  
-Star,
+  FileText,
+  Star,
 } from 'lucide-react';
 
 interface StaffWithAttendance extends Staff {
@@ -54,6 +53,141 @@ export const AdminAttendance: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Present' | 'Late' | 'Half Day' | 'Leave' | 'Absent'>('All');
   const [adminTab, setAdminTab] = useState<'registry' | 'reports'>('registry');
+
+  const handleExportStaffAttendanceExcel = (staff: any, month: string, logs: any[], present: number, late: number, halfDay: number, leave: number, holiday: number, attPct: number) => {
+    try {
+      const csvRows = [];
+      csvRows.push([`Tech Ads ERP - Staff Attendance Report`]);
+      csvRows.push([`Staff Name: ${staff?.full_name || 'Staff'}`, `Designation: ${staff?.designation || 'Staff'}`, `Month: ${month}`]);
+      csvRows.push([`Present: ${present}`, `Late: ${late}`, `Half Day: ${halfDay}`, `Leave: ${leave}`, `Holiday: ${holiday}`, `Attendance %: ${attPct}%`]);
+      csvRows.push([]);
+      csvRows.push(['Date', 'Clock In', 'Clock Out', 'Working Hours', 'Status', 'Selfie Verified']);
+      
+      (logs || []).slice().reverse().forEach((log: any) => {
+        csvRows.push([
+          log.date, 
+          log.punch_in || '-', 
+          log.punch_out || '-', 
+          log.working_hours || '-', 
+          log.status || 'ABSENT',
+          log.selfie_url ? 'Yes' : 'No'
+        ]);
+      });
+
+      const BOM = "\uFEFF";
+      const csvContent = BOM + csvRows.map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Attendance_Report_${(staff?.full_name || 'Staff').replace(/\s+/g, '_')}_${month}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      alert('Error exporting attendance: ' + e);
+    }
+  };
+
+  const handleExportStaffAttendancePDF = (staff: any, month: string, logs: any[], present: number, late: number, halfDay: number, leave: number, holiday: number, attPct: number) => {
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to export PDF');
+        return;
+      }
+
+      const rowsHtml = (logs || []).slice().reverse().map((log: any) => {
+        return `
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px; font-weight: bold;">${log.date}</td>
+            <td style="padding: 8px;">${log.punch_in || '-'}</td>
+            <td style="padding: 8px;">${log.punch_out || '-'}</td>
+            <td style="padding: 8px;">${log.working_hours || '-'}</td>
+            <td style="padding: 8px; text-align: center; font-weight: bold; color: ${log.status === 'PRESENT' ? '#059669' : log.status === 'LATE' ? '#4f46e5' : log.status === 'HALF_DAY' ? '#6366f1' : '#e11d48'};">${log.status || 'ABSENT'}</td>
+            <td style="padding: 8px; text-align: center;">${log.selfie_url ? 'Yes' : 'No'}</td>
+          </tr>
+        `;
+      }).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Attendance Report - ${staff?.full_name}</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; }
+              h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
+              .metrics { display: flex; gap: 12px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
+              .metric-item { flex: 1; text-align: center; }
+              .metric-label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+              .metric-val { font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+              th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+              th.center { text-align: center; }
+            </style>
+          </head>
+          <body>
+            <h1>Tech Ads ERP - Staff Attendance Report</h1>
+            <p>Staff: <strong>${staff?.full_name || 'Staff'}</strong> &bull; Designation: <strong>${staff?.designation || 'Staff'}</strong> &bull; Month: <strong>${month}</strong></p>
+            
+            <div class="metrics">
+              <div class="metric-item">
+                <div class="metric-label">Present</div>
+                <div class="metric-val" style="color: #059669;">${present}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Late</div>
+                <div class="metric-val" style="color: #4f46e5;">${late}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Half Day</div>
+                <div class="metric-val" style="color: #6366f1;">${halfDay}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Leave</div>
+                <div class="metric-val" style="color: #9333ea;">${leave}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Holiday</div>
+                <div class="metric-val" style="color: #a855f7;">${holiday}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Attendance %</div>
+                <div class="metric-val">${attPct}%</div>
+              </div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Clock In</th>
+                  <th>Clock Out</th>
+                  <th>Working HR's</th>
+                  <th class="center">Status</th>
+                  <th class="center">Selfie Verified</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+            <script>
+              window.onload = function() {
+                window.print();
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (e) {
+      alert('Error exporting PDF: ' + e);
+    }
+  };
 
   // Custom Reports states
   const [reportFromDate, setReportFromDate] = useState<string>(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('sv-SE'));
@@ -904,15 +1038,33 @@ export const AdminAttendance: React.FC = () => {
 
                         return (
                           <div className="space-y-6">
-                            <div className="flex justify-between items-center bg-slate-900/60 p-4 rounded-xl border border-white/5">
-                              <span className="text-xs font-bold text-slate-350 uppercase">Filter Registry Month</span>
-                              <input 
-                                type="month" 
-                                value={drillMonth}
-                                onChange={(e) => setDrillMonth(e.target.value)}
-                                className="px-3 py-1.5 rounded-xl bg-slate-950 border border-white/10 text-xs font-bold text-slate-200 focus:outline-none"
-                              />
-                            </div>
+                              <div className="flex justify-between items-center bg-slate-900/60 p-4 rounded-xl border border-white/5">
+                                <span className="text-xs font-bold text-slate-350 uppercase">Filter Registry Month</span>
+                                <div className="flex items-center gap-2">
+                                  <input 
+                                    type="month" 
+                                    value={drillMonth}
+                                    onChange={(e) => setDrillMonth(e.target.value)}
+                                    className="px-3 py-1.5 rounded-xl bg-slate-950 border border-white/10 text-xs font-bold text-slate-200 focus:outline-none"
+                                  />
+                                  <button 
+                                    onClick={() => handleExportStaffAttendanceExcel(selectedStaff, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                                    title="Export Attendance Report to Excel / CSV"
+                                  >
+                                    <Download className="w-3.5 h-3.5" />
+                                    <span>Export Excel</span>
+                                  </button>
+                                  <button 
+                                    onClick={() => handleExportStaffAttendancePDF(selectedStaff, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                                    title="Export Attendance Report to PDF"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" />
+                                    <span>Export PDF</span>
+                                  </button>
+                                </div>
+                              </div>
 
                             {/* Summary Metrics */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
