@@ -25,8 +25,11 @@ import {
   Calendar,
   ShieldAlert,
   
-Star,
+  Star,
   Key,
+  UserMinus,
+  UserCheck,
+  UserX
 } from 'lucide-react';
 
 import type { StaffProfile } from '../types';
@@ -82,6 +85,7 @@ export const StaffManagement: React.FC = () => {
   const [editShiftStart, setEditShiftStart] = useState('09:00');
   const [editShiftEnd, setEditShiftEnd] = useState('18:00');
   const [editWeeklyOff, setEditWeeklyOff] = useState('Sunday');
+  const [editStatus, setEditStatus] = useState<'ACTIVE' | 'INACTIVE' | 'RESIGNED'>('ACTIVE');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Detailed Profile Overlay state
@@ -357,6 +361,37 @@ export const StaffManagement: React.FC = () => {
     }
   };
 
+  // Mark or Reactivate staff member as Resigned
+  const handleToggleResignStaff = async (profile: StaffProfile) => {
+    const isResigned = profile.status === 'RESIGNED';
+    const nextStatus = isResigned ? 'ACTIVE' : 'RESIGNED';
+
+    const confirmMsg = isResigned
+      ? `Reactivate staff member "${profile.full_name}"? They will reappear in current attendance registries.`
+      : `Mark staff member "${profile.full_name}" as Resigned? They will be hidden from future daily attendance registries while past sales, attendance logs, and financial history remain 100% intact.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      const { error } = await supabase
+        .from('staff_profiles')
+        .update({ status: nextStatus })
+        .eq('id', profile.id);
+
+      if (error) throw error;
+
+      await supabase
+        .from('staff')
+        .update({ status: nextStatus })
+        .eq('id', profile.id);
+
+      alert(`Staff member "${profile.full_name}" has been ${isResigned ? 'reactivated' : 'marked as Resigned'}. Historical data remains fully preserved.`);
+      await loadInitialData();
+    } catch (err: any) {
+      alert('Failed to update staff status: ' + err.message);
+    }
+  };
+
   // Open edit profile modal
   const openEditModal = (profile: StaffProfile) => {
     setEditingProfile(profile);
@@ -367,6 +402,7 @@ export const StaffManagement: React.FC = () => {
     setEditShiftStart(profile.shift_start_time.substring(0, 5));
     setEditShiftEnd(profile.shift_end_time.substring(0, 5));
     setEditWeeklyOff(profile.weekly_off_day);
+    setEditStatus(profile.status || 'ACTIVE');
     setIsEditModalOpen(true);
   };
 
@@ -386,11 +422,20 @@ export const StaffManagement: React.FC = () => {
           gender: editGender,
           shift_start_time: editShiftStart,
           shift_end_time: editShiftEnd,
-          weekly_off_day: editWeeklyOff
+          weekly_off_day: editWeeklyOff,
+          status: editStatus
         })
         .eq('id', editingProfile.id);
 
       if (error) throw error;
+
+      await supabase
+        .from('staff')
+        .update({
+          full_name: editFullName.trim(),
+          status: editStatus
+        })
+        .eq('id', editingProfile.id);
 
       setIsEditModalOpen(false);
       setEditingProfile(null);
@@ -725,7 +770,12 @@ export const StaffManagement: React.FC = () => {
                         />
                         <div className="min-w-0 flex-1 flex flex-col justify-between">
                           <div>
-                            <h4 className="font-bold text-slate-200 text-xs truncate leading-tight">{profile.full_name}</h4>
+                            <div className="flex items-center gap-1.5">
+                              <h4 className="font-bold text-slate-200 text-xs truncate leading-tight">{profile.full_name}</h4>
+                              {profile.status === 'RESIGNED' && (
+                                <Badge variant="error" className="text-[8px] py-0 px-1 font-bold">RESIGNED</Badge>
+                              )}
+                            </div>
                             <span className="text-[10px] text-indigo-300/80 font-bold tracking-tight block mt-0.5">{profile.designation}</span>
                           </div>
                           
@@ -751,14 +801,23 @@ export const StaffManagement: React.FC = () => {
                             <Key className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => setDrilldownProfile(profile)}
+                            onClick={() => handleToggleResignStaff(profile)}
+                            className={`p-1.5 rounded-lg border transition-colors ${profile.status === 'RESIGNED' ? 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border-emerald-800/40' : 'bg-slate-900 hover:bg-slate-800 text-rose-400 hover:text-rose-300 border-slate-800'}`}
+                            title={profile.status === 'RESIGNED' ? 'Reactivate Staff' : 'Mark as Resigned'}
+                          >
+                            {profile.status === 'RESIGNED' ? <UserCheck className="w-3.5 h-3.5" /> : <UserMinus className="w-3.5 h-3.5" />}
+                          </button>
+                          <button
+                            onClick={() => openEditModal(profile)}
                             className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-indigo-400 hover:text-indigo-300 border border-slate-800 transition-colors"
+                            title="Edit Profile"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleDeleteStaff(profile.id, profile.full_name)}
                             className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-rose-400 hover:text-rose-300 border border-slate-800 transition-colors"
+                            title="Delete Profile"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -907,6 +966,19 @@ export const StaffManagement: React.FC = () => {
                   <option value="Thursday">Thursday</option>
                   <option value="Friday">Friday</option>
                   <option value="Saturday">Saturday</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-300">Employment Status</label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => setEditStatus(e.target.value as any)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none"
+                >
+                  <option value="ACTIVE">Active (Current Staff)</option>
+                  <option value="RESIGNED">Resigned (Hide from future registries, keep history)</option>
+                  <option value="INACTIVE">Inactive</option>
                 </select>
               </div>
 

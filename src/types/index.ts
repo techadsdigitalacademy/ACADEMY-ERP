@@ -18,7 +18,7 @@ export interface Staff {
   monthly_target_amount: number;
   monthly_targets?: any;
   notice_period_days: number;
-  status: 'ACTIVE' | 'INACTIVE';
+  status?: 'ACTIVE' | 'INACTIVE' | 'RESIGNED';
   
   // Joined fields for display
   department_name?: string;
@@ -112,4 +112,5 @@ export interface StaffProfile {
   weekly_off_day: string;
   created_at: string;
   base_salary?: number;
+  status?: 'ACTIVE' | 'INACTIVE' | 'RESIGNED';
 }

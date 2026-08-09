@@ -134,13 +134,27 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
     }
   };
 
-  // Filter out extra academy-specific roles (Tutor and Academy Counselor)
+  // Filter out extra academy-specific roles (Tutor and Academy Counselor), Admin Director, and resigned/inactive staff
   const validStaffProfiles = (staffProfiles || []).filter(p => {
-    const desig = String(p?.designation || '').toLowerCase().trim();
+    if (!p) return false;
+    if (p.status === 'INACTIVE' || p.status === 'RESIGNED') return false;
+    const desig = String(p?.designation || p?.role_name || p?.role || '').toLowerCase().trim();
     const rName = String(p?.role_name || p?.role || '').toLowerCase().trim();
-    const isTutor = desig === 'tutor' || desig.includes('tutor') || rName === 'tutor' || rName.includes('tutor');
-    const isCounselor = desig === 'academy counselor' || desig.includes('academy counselor') || rName === 'academy counselor' || rName.includes('academy counselor');
-    return !isTutor && !isCounselor;
+    const nameStr = String(p?.full_name || '').toLowerCase().trim();
+
+    if (nameStr.includes('althaf')) return false;
+
+    const isTutor = desig.includes('tutor') || rName.includes('tutor');
+    const isCounselor = desig.includes('counselor') || rName.includes('counselor');
+    
+    // Explicitly filter out Admin Director or Admin designation/role (excluding Managing Director)
+    const isAdminDirector = desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director');
+    const isManagingDirector = desig === 'managing director' || nameStr.includes('shibili');
+
+    if (isAdminDirector && !isManagingDirector) return false;
+    if (isTutor || isCounselor) return false;
+
+    return true;
   });
 
   const salesTeam = validStaffProfiles.filter(p => p.designation === 'Sales Executive');

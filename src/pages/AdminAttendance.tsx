@@ -53,6 +53,7 @@ export const AdminAttendance: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Present' | 'Late' | 'Half Day' | 'Leave' | 'Absent'>('All');
   const [adminTab, setAdminTab] = useState<'registry' | 'reports'>('registry');
+  const [masterStaffList, setMasterStaffList] = useState<any[]>([]);
 
   const handleExportStaffAttendanceExcel = (staff: any, month: string, logs: any[], present: number, late: number, halfDay: number, leave: number, holiday: number, attPct: number) => {
     try {
@@ -236,7 +237,9 @@ export const AdminAttendance: React.FC = () => {
       if (rangeAttErr) throw rangeAttErr;
 
       const logs = rangeAttData || [];
-      const aggregated = staffList.map(staff => {
+      const targetStaffs = (masterStaffList.length > 0 ? masterStaffList : staffList).filter(s => s && s.full_name && !s.full_name.toLowerCase().includes('althaf'));
+
+      const aggregated = targetStaffs.map(staff => {
         const staffLogs = logs.filter(l => l.staff_id === staff.id);
         
         let present = 0;
@@ -526,17 +529,76 @@ export const AdminAttendance: React.FC = () => {
     try {
       const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
-      // 1. Fetch all staff members from Supabase
-      const { data: staffData, error: staffErr } = await supabase
+      // 1. Fetch staff members & staff_profiles from Supabase
+      const { data: staffData } = await supabase
         .from('staff')
         .select('*, departments(name), roles(role_name)');
 
-      if (staffErr) throw staffErr;
-
-      // Fetch profiles to get dynamic designations
       const { data: profilesData } = await supabase
         .from('staff_profiles')
-        .select('full_name, designation');
+        .select('*');
+
+      const staffByCleanName = new Map<string, any>();
+      (staffData || []).forEach((s: any) => {
+        if (s.full_name) {
+          staffByCleanName.set(s.full_name.trim().toLowerCase(), s);
+        }
+      });
+
+      // Filter active profiles matching Staff Management directory
+      const activeProfiles = (profilesData || []).filter((p: any) => {
+        if (!p || !p.full_name) return false;
+        if (p.status === 'INACTIVE' || p.status === 'RESIGNED') return false;
+
+        const cleanName = p.full_name.trim().toLowerCase();
+        if (cleanName.includes('althaf')) return false;
+
+        const desig = String(p.designation || '').toLowerCase().trim();
+        const rName = String(p.role_name || p.role || '').toLowerCase().trim();
+
+        const isTutor = desig.includes('tutor') || rName.includes('tutor');
+        const isCounselor = desig.includes('counselor') || rName.includes('counselor');
+
+        const isAdminDir = desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director');
+        const isManagingDir = desig === 'managing director' || cleanName.includes('shibili');
+
+        if (isAdminDir && !isManagingDir) return false;
+        if (isTutor || isCounselor) return false;
+
+        return true;
+      });
+
+      // Master staff list for reports (includes active + resigned profiles, excludes deleted test staff & excluded roles)
+      const validMasterProfiles = (profilesData || []).filter((p: any) => {
+        if (!p || !p.full_name) return false;
+        const cleanName = p.full_name.trim().toLowerCase();
+        if (cleanName.includes('althaf')) return false;
+
+        const desig = String(p.designation || '').toLowerCase().trim();
+        const rName = String(p.role_name || p.role || '').toLowerCase().trim();
+
+        const isTutor = desig.includes('tutor') || rName.includes('tutor');
+        const isCounselor = desig.includes('counselor') || rName.includes('counselor');
+
+        const isAdminDir = desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director');
+        const isManagingDir = desig === 'managing director' || cleanName.includes('shibili');
+
+        if (isAdminDir && !isManagingDir) return false;
+        if (isTutor || isCounselor) return false;
+
+        return true;
+      });
+
+      setMasterStaffList(validMasterProfiles.map((p: any) => {
+        const sMatch = staffByCleanName.get(p.full_name.trim().toLowerCase());
+        return {
+          id: sMatch?.id || p.id,
+          full_name: p.full_name,
+          designation: p.designation || 'Staff',
+          department_name: sMatch?.departments?.name || 'Sales & Growth',
+          status: p.status || 'ACTIVE'
+        };
+      }));
 
       // 2. Fetch current month's attendance records from Supabase
       const startOfMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
@@ -549,47 +611,27 @@ export const AdminAttendance: React.FC = () => {
 
       setAttendanceList(attData || []);
 
-      // 3. Map attendance records onto staff list
-      const mappedList: StaffWithAttendance[] = (staffData || []).map((staff: any) => {
-        let deptName = 'Sales & Growth';
-        let rName = 'Senior Sales Consultant';
-        let designationVal = 'Senior Sales Consultant';
-
-        if (staff.departments) {
-          deptName = Array.isArray(staff.departments) 
-            ? staff.departments[0]?.name 
-            : staff.departments.name;
-        }
-        if (staff.roles) {
-          rName = Array.isArray(staff.roles) 
-            ? staff.roles[0]?.role_name 
-            : staff.roles.role_name;
-        }
-
-        const matchedProfile = (profilesData || []).find(
-          (p: any) => p.full_name && p.full_name.toLowerCase() === staff.full_name.toLowerCase()
+      // 3. Map attendance records onto active staff profiles list
+      const mappedList: StaffWithAttendance[] = activeProfiles.map((p: any) => {
+        const sMatch = staffByCleanName.get(p.full_name.trim().toLowerCase());
+        const staffId = sMatch?.id || p.id;
+        const todayRecord = (attData || []).find((a: any) => 
+          (a.staff_id === staffId || a.staff_id === p.id) && a.attendance_date === todayStr
         );
-        if (matchedProfile && matchedProfile.designation) {
-          designationVal = matchedProfile.designation;
-        } else {
-          designationVal = rName;
-        }
-
-        const todayRecord = (attData || []).find((a: any) => a.staff_id === staff.id && a.attendance_date === todayStr);
 
         return {
-          id: staff.id,
-          staff_code: staff.staff_code,
-          full_name: staff.full_name,
-          department_id: staff.department_id,
-          role_id: staff.role_id,
-          avatar_url: staff.avatar_url,
-          monthly_target_amount: Number(staff.monthly_target_amount),
-          notice_period_days: staff.notice_period_days,
-          status: staff.status as 'ACTIVE' | 'INACTIVE',
-          department_name: deptName,
-          role_name: rName,
-          designation: designationVal,
+          id: staffId,
+          staff_code: sMatch?.staff_code || `EMP-${p.id.slice(0, 4)}`,
+          full_name: p.full_name,
+          department_id: sMatch?.department_id,
+          role_id: sMatch?.role_id,
+          avatar_url: p.avatar_url || sMatch?.avatar_url,
+          monthly_target_amount: Number(sMatch?.monthly_target_amount || 0),
+          notice_period_days: sMatch?.notice_period_days || 30,
+          status: p.status as 'ACTIVE' | 'INACTIVE',
+          department_name: sMatch?.departments?.name || 'Sales & Growth',
+          role_name: p.designation || 'Staff',
+          designation: p.designation || 'Staff',
           todayRecord: todayRecord as Attendance | undefined
         };
       });

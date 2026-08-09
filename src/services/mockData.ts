@@ -100,11 +100,12 @@ export const INITIAL_MOCK_ATTENDANCE: Attendance[] = [
 ];
 
 export const formatCurrency = (value: number) => {
+  const safeVal = (value === null || value === undefined || isNaN(value)) ? 0 : Number(value);
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0
-  }).format(value);
+  }).format(safeVal);
 };
 
 export const getMonthSummary = (sales: Sale[]) => {
