@@ -12,7 +12,9 @@ import {
   X,
   Trash2,
   Calendar,
-  Star
+  Star,
+  Download,
+  FileText
 } from 'lucide-react';
 
 interface PartnerWithdrawal {
@@ -100,6 +102,133 @@ export const PartnerWithdrawals: React.FC = () => {
   useEffect(() => {
     loadWithdrawals();
   }, [activeStaff, isOwner]);
+
+  const handleExportExcel = () => {
+    try {
+      const csvRows: any[][] = [];
+
+      csvRows.push([`Tech Ads ERP - Partner Withdrawals Ledger Report`]);
+      csvRows.push([`Generated On: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`, `Total Items: ${filteredWithdrawals.length}`, `Total Withdrawn: ₹${totalWithdrawn.toLocaleString()}`]);
+      csvRows.push([]);
+      csvRows.push(['Date', 'Partner', 'Description', 'Amount (₹)']);
+
+      filteredWithdrawals.forEach(w => {
+        csvRows.push([
+          w.withdrawal_date || '-',
+          w.partner_name || '-',
+          w.description || '-',
+          Number(w.amount || 0)
+        ]);
+      });
+
+      csvRows.push([]);
+      csvRows.push(['Total Withdrawn Summary', '', '', totalWithdrawn]);
+
+      const BOM = "\uFEFF";
+      const csvContent = BOM + csvRows.map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Partner_Withdrawals_Ledger_${new Date().toISOString().substring(0, 10)}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err: any) {
+      alert('Failed to export Partner Withdrawals to Excel: ' + err.message);
+    }
+  };
+
+  const handleExportPDF = () => {
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to export PDF');
+        return;
+      }
+
+      const rowsHtml = filteredWithdrawals.map(w => `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 8px; color: #475569;">${w.withdrawal_date || '-'}</td>
+          <td style="padding: 8px; font-weight: bold; color: #9333ea;">${w.partner_name || '-'}</td>
+          <td style="padding: 8px;">${w.description || '-'}</td>
+          <td style="padding: 8px; text-align: right; font-weight: bold; color: #9333ea;">₹${Number(w.amount || 0).toLocaleString()}</td>
+        </tr>
+      `).join('');
+
+      const shibiliTotal = withdrawals.filter(w => w.partner_name === 'SHIBILI').reduce((sum, w) => sum + Number(w.amount || 0), 0);
+      const ashifTotal = withdrawals.filter(w => w.partner_name === 'ASHIF').reduce((sum, w) => sum + Number(w.amount || 0), 0);
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Partner Withdrawals Ledger Report</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; }
+              h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
+              .metrics { display: flex; gap: 12px; margin-bottom: 20px; background: #faf5ff; padding: 12px; border-radius: 8px; border: 1px solid #e9d5ff; }
+              .metric-item { flex: 1; }
+              .metric-label { font-size: 10px; font-weight: 700; color: #7e22ce; text-transform: uppercase; }
+              .metric-val { font-size: 16px; font-weight: 800; color: #9333ea; margin-top: 2px; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+              th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+              th.right { text-align: right; }
+            </style>
+          </head>
+          <body>
+            <h1>Tech Ads ERP - Partner Withdrawals Ledger Report</h1>
+            <p>Generated: <strong>${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</strong> &bull; Total Items: <strong>${filteredWithdrawals.length}</strong></p>
+
+            <div class="metrics">
+              <div class="metric-item">
+                <div class="metric-label">Total Withdrawn</div>
+                <div class="metric-val">₹${totalWithdrawn.toLocaleString()}</div>
+              </div>
+              ${isAdminView ? `
+                <div class="metric-item">
+                  <div class="metric-label">SHIBILI Withdrawn</div>
+                  <div class="metric-val" style="color: #6b21a8;">₹${shibiliTotal.toLocaleString()}</div>
+                </div>
+                <div class="metric-item">
+                  <div class="metric-label">ASHIF Withdrawn</div>
+                  <div class="metric-val" style="color: #4338ca;">₹${ashifTotal.toLocaleString()}</div>
+                </div>
+              ` : ''}
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Partner</th>
+                  <th>Description</th>
+                  <th class="right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml || '<tr><td colspan="4" style="padding: 10px; text-align: center; color: #94a3b8;">No withdrawal records found.</td></tr>'}
+              </tbody>
+              <tfoot>
+                <tr style="font-weight: bold; border-top: 2px solid #cbd5e1;">
+                  <td colspan="3" style="padding: 10px; text-align: right; text-transform: uppercase;">Total Withdrawn:</td>
+                  <td style="padding: 10px; text-align: right; color: #9333ea; font-size: 13px;">₹${totalWithdrawn.toLocaleString()}</td>
+                </tr>
+              </tfoot>
+            </table>
+            <script>
+              window.onload = function() { window.print(); };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (err: any) {
+      alert('Failed to export Partner Withdrawals to PDF: ' + err.message);
+    }
+  };
 
   const handleAddWithdrawal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -223,15 +352,35 @@ export const PartnerWithdrawals: React.FC = () => {
                   <Calendar className="w-4 h-4 text-slate-400" />
                   Withdrawal Ledger
                 </h3>
-                <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input 
-                    type="text" 
-                    placeholder="Search by name or description..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full md:w-64 pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors"
-                  />
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  <div className="flex items-center gap-1.5 border-r border-white/10 pr-3">
+                    <button
+                      onClick={handleExportExcel}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                      title="Export Withdrawal Ledger to Excel / CSV"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Export Excel</span>
+                    </button>
+                    <button
+                      onClick={handleExportPDF}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                      title="Export Withdrawal Ledger to PDF"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Export PDF</span>
+                    </button>
+                  </div>
+                  <div className="relative w-full sm:w-auto">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input 
+                      type="text" 
+                      placeholder="Search by name or description..." 
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full md:w-64 pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                    />
+                  </div>
                 </div>
               </div>
 
