@@ -545,45 +545,51 @@ export const AdminAttendance: React.FC = () => {
         }
       });
 
-      // Filter active profiles matching Staff Management directory
+      // Helper to identify Company Owners
+      const isOwnerProfile = (p: any) => {
+        if (!p || !p.full_name) return true;
+        const cleanName = String(p.full_name || '').trim().toLowerCase();
+        const desig = String(p.designation || '').toLowerCase().trim();
+        const rName = String(p.role_name || p.role || '').toLowerCase().trim();
+
+        if (cleanName.includes('althaf') || cleanName.includes('shibili') || cleanName.includes('ashif')) return true;
+        if (desig.includes('owner') || rName.includes('owner') || desig.includes('managing director') || rName.includes('managing director')) return true;
+
+        return false;
+      };
+
+      // Filter active profiles matching Staff Management directory (excludes Company Owners)
       const activeProfiles = (profilesData || []).filter((p: any) => {
         if (!p || !p.full_name) return false;
         if (p.status === 'INACTIVE' || p.status === 'RESIGNED') return false;
-
-        const cleanName = p.full_name.trim().toLowerCase();
-        if (cleanName.includes('althaf')) return false;
+        if (isOwnerProfile(p)) return false;
 
         const desig = String(p.designation || '').toLowerCase().trim();
         const rName = String(p.role_name || p.role || '').toLowerCase().trim();
 
         const isTutor = desig.includes('tutor') || rName.includes('tutor');
         const isCounselor = desig.includes('counselor') || rName.includes('counselor');
-
         const isAdminDir = desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director');
-        const isManagingDir = desig === 'managing director' || cleanName.includes('shibili');
 
-        if (isAdminDir && !isManagingDir) return false;
+        if (isAdminDir) return false;
         if (isTutor || isCounselor) return false;
 
         return true;
       });
 
-      // Master staff list for reports (includes active + resigned profiles, excludes deleted test staff & excluded roles)
+      // Master staff list for reports (includes active + resigned profiles, excludes deleted test staff, excluded roles & owners)
       const validMasterProfiles = (profilesData || []).filter((p: any) => {
         if (!p || !p.full_name) return false;
-        const cleanName = p.full_name.trim().toLowerCase();
-        if (cleanName.includes('althaf')) return false;
+        if (isOwnerProfile(p)) return false;
 
         const desig = String(p.designation || '').toLowerCase().trim();
         const rName = String(p.role_name || p.role || '').toLowerCase().trim();
 
         const isTutor = desig.includes('tutor') || rName.includes('tutor');
         const isCounselor = desig.includes('counselor') || rName.includes('counselor');
-
         const isAdminDir = desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director');
-        const isManagingDir = desig === 'managing director' || cleanName.includes('shibili');
 
-        if (isAdminDir && !isManagingDir) return false;
+        if (isAdminDir) return false;
         if (isTutor || isCounselor) return false;
 
         return true;
@@ -649,22 +655,52 @@ export const AdminAttendance: React.FC = () => {
     loadAttendanceData();
   }, []);
 
-  // Compute metrics
+  // Compute metrics for today (excluding owners)
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const totalStaffCount = staffList.length;
   
-  const todayAttLogs = attendanceList.filter(a => a.attendance_date === todayStr);
+  // Present: strictly present on time (excluding Late and Half Day)
+  const presentCount = staffList.filter(s => {
+    if (!s.todayRecord) return false;
+    const status = s.todayRecord.status;
+    const punchIn = s.todayRecord.punch_in;
+    return status === 'PRESENT' && (!punchIn || punchIn <= '09:30:00');
+  }).length;
 
-  const presentCount = todayAttLogs.filter(a => a.status === 'PRESENT').length;
-  const lateCount = todayAttLogs.filter(a => a.status === 'LATE').length;
-  const halfDayCount = todayAttLogs.filter(a => a.status === 'HALF_DAY').length;
-  const leaveCount = todayAttLogs.filter(a => a.status === 'LEAVE').length;
-  
-  const isSunday = new Date().getDay() === 0;
-  const holidayCountVal = isSunday ? totalStaffCount : 0;
+  // Late: marked as Late or present with punch_in > 09:30:00
+  const lateCount = staffList.filter(s => {
+    if (!s.todayRecord) return false;
+    const status = s.todayRecord.status;
+    const punchIn = s.todayRecord.punch_in;
+    return status === 'LATE' || (status === 'PRESENT' && punchIn && punchIn > '09:30:00');
+  }).length;
 
-  const inOfficeCount = todayAttLogs.filter(a => a.punch_in && !a.punch_out).length;
-  const missedPunchOutCount = attendanceList.filter(a => a.attendance_date < todayStr && a.punch_in && !a.punch_out).length;
+  // Half Day: marked as Half Day
+  const halfDayCount = staffList.filter(s => {
+    if (!s.todayRecord) return false;
+    return s.todayRecord.status === 'HALF_DAY';
+  }).length;
+
+  // On Leave / Absent: staff who haven't punched in yet or are on leave/absent
+  const leaveCount = staffList.filter(s => {
+    if (!s.todayRecord) return true;
+    const status = s.todayRecord.status;
+    return status === 'LEAVE' || status === 'ABSENT';
+  }).length;
+
+  // Missed Out: staff who missed punch-in or punch-out logs today
+  const missedOutCount = staffList.filter(s => {
+    if (!s.todayRecord) return false;
+    const { punch_in, punch_out } = s.todayRecord;
+    return (punch_in && !punch_out) || (!punch_in && punch_out);
+  }).length;
+
+  // In Office: total count of everyone inside the office today (Present + Late + Half Day combined who punched in)
+  const inOfficeCount = staffList.filter(s => {
+    if (!s.todayRecord) return false;
+    const { punch_in, status } = s.todayRecord;
+    return !!punch_in && (status === 'PRESENT' || status === 'LATE' || status === 'HALF_DAY');
+  }).length;
 
   // Filter & search staff list
   const filteredStaff = staffList.filter((staff) => {
@@ -768,8 +804,8 @@ export const AdminAttendance: React.FC = () => {
             </div>
           ) : (
             <>
-              {/* Summary Stats Grid (Total, Present, Late, Half Day, Leave, Holiday, Missed Punch Out, In Office) */}
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5">
+              {/* Summary Stats Grid (Total Staff, Present, Late, Half Day, On Leave / Absent, Missed Out, In Office) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
                 {/* Total Staff */}
                 <Card variant="glass" className="p-3 flex flex-col justify-between border-slate-500/10 min-h-[80px]">
                   <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Total Staff</span>
@@ -783,7 +819,7 @@ export const AdminAttendance: React.FC = () => {
                 </Card>
 
                 {/* Late */}
-                <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-purple-500/10 min-h-[80px]">
+                <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-amber-500/10 min-h-[80px]">
                   <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider">Late</span>
                   <p className="text-xl font-extrabold text-amber-400 mt-1">{lateCount}</p>
                 </Card>
@@ -794,22 +830,16 @@ export const AdminAttendance: React.FC = () => {
                   <p className="text-xl font-extrabold text-indigo-400 mt-1">{halfDayCount}</p>
                 </Card>
 
-                {/* Leave */}
+                {/* On Leave / Absent */}
                 <Card variant="glass" className="p-3 flex flex-col justify-between border-blue-500/10 min-h-[80px]">
-                  <span className="text-[9px] font-bold text-blue-400 uppercase tracking-wider">On Leave</span>
+                  <span className="text-[9px] font-bold text-blue-400 uppercase tracking-wider">On Leave / Absent</span>
                   <p className="text-xl font-extrabold text-blue-400 mt-1">{leaveCount}</p>
                 </Card>
 
-                {/* Holiday */}
-                <Card variant="glass" className="p-3 flex flex-col justify-between border-slate-500/10 min-h-[80px]">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Holiday</span>
-                  <p className="text-xl font-extrabold text-slate-450 mt-1">{holidayCountVal}</p>
-                </Card>
-
-                {/* Missed Punch Out */}
+                {/* Missed Out */}
                 <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-rose-500/10 min-h-[80px]">
                   <span className="text-[9px] font-bold text-rose-450 uppercase tracking-wider">Missed Out</span>
-                  <p className="text-xl font-extrabold text-rose-450 mt-1">{missedPunchOutCount}</p>
+                  <p className="text-xl font-extrabold text-rose-450 mt-1">{missedOutCount}</p>
                 </Card>
 
                 {/* In Office */}
@@ -1273,10 +1303,22 @@ export const AdminAttendance: React.FC = () => {
                       </div>
                     ) : (
                       (() => {
-                        // Generate monthly logs for drill Month
+                        // Generate monthly logs for drill Month (Day 1 to Current Date)
                         const [year, monthIdx] = drillMonth.split('-').map(Number);
                         const daysInMonth = new Date(year, monthIdx, 0).getDate();
                         
+                        const todayObj = new Date();
+                        const currentYear = todayObj.getFullYear();
+                        const currentMonth = todayObj.getMonth() + 1;
+                        const todayDate = todayObj.getDate();
+
+                        let maxDay = daysInMonth;
+                        if (year === currentYear && monthIdx === currentMonth) {
+                          maxDay = todayDate;
+                        } else if (year > currentYear || (year === currentYear && monthIdx > currentMonth)) {
+                          maxDay = 0;
+                        }
+
                         const monthlyLogs: any[] = [];
                         let presentCount = 0;
                         let lateCount = 0;
@@ -1284,16 +1326,21 @@ export const AdminAttendance: React.FC = () => {
                         let leaveCount = 0;
                         let holidayCount = 0;
 
-                        for (let d = 1; d <= daysInMonth; d++) {
+                        for (let d = 1; d <= maxDay; d++) {
                           const dateStr = `${year}-${String(monthIdx).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                           const matchedLog = drillLogs.find(a => a.attendance_date === dateStr);
                           const dayOfWeek = new Date(year, monthIdx - 1, d).getDay(); // 0 is Sunday
                           
                           if (matchedLog) {
-                            if (matchedLog.status === 'PRESENT') presentCount++;
-                            else if (matchedLog.status === 'LATE') lateCount++;
-                            else if (matchedLog.status === 'HALF_DAY') halfDayCount++;
-                            else if (matchedLog.status === 'LEAVE') leaveCount++;
+                            let effectiveStatus = matchedLog.status;
+                            if (effectiveStatus === 'PRESENT' && matchedLog.punch_in && matchedLog.punch_in > '09:30:00') {
+                              effectiveStatus = 'LATE';
+                            }
+
+                            if (effectiveStatus === 'PRESENT') presentCount++;
+                            else if (effectiveStatus === 'LATE') lateCount++;
+                            else if (effectiveStatus === 'HALF_DAY') halfDayCount++;
+                            else if (effectiveStatus === 'LEAVE' || effectiveStatus === 'ABSENT') leaveCount++;
                             
                             let workingHours = '-';
                             if (matchedLog.punch_in && matchedLog.punch_out) {
@@ -1306,9 +1353,9 @@ export const AdminAttendance: React.FC = () => {
 
                             monthlyLogs.push({
                               date: dateStr,
-                              punch_in: matchedLog.punch_in,
-                              punch_out: matchedLog.punch_out,
-                              status: matchedLog.status,
+                              punch_in: matchedLog.punch_in || '-',
+                              punch_out: matchedLog.punch_out || '-',
+                              status: effectiveStatus,
                               selfie_url: matchedLog.selfie_url,
                               working_hours: workingHours
                             });
@@ -1323,11 +1370,21 @@ export const AdminAttendance: React.FC = () => {
                                 selfie_url: null,
                                 working_hours: '-'
                               });
+                            } else {
+                              leaveCount++;
+                              monthlyLogs.push({
+                                date: dateStr,
+                                punch_in: '-',
+                                punch_out: '-',
+                                status: 'ABSENT',
+                                selfie_url: null,
+                                working_hours: '-'
+                              });
                             }
                           }
                         }
 
-                        const totalWorkingDays = daysInMonth - holidayCount;
+                        const totalWorkingDays = maxDay - holidayCount;
                         const attendancePercentage = totalWorkingDays > 0 
                           ? Math.min(100, Math.round(((presentCount + lateCount + halfDayCount * 0.5) / totalWorkingDays) * 100))
                           : 0;
@@ -1344,7 +1401,7 @@ export const AdminAttendance: React.FC = () => {
                                     className="px-3 py-1.5 rounded-xl bg-slate-950 border border-white/10 text-xs font-bold text-slate-200 focus:outline-none"
                                   />
                                   <button 
-                                    onClick={() => handleExportStaffAttendanceExcel(selectedStaff, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
+                                    onClick={() => handleExportStaffAttendanceExcel(selectedStaffForDrill, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
                                     title="Export Attendance Report to Excel / CSV"
                                   >
@@ -1352,7 +1409,7 @@ export const AdminAttendance: React.FC = () => {
                                     <span>Export Excel</span>
                                   </button>
                                   <button 
-                                    onClick={() => handleExportStaffAttendancePDF(selectedStaff, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
+                                    onClick={() => handleExportStaffAttendancePDF(selectedStaffForDrill, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
                                     title="Export Attendance Report to PDF"
                                   >
@@ -1381,10 +1438,6 @@ export const AdminAttendance: React.FC = () => {
                                 <p className="text-lg font-extrabold text-blue-400 mt-1">{leaveCount}</p>
                               </Card>
                               <Card variant="glass" className="p-3 flex flex-col justify-between border-white/5">
-                                <span className="text-[9px] font-bold text-slate-400 uppercase">Holiday</span>
-                                <p className="text-lg font-extrabold text-slate-450 mt-1">{holidayCount}</p>
-                              </Card>
-                              <Card variant="glass" className="p-3 flex flex-col justify-between border-white/5">
                                 <span className="text-[9px] font-bold text-slate-400 uppercase">Working Days</span>
                                 <p className="text-lg font-extrabold text-white mt-1">{totalWorkingDays}</p>
                               </Card>
@@ -1408,7 +1461,7 @@ export const AdminAttendance: React.FC = () => {
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5 text-slate-350 font-semibold">
-                                  {monthlyLogs.map((log: any) => (
+                                  {monthlyLogs.slice().reverse().map((log: any) => (
                                     <tr key={log.date} className="hover:bg-slate-900/10">
                                       <td className="py-2.5 px-3">
                                         {log.selfie_url ? (
@@ -1433,11 +1486,12 @@ export const AdminAttendance: React.FC = () => {
                                             log.status === 'PRESENT' ? 'success' : 
                                             log.status === 'LATE' ? 'warning' : 
                                             log.status === 'HALF_DAY' ? 'purple' : 
+                                            log.status === 'LEAVE' ? 'info' : 
                                             log.status === 'HOLIDAY' ? 'indigo' : 'error'
                                           } 
                                           className="text-[9px] py-0.5 px-1.5"
                                         >
-                                          {log.status === 'HALF_DAY' ? 'HALF DAY' : log.status}
+                                          {log.status === 'HALF_DAY' ? 'HALF DAY' : log.status === 'LEAVE' ? 'ON LEAVE' : log.status}
                                         </Badge>
                                       </td>
                                     </tr>

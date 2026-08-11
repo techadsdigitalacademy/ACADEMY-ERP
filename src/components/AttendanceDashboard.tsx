@@ -40,6 +40,8 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   // Admin editing state
   const [editingAttendance, setEditingAttendance] = useState<any | null>(null);
   const [editAttStatus, setEditAttStatus] = useState<string>('PRESENT');
+  const [editClockIn, setEditClockIn] = useState<string>('09:30');
+  const [editClockOut, setEditClockOut] = useState<string>('18:30');
   const [isUpdating, setIsUpdating] = useState(false);
 
   const fetchLogs = async () => {
@@ -98,6 +100,9 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
     if (!editingAttendance) return;
     setIsUpdating(true);
     try {
+      const formattedIn = editClockIn.length === 5 ? `${editClockIn}:00` : editClockIn;
+      const formattedOut = editClockOut.length === 5 ? `${editClockOut}:00` : editClockOut;
+
       if (editingAttendance.isVirtual) {
         // Insert a new attendance row for that date
         const { error } = await supabase
@@ -106,8 +111,8 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
             staff_id: staffId,
             attendance_date: editingAttendance.date,
             status: editAttStatus,
-            punch_in: profileDetails?.shift_start_time || '09:30:00',
-            punch_out: profileDetails?.shift_end_time || '18:30:00',
+            punch_in: formattedIn,
+            punch_out: formattedOut,
             selfie_url: avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256&auto=format&fit=crop'
           });
         if (error) throw error;
@@ -115,7 +120,11 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
         // Update the existing row
         const { error } = await supabase
           .from('attendance')
-          .update({ status: editAttStatus })
+          .update({ 
+            status: editAttStatus,
+            punch_in: formattedIn,
+            punch_out: formattedOut
+          })
           .eq('id', editingAttendance.id);
         if (error) throw error;
       }
@@ -390,7 +399,7 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Present */}
           <Card variant="glass" glowColor="emerald" className="p-3 flex flex-col justify-between border-emerald-500/10 min-h-[80px]">
             <span className="text-[9px] font-bold text-emerald-400 uppercase">Present</span>
@@ -413,12 +422,6 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
           <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-purple-500/10 min-h-[80px]">
             <span className="text-[9px] font-bold text-purple-400 uppercase">Leave</span>
             <p className="text-xl font-extrabold text-purple-400 mt-1">{leaveCount}</p>
-          </Card>
-
-          {/* Holiday */}
-          <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-purple-500/10 min-h-[80px]">
-            <span className="text-[9px] font-bold text-purple-400 uppercase">Holiday</span>
-            <p className="text-xl font-extrabold text-purple-400 mt-1">{holidayCount}</p>
           </Card>
 
           {/* Worked Hours */}
@@ -487,7 +490,7 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
-              {monthlyLogs.slice().reverse().map((log: any) => (
+              {monthlyLogs.slice().reverse().filter((log: any) => !log.isVirtual || log.status !== 'HOLIDAY').map((log: any) => (
                 <tr key={log.date} className="hover:bg-slate-900/10">
                   <td className="py-2.5 px-3">
                     {log.selfie_url ? (
@@ -537,6 +540,18 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
                         onClick={() => {
                           setEditingAttendance(log);
                           setEditAttStatus(log.status === 'HOLIDAY' || log.status === 'LEAVE' ? 'PRESENT' : log.status);
+
+                          let defaultIn = profileDetails?.shift_start_time || '09:30';
+                          if (log.punch_in && log.punch_in !== '-') {
+                            defaultIn = log.punch_in.length >= 5 ? log.punch_in.slice(0, 5) : log.punch_in;
+                          }
+                          setEditClockIn(defaultIn);
+
+                          let defaultOut = profileDetails?.shift_end_time || '18:30';
+                          if (log.punch_out && log.punch_out !== '-') {
+                            defaultOut = log.punch_out.length >= 5 ? log.punch_out.slice(0, 5) : log.punch_out;
+                          }
+                          setEditClockOut(defaultOut);
                         }}
                         className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-indigo-400 transition-colors cursor-pointer"
                       >
@@ -556,37 +571,107 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
             </tbody>
           </table>
         </div>
+      </Card>
 
-        {/* Override status form (Admin Only) */}
-        {isAdmin && editingAttendance && (
-          <form onSubmit={handleUpdateStatus} className="p-4 rounded-xl bg-slate-950/70 border border-indigo-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in mt-4">
-            <div>
-              <p className="text-xs font-bold text-white uppercase tracking-wider">Override Attendance Status</p>
-              <p className="text-[9px] text-slate-500 mt-1 uppercase font-semibold">Date: {editingAttendance.date}</p>
-            </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <select
-                value={editAttStatus}
-                onChange={(e) => setEditAttStatus(e.target.value)}
-                className="px-3 py-1.5 rounded-lg bg-slate-900 border border-white/10 text-xs font-bold text-slate-200 focus:outline-none cursor-pointer"
+      {/* Attendance Edit Modal (Admin Only - Centered Popup) */}
+      {isAdmin && editingAttendance && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+          <div className="relative max-w-md w-full rounded-2xl bg-slate-900 border border-indigo-500/30 p-6 shadow-2xl space-y-5 animate-scale-up">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                  <Edit2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white tracking-wide">Edit Attendance</h3>
+                  <p className="text-xs text-slate-400 font-medium">
+                    {fullName} &bull; <span className="text-indigo-400 font-semibold">{editingAttendance.date}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingAttendance(null)}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
               >
-                <option value="PRESENT">PRESENT</option>
-                <option value="LATE">LATE</option>
-                <option value="HALF_DAY">HALF DAY</option>
-                <option value="LEAVE">LEAVE</option>
-              </select>
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm" type="button" onClick={() => setEditingAttendance(null)}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleUpdateStatus} className="space-y-4">
+              {/* Attendance Status */}
+              <div>
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                  Attendance Status
+                </label>
+                <select
+                  value={editAttStatus}
+                  onChange={(e) => setEditAttStatus(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-white/10 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="PRESENT">PRESENT</option>
+                  <option value="LATE">LATE</option>
+                  <option value="HALF_DAY">HALF DAY</option>
+                  <option value="LEAVE">LEAVE</option>
+                </select>
+              </div>
+
+              {/* Clock In & Clock Out Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Clock-In Time
+                  </label>
+                  <input
+                    type="time"
+                    value={editClockIn}
+                    onChange={(e) => setEditClockIn(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-white/10 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                    Clock-Out Time
+                  </label>
+                  <input
+                    type="time"
+                    value={editClockOut}
+                    onChange={(e) => setEditClockOut(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-white/10 text-xs font-bold text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              {/* Notice */}
+              <div className="p-3 rounded-xl bg-indigo-500/5 border border-indigo-500/10 text-[11px] text-slate-400 leading-relaxed">
+                Updating attendance will record status and timing overrides for this date.
+              </div>
+
+              {/* Footer Actions */}
+              <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/5">
+                <Button 
+                  variant="secondary" 
+                  size="sm" 
+                  type="button" 
+                  onClick={() => setEditingAttendance(null)}
+                >
                   Cancel
                 </Button>
-                <Button variant="primary" size="sm" type="submit" isLoading={isUpdating}>
-                  Save
+                <Button 
+                  variant="primary" 
+                  size="sm" 
+                  type="submit" 
+                  isLoading={isUpdating}
+                >
+                  Save Changes
                 </Button>
               </div>
-            </div>
-          </form>
-        )}
-      </Card>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Lightbox Selfie Modal */}
       {enlargedSelfie && (
