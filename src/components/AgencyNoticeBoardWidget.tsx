@@ -101,28 +101,28 @@ export const AgencyNoticeBoardWidget: React.FC<AgencyNoticeBoardWidgetProps> = (
   };
 
   return (
-    <Card variant="glass" className="p-5 border-white/5 space-y-4">
+    <Card variant="glass" className="p-5 border-slate-200/80 dark:border-white/5 space-y-4">
       {/* Header Bar */}
-      <div className="flex items-center justify-between border-b border-white/5 pb-3.5">
+      <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-white/5 pb-3.5">
         <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
+          <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 dark:text-amber-400">
             <Megaphone className="w-4.5 h-4.5" />
           </div>
           <div>
-            <h3 className="font-extrabold text-white text-sm uppercase tracking-wider flex items-center gap-2">
+            <h3 className="font-extrabold text-slate-900 dark:text-white text-sm uppercase tracking-wider flex items-center gap-2">
               Agency Notice Board
               <Badge variant="warning" className="text-[9px] py-0.2 px-1.5 font-bold">
                 {notices.length} {notices.length === 1 ? 'Notice' : 'Notices'}
               </Badge>
             </h3>
-            <p className="text-[10px] text-slate-400 mt-0.5">Important announcements & staff updates</p>
+            <p className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">Important announcements & staff updates</p>
           </div>
         </div>
 
         {isAdmin && onOpenAdminNoticeModal && (
           <button
             onClick={onOpenAdminNoticeModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-600/30 hover:text-white text-xs font-bold transition-all cursor-pointer shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-600/20 border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-600/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
           >
             <Settings className="w-3.5 h-3.5" />
             Manage Notices
@@ -137,28 +137,28 @@ export const AgencyNoticeBoardWidget: React.FC<AgencyNoticeBoardWidgetProps> = (
             Loading announcements...
           </div>
         ) : notices.length === 0 ? (
-          <div className="text-center py-6 border border-dashed border-white/10 rounded-xl bg-slate-950/20">
-            <Bell className="w-6 h-6 text-slate-600 mx-auto mb-1.5 opacity-60" />
-            <p className="text-xs text-slate-400 font-semibold">No active notices published yet.</p>
-            <p className="text-[10px] text-slate-600 mt-0.5">Admin updates and announcements will appear here.</p>
+          <div className="text-center py-6 border border-dashed border-slate-200 dark:border-white/10 rounded-xl bg-slate-50 dark:bg-slate-950/20">
+            <Bell className="w-6 h-6 text-slate-400 dark:text-slate-600 mx-auto mb-1.5 opacity-60" />
+            <p className="text-xs text-slate-600 dark:text-slate-400 font-semibold">No active notices published yet.</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-600 mt-0.5">Admin updates and announcements will appear here.</p>
           </div>
         ) : (
           notices.map((notice) => (
             <div
               key={notice.id}
-              className="p-3.5 rounded-xl bg-slate-950/50 border border-white/5 hover:border-amber-500/20 transition-all space-y-2"
+              className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200/80 dark:border-white/5 hover:border-amber-500/30 transition-all space-y-2"
             >
               <div className="flex items-start justify-between gap-2">
-                <h4 className="font-bold text-slate-100 text-xs tracking-wide leading-snug">{notice.title}</h4>
-                <span className="text-[9px] text-slate-400 font-medium shrink-0 flex items-center gap-1">
-                  <Calendar className="w-3 h-3 text-slate-500" />
+                <h4 className="font-bold text-slate-900 dark:text-slate-100 text-xs tracking-wide leading-snug">{notice.title}</h4>
+                <span className="text-[9px] text-slate-500 dark:text-slate-400 font-medium shrink-0 flex items-center gap-1">
+                  <Calendar className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                   {formatISTDate(notice.created_at)}
                 </span>
               </div>
-              <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed">{notice.content}</p>
-              <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-medium pt-1 border-t border-white/5">
-                <User className="w-3 h-3 text-indigo-400" />
-                <span>Posted by: <strong className="text-slate-200">{notice.author_name || notice.author?.full_name || 'Management'}</strong></span>
+              <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">{notice.content}</p>
+              <div className="flex items-center gap-1.5 text-[9px] text-slate-500 dark:text-slate-400 font-medium pt-1 border-t border-slate-200/80 dark:border-white/5">
+                <User className="w-3 h-3 text-indigo-500 dark:text-indigo-400" />
+                <span>Posted by: <strong className="text-slate-900 dark:text-slate-200">{notice.author_name || notice.author?.full_name || 'Management'}</strong></span>
               </div>
             </div>
           ))

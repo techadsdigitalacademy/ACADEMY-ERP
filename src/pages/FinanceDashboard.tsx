@@ -194,8 +194,8 @@ export const FinanceDashboard: React.FC = () => {
         const rawName = (sale.staff_name || sale.staff?.full_name || sale.full_name || sale.logged_by_name || '').trim().toLowerCase();
         const sId = sale.staff_id || sale.user_id;
 
-        // 1. Explicit check: If the sale name contains 'althaf' -> Exclude!
-        if (rawName.includes('althaf')) {
+        // 1. Explicit check: If sale contains 'althaf' or 'sana' -> Exclude!
+        if (rawName.includes('althaf') || rawName === 'sana' || rawName === 'sana nesrin') {
           return true;
         }
 
@@ -204,17 +204,17 @@ export const FinanceDashboard: React.FC = () => {
           return false;
         }
 
-        // 3. If sale staff_name matches any active staff member name (Safwana, Sana, Shibili, Ashif, etc.) -> Keep it!
+        // 3. If sale staff_name matches any active staff member name -> Keep it!
         if (rawName) {
           for (const activeName of activeStaffNamesSet) {
-            if (activeName && (activeName.includes(rawName) || rawName.includes(activeName))) {
+            if (activeName && (activeName === rawName || activeName.split(' ')[0] === rawName)) {
               return false;
             }
           }
         }
 
         // 4. Default: Only exclude if staff_id is null AND name is explicitly unassigned or unknown test staff
-        if (!sId && (!rawName || rawName === 'unassigned staff' || rawName === 'unassigned')) {
+        if (!sId && (!rawName || rawName === 'unassigned staff' || rawName === 'unassigned' || rawName === 'sana')) {
           return true;
         }
 
@@ -260,12 +260,23 @@ export const FinanceDashboard: React.FC = () => {
       const activeSalesOnly = (rawSalesData || []).filter(s => !isSaleFromDeletedStaff(s));
       setSalesList(activeSalesOnly);
 
-      // Process monthly sales by ACTIVE staff
+      // Process monthly sales by active staff and owners
       const staffIncomesMap: Record<string, { staffId: string; fullName: string; designation: string; total: number; count: number }> = {};
 
-      // Seed active profiles into map so active staff rows display in the table
+      const isExcludedRoleOrDeletedStaff = (desig: string, name: string) => {
+        const d = (desig || '').toLowerCase();
+        const n = (name || '').toLowerCase();
+        if (d.includes('tutor') || d.includes('counselor') || d.includes('director')) return true;
+        if (n.includes('althaf') || n === 'sana' || n === 'sana nesrin') return true;
+        return false;
+      };
+
+      // Seed active profiles & owners into map so their rows display in the table
       (profilesData || []).forEach(p => {
-        if (p.status === 'INACTIVE') return;
+        if (p.status === 'INACTIVE' || p.status === 'RESIGNED') return;
+        if (!p.full_name) return;
+        if (isExcludedRoleOrDeletedStaff(p.designation, p.full_name)) return;
+
         staffIncomesMap[String(p.id)] = {
           staffId: String(p.id),
           fullName: p.full_name,
@@ -277,14 +288,28 @@ export const FinanceDashboard: React.FC = () => {
 
       activeSalesOnly.forEach(sale => {
         let sId = String(sale.staff_id || sale.user_id || '');
-        let sName = (sale.staff_id && staffIdToNameMap.get(String(sale.staff_id))) || sale.staff_name || sale.staff?.full_name || 'Staff';
+        let sName = (sale.staff_id && staffIdToNameMap.get(String(sale.staff_id))) || sale.staff_name || sale.staff?.full_name || '';
 
-        // Find matching active profile key
+        // 1. Check direct hit by staff_id in staffIncomesMap
         let matchedProfileId = sId;
-        if (!staffIncomesMap[matchedProfileId]) {
+
+        // 2. If staff_id is missing or unseeded, try exact name equality in staffIncomesMap
+        if (!staffIncomesMap[matchedProfileId] && sName) {
+          const lowerName = sName.trim().toLowerCase();
+          for (const [idKey, item] of Object.entries(staffIncomesMap)) {
+            if (item.fullName.trim().toLowerCase() === lowerName) {
+              matchedProfileId = idKey;
+              sName = item.fullName;
+              break;
+            }
+          }
+        }
+
+        // 3. Fallback: try exact name equality in staffIdToNameMap (only exact string match, no loose substring .includes())
+        if (!staffIncomesMap[matchedProfileId] && sName) {
           const lowerName = sName.trim().toLowerCase();
           for (const [idKey, pName] of staffIdToNameMap.entries()) {
-            if (pName.trim().toLowerCase() === lowerName || pName.trim().toLowerCase().includes(lowerName) || lowerName.includes(pName.trim().toLowerCase())) {
+            if (pName.trim().toLowerCase() === lowerName) {
               matchedProfileId = idKey;
               sName = pName;
               break;
@@ -294,36 +319,60 @@ export const FinanceDashboard: React.FC = () => {
 
         const sDesig = staffIdToDesigMap.get(matchedProfileId) || 'Sales Executive';
 
-        if (!staffIncomesMap[matchedProfileId]) {
-          staffIncomesMap[matchedProfileId] = {
-            staffId: matchedProfileId,
-            fullName: sName,
-            designation: sDesig,
-            total: 0,
-            count: 0
-          };
-        }
+        if (matchedProfileId && sName && !isExcludedRoleOrDeletedStaff(sDesig, sName)) {
+          if (!staffIncomesMap[matchedProfileId]) {
+            staffIncomesMap[matchedProfileId] = {
+              staffId: matchedProfileId,
+              fullName: sName,
+              designation: sDesig,
+              total: 0,
+              count: 0
+            };
+          }
 
-        const currentTotal = parseSafeNumber(staffIncomesMap[matchedProfileId].total);
-        const currentCount = parseSafeNumber(staffIncomesMap[matchedProfileId].count);
-        const amt = parseSafeNumber(sale.received_amount);
+          const currentTotal = parseSafeNumber(staffIncomesMap[matchedProfileId].total);
+          const currentCount = parseSafeNumber(staffIncomesMap[matchedProfileId].count);
+          const amt = parseSafeNumber(sale.received_amount);
 
-        if (sale.payment_type === 'Refund') {
-          staffIncomesMap[matchedProfileId].total = currentTotal - amt;
+          if (sale.payment_type === 'Refund') {
+            staffIncomesMap[matchedProfileId].total = currentTotal - amt;
+          } else {
+            staffIncomesMap[matchedProfileId].total = currentTotal + amt;
+            staffIncomesMap[matchedProfileId].count = currentCount + 1;
+          }
         } else {
-          staffIncomesMap[matchedProfileId].total = currentTotal + amt;
-          staffIncomesMap[matchedProfileId].count = currentCount + 1;
+          // Attribute to Direct Agency Sales so all active sales are transparently accounted for
+          const unassignedKey = 'unassigned_direct_sales';
+          if (!staffIncomesMap[unassignedKey]) {
+            staffIncomesMap[unassignedKey] = {
+              staffId: unassignedKey,
+              fullName: 'Direct Agency Sales',
+              designation: 'Direct Income',
+              total: 0,
+              count: 0
+            };
+          }
+          const currentTotal = parseSafeNumber(staffIncomesMap[unassignedKey].total);
+          const currentCount = parseSafeNumber(staffIncomesMap[unassignedKey].count);
+          const amt = parseSafeNumber(sale.received_amount);
+
+          if (sale.payment_type === 'Refund') {
+            staffIncomesMap[unassignedKey].total = currentTotal - amt;
+          } else {
+            staffIncomesMap[unassignedKey].total = currentTotal + amt;
+            staffIncomesMap[unassignedKey].count = currentCount + 1;
+          }
         }
       });
 
-      // 3. Filter out any remaining unlinked/deleted staff rows (like "althaf" or "unassigned") from staffIncomesList
+      // 3. Filter out any unlinked/deleted staff rows (like "althaf" or "sana"), keeping populated income entries
       const staffIncomesArray = Object.values(staffIncomesMap)
         .filter(item => {
           const lower = item.fullName.trim().toLowerCase();
-          if (lower.includes('althaf') || lower === 'unassigned staff' || lower === 'unassigned') {
+          if (lower.includes('althaf') || lower === 'sana' || lower === 'sana nesrin' || lower === 'unassigned staff') {
             return false;
           }
-          return true;
+          return item.count > 0 || item.totalAmount !== 0 || (profilesMap.has(item.staffId) && item.designation === 'Sales Executive');
         })
         .map(info => ({
           staffId: info.staffId,
@@ -703,7 +752,7 @@ export const FinanceDashboard: React.FC = () => {
   // Export Master Financial Report to Excel (CSV with BOM)
   const handleExportFinanceExcel = () => {
     try {
-      const totalIncome = (salesList || []).reduce((sum, s) => sum + (Number(s.received_amount) || 0), 0);
+      const totalIncome = (staffIncomesList || []).reduce((sum, r) => sum + r.totalAmount, 0);
       const totalExpenses = (expenseCategories || []).reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
       const netProfit = totalIncome - totalExpenses;
       const totalWithdrawals = (withdrawalsList || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
@@ -793,7 +842,7 @@ export const FinanceDashboard: React.FC = () => {
   // Export Master Financial Report to PDF
   const handleExportFinancePDF = () => {
     try {
-      const totalIncome = (salesList || []).reduce((sum, s) => sum + (Number(s.received_amount) || 0), 0);
+      const totalIncome = (staffIncomesList || []).reduce((sum, r) => sum + r.totalAmount, 0);
       const totalExpenses = (expenseCategories || []).reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
       const netProfit = totalIncome - totalExpenses;
       const totalWithdrawals = (withdrawalsList || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
@@ -958,14 +1007,14 @@ export const FinanceDashboard: React.FC = () => {
   };
 
   // Summary Metrics calculations
-  const summaryTotalIncome = (salesList || []).reduce((sum, s) => sum + parseSafeNumber(s.received_amount), 0);
+  const summaryTotalIncome = (staffIncomesList || []).reduce((sum, r) => sum + r.totalAmount, 0);
   const summaryTotalExpenses = expenseCategories.reduce((sum, r) => sum + r.totalAmount, 0);
   const summaryNetProfit = summaryTotalIncome - summaryTotalExpenses;
   const summaryTotalWithdrawals = withdrawalsList.reduce((sum, r) => sum + r.amount, 0);
   const finalCompanyBalance = openingBalance + summaryTotalIncome - summaryTotalExpenses - summaryTotalWithdrawals;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-clip">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-hidden">
       {/* Background Lighting Glows */}
       <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/15 blur-[130px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-20%] w-[80vw] h-[80vw] rounded-full bg-purple-900/10 blur-[130px] pointer-events-none"></div>
@@ -974,7 +1023,7 @@ export const FinanceDashboard: React.FC = () => {
       <Sidebar />
 
       {/* Main Container */}
-      <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-24 md:pb-8">
+      <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12">
         
         {/* Header Bar */}
         <header className="glass-panel sticky top-14 lg:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-white/5 backdrop-blur-md">
@@ -1063,41 +1112,41 @@ export const FinanceDashboard: React.FC = () => {
             <>
               {/* Overview Metrics Cards */}
               <div className="grid grid-cols-2 md:grid-cols-8 gap-3">
-                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-white/5 bg-slate-900/40">
-                  <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-wider">Opening Bal</span>
-                  <p className="text-sm md:text-base font-extrabold text-white mt-1.5">{formatCurrency(openingBalance)}</p>
+                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-white/5 dark:border-white/5 light:border-slate-200 bg-slate-900/40 dark:bg-slate-900/40 light:bg-white">
+                  <span className="text-[8.5px] font-bold text-slate-400 dark:text-slate-400 light:text-slate-600 uppercase tracking-wider">Opening Bal</span>
+                  <p className="text-sm md:text-base font-extrabold text-slate-100 dark:text-white light:text-slate-900 mt-1.5">{formatCurrency(openingBalance)}</p>
                 </Card>
 
-                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-white/5 bg-slate-900/40">
-                  <span className="text-[8.5px] font-bold text-emerald-400 uppercase tracking-wider">Total Income</span>
-                  <p className="text-sm md:text-base font-extrabold text-emerald-400 mt-1.5">{formatCurrency(summaryTotalIncome)}</p>
+                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-white/5 dark:border-white/5 light:border-slate-200 bg-slate-900/40 dark:bg-slate-900/40 light:bg-white">
+                  <span className="text-[8.5px] font-bold text-emerald-400 dark:text-emerald-400 light:text-emerald-600 uppercase tracking-wider">Total Income</span>
+                  <p className="text-sm md:text-base font-extrabold text-emerald-400 dark:text-emerald-400 light:text-emerald-600 mt-1.5">{formatCurrency(summaryTotalIncome)}</p>
                 </Card>
 
-                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-white/5 bg-slate-900/40">
-                  <span className="text-[8.5px] font-bold text-rose-400 uppercase tracking-wider">Total Expenses</span>
-                  <p className="text-sm md:text-base font-extrabold text-rose-400 mt-1.5">{formatCurrency(summaryTotalExpenses)}</p>
+                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-white/5 dark:border-white/5 light:border-slate-200 bg-slate-900/40 dark:bg-slate-900/40 light:bg-white">
+                  <span className="text-[8.5px] font-bold text-rose-400 dark:text-rose-400 light:text-rose-600 uppercase tracking-wider">Total Expenses</span>
+                  <p className="text-sm md:text-base font-extrabold text-rose-400 dark:text-rose-400 light:text-rose-600 mt-1.5">{formatCurrency(summaryTotalExpenses)}</p>
                 </Card>
 
                 <Card variant="solid" className={`p-4 flex flex-col justify-between shadow-lg relative overflow-hidden md:col-span-2 ${summaryNetProfit >= 0 ? 'bg-emerald-900/10 border-emerald-500/40 shadow-emerald-500/10' : 'bg-rose-900/10 border-rose-500/40 shadow-rose-500/10'}`}>
                   <div className={`absolute top-0 right-0 w-16 h-16 rounded-bl-full blur-xl ${summaryNetProfit >= 0 ? 'bg-emerald-500/20' : 'bg-rose-500/20'}`}></div>
                   <div className="flex justify-between items-start relative z-10">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${summaryNetProfit >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>Net Profit/Loss</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${summaryNetProfit >= 0 ? 'text-emerald-300 dark:text-emerald-300 light:text-emerald-700' : 'text-rose-300 dark:text-rose-300 light:text-rose-700'}`}>Net Profit/Loss</span>
                     <Badge variant={summaryNetProfit >= 0 ? 'success' : 'error'} className="text-[10px] py-0.5 font-bold">
                       {summaryTotalIncome > 0 ? ((summaryNetProfit / summaryTotalIncome) * 100).toFixed(1) : 0}%
                     </Badge>
                   </div>
-                  <p className={`text-lg md:text-2xl font-black mt-1 relative z-10 ${summaryNetProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{formatCurrency(summaryNetProfit)}</p>
+                  <p className={`text-lg md:text-2xl font-black mt-1 relative z-10 ${summaryNetProfit >= 0 ? 'text-emerald-400 dark:text-emerald-400 light:text-emerald-600' : 'text-rose-400 dark:text-rose-400 light:text-rose-600'}`}>{formatCurrency(summaryNetProfit)}</p>
                 </Card>
 
-                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-white/5 bg-slate-900/40">
-                  <span className="text-[8.5px] font-bold text-purple-400 uppercase tracking-wider">Partner Withdraw</span>
-                  <p className="text-sm md:text-base font-extrabold text-purple-400 mt-1.5">{formatCurrency(summaryTotalWithdrawals)}</p>
+                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-white/5 dark:border-white/5 light:border-slate-200 bg-slate-900/40 dark:bg-slate-900/40 light:bg-white">
+                  <span className="text-[8.5px] font-bold text-purple-400 dark:text-purple-400 light:text-purple-600 uppercase tracking-wider">Partner Withdraw</span>
+                  <p className="text-sm md:text-base font-extrabold text-purple-400 dark:text-purple-400 light:text-purple-600 mt-1.5">{formatCurrency(summaryTotalWithdrawals)}</p>
                 </Card>
 
                 <Card variant="solid" className="p-4 flex flex-col justify-between border-indigo-500/40 bg-indigo-900/10 shadow-lg shadow-indigo-500/10 relative overflow-hidden md:col-span-2">
                   <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/20 rounded-bl-full blur-xl"></div>
-                  <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider relative z-10">Company Remaining Balance</span>
-                  <p className="text-lg md:text-2xl font-black text-indigo-400 mt-1 relative z-10">{formatCurrency(finalCompanyBalance)}</p>
+                  <span className="text-[10px] font-bold text-indigo-300 dark:text-indigo-300 light:text-indigo-700 uppercase tracking-wider relative z-10">Company Remaining Balance</span>
+                  <p className="text-lg md:text-2xl font-black text-indigo-400 dark:text-indigo-400 light:text-indigo-600 mt-1 relative z-10">{formatCurrency(finalCompanyBalance)}</p>
                 </Card>
               </div>
 
@@ -1105,30 +1154,30 @@ export const FinanceDashboard: React.FC = () => {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 
                 {/* LEFT COLUMN: Income List by Staff */}
-                <Card variant="glass" className="p-5 border-white/5 space-y-4">
-                  <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                    <h3 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-2">
+                <Card variant="glass" className="p-5 border-white/5 dark:border-white/5 light:border-slate-200 space-y-4">
+                  <div className="flex items-center justify-between border-b border-white/5 dark:border-white/5 light:border-slate-200 pb-3">
+                    <h3 className="font-bold text-slate-100 dark:text-white light:text-slate-900 text-xs uppercase tracking-wider flex items-center gap-2">
                       <ArrowUpRight className="w-5 h-5 text-emerald-400 animate-pulse" />
                       Monthly Incomes (Sales by Staff)
                     </h3>
                     <Badge variant="success" className="text-[9px] py-0.5">{staffIncomesList.length} staff</Badge>
                   </div>
 
-                  <div className="overflow-x-auto rounded-xl border border-white/5">
+                  <div className="overflow-x-auto rounded-xl border border-white/5 dark:border-white/5 light:border-slate-200">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="bg-slate-900/60 text-[9px] font-bold text-slate-400 uppercase tracking-wider border-b border-white/5">
+                        <tr className="bg-slate-900/60 dark:bg-slate-900/60 light:bg-slate-100 text-[9px] font-bold text-slate-400 dark:text-slate-400 light:text-slate-600 uppercase tracking-wider border-b border-white/5 dark:border-white/5 light:border-slate-200">
                           <th className="py-2.5 px-3">Staff Member</th>
                           <th className="py-2.5 px-3">Designation</th>
                           <th className="py-2.5 px-3 text-center">Sales Count</th>
                           <th className="py-2.5 px-3 text-right">Total Income</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/5">
+                      <tbody className="divide-y divide-white/5 dark:divide-white/5 light:divide-slate-200">
                         {staffIncomesList.map(item => (
-                          <tr key={`inc-${item.staffId}`} className="hover:bg-slate-900/30 transition-colors">
-                            <td className="py-2.5 px-3 font-semibold text-slate-200">{item.fullName}</td>
-                            <td className="py-2.5 px-3 text-slate-400">{item.designation}</td>
+                          <tr key={`inc-${item.staffId}`} className="hover:bg-slate-900/30 dark:hover:bg-slate-900/30 light:hover:bg-slate-100/60 transition-colors">
+                            <td className="py-2.5 px-3 font-semibold text-slate-200 dark:text-slate-200 light:text-slate-900">{item.fullName}</td>
+                            <td className="py-2.5 px-3 text-slate-400 dark:text-slate-400 light:text-slate-600">{item.designation}</td>
                             <td className="py-2.5 px-3 text-center text-slate-500 font-bold">{item.count}</td>
                             <td className="py-2.5 px-3 text-right font-extrabold text-emerald-400">{formatCurrency(item.totalAmount)}</td>
                           </tr>

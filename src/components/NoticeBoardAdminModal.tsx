@@ -107,20 +107,20 @@ export const NoticeBoardAdminModal: React.FC<NoticeBoardAdminModalProps> = ({ on
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto animate-fade-in">
-      <Card variant="glass" className="w-full max-w-2xl bg-slate-900 border border-slate-700 relative shadow-2xl flex flex-col max-h-[85vh]">
+      <Card variant="glass" className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 relative shadow-2xl flex flex-col max-h-[85vh]">
         
         {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-white/5 shrink-0">
+        <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-white/5 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-indigo-500/20 rounded-lg text-indigo-400">
+            <div className="p-2 bg-indigo-500/20 rounded-lg text-indigo-500 dark:text-indigo-400">
               <Megaphone className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-xl font-black text-white">Notice Board Management</h2>
-              <p className="text-xs text-slate-400">Broadcast notices to agency staff</p>
+              <h2 className="text-xl font-black text-slate-900 dark:text-white">Notice Board Management</h2>
+              <p className="text-xs text-slate-600 dark:text-slate-400">Broadcast notices to agency staff</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors">
+          <button onClick={onClose} className="p-2 bg-slate-100 dark:bg-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -131,7 +131,7 @@ export const NoticeBoardAdminModal: React.FC<NoticeBoardAdminModalProps> = ({ on
           <div className="flex justify-end">
             <button 
               onClick={() => setIsAdding(!isAdding)}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-sm font-bold transition-all"
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-indigo-500/20"
             >
               <Plus className="w-4 h-4" />
               {isAdding ? 'Cancel' : 'Create Notice'}
@@ -139,32 +139,32 @@ export const NoticeBoardAdminModal: React.FC<NoticeBoardAdminModalProps> = ({ on
           </div>
 
           {isAdding && (
-            <Card variant="solid" className="p-5 border-indigo-500/30 bg-indigo-500/5">
+            <Card variant="solid" className="p-5 border-indigo-500/30 bg-indigo-50 dark:bg-indigo-500/5">
               <form onSubmit={handleSaveNotice} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Notice Title</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-400 uppercase mb-1.5">Notice Title</label>
                   <input 
                     required 
                     value={title}
                     onChange={e => setTitle(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white text-sm focus:border-indigo-500 focus:outline-none"
                     placeholder="e.g. Schedule Update for April"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">Content</label>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-400 uppercase mb-1.5">Content</label>
                   <textarea 
                     required 
                     rows={4}
                     value={content}
                     onChange={e => setContent(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white text-sm focus:border-indigo-500 focus:outline-none"
+                    className="w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-white text-sm focus:border-indigo-500 focus:outline-none"
                     placeholder="Enter the notice details here..."
                   />
                 </div>
                 <div className="flex justify-end gap-3">
-                  <button type="button" onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-400 hover:text-white text-sm font-bold">Cancel</button>
-                  <button type="submit" disabled={isSaving} className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-bold">
+                  <button type="button" onClick={() => setIsAdding(false)} className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-sm font-bold">Cancel</button>
+                  <button type="submit" disabled={isSaving} className="px-6 py-2 bg-indigo-600 dark:bg-indigo-500 hover:bg-indigo-700 dark:hover:bg-indigo-600 text-white rounded-lg text-sm font-bold shadow-md shadow-indigo-500/20">
                     {isSaving ? 'Publishing...' : 'Publish Notice'}
                   </button>
                 </div>
@@ -176,25 +176,25 @@ export const NoticeBoardAdminModal: React.FC<NoticeBoardAdminModalProps> = ({ on
             {isLoading ? (
               <div className="text-center py-8 text-slate-500 animate-pulse">Loading notices...</div>
             ) : notices.length === 0 ? (
-              <div className="text-center py-12 text-slate-500 italic bg-slate-900/50 rounded-2xl border border-white/5">
+              <div className="text-center py-12 text-slate-500 italic bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200 dark:border-white/5">
                 No active notices found.
               </div>
             ) : (
               notices.map(notice => (
-                <div key={notice.id} className="p-5 rounded-2xl bg-slate-800/50 border border-white/5 hover:border-white/10 transition-colors group">
+                <div key={notice.id} className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-white/5 hover:border-indigo-500/30 dark:hover:border-white/10 transition-colors group">
                   <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-base font-bold text-white">{notice.title}</h3>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">{notice.title}</h3>
                     <button 
                       onClick={() => handleDelete(notice.id)}
-                      className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                      className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                  <p className="text-sm text-slate-300 mb-4 whitespace-pre-wrap leading-relaxed">{notice.content}</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 mb-4 whitespace-pre-wrap leading-relaxed">{notice.content}</p>
                   <div className="flex items-center gap-3 text-[10px] uppercase font-bold text-slate-500 tracking-wider">
                     <span>{new Date(notice.created_at).toLocaleDateString()}</span>
-                    <span>?</span>
+                    <span>•</span>
                     <span>By {notice.author?.full_name || 'Admin'}</span>
                   </div>
                 </div>

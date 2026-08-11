@@ -9,7 +9,7 @@ interface SalesDashboardMetricsProps {
   activeStaff: any;
   isOwner: boolean;
   dailyLeaderboard: { name: string; amount: number; avatar?: string }[];
-  todayAttendanceStats: { present: number; late: number; halfDay: number; leave: number };
+  todayAttendanceStats: { present: number; late: number; halfDay: number; leave: number; inOffice?: number };
   academyRevenue: number;
   totalReceived: number;
   totalPackage: number;
@@ -64,30 +64,30 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
             
             {/* Card 1: Revenue Month Agency & Academy separately */}
             <Card variant="glass" glowColor="indigo" className="p-3.5 sm:p-5 flex flex-col justify-between min-h-[150px] sm:min-h-[160px] border-indigo-500/10">
-              <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">Month's Revenue Stream</span>
+              <span className="text-[10px] font-bold text-indigo-400 dark:text-indigo-400 light:text-indigo-600 uppercase tracking-wider block">Month's Revenue Stream</span>
               <div className="space-y-3.5 mt-3">
-                <div className="bg-slate-950/40 p-2.5 rounded-xl border border-white/5 flex justify-between items-center">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Agency sales:</span>
-                  <span className="text-base font-extrabold text-white">{formatCurrency(totalReceived)}</span>
+                <div className="bg-slate-950/40 dark:bg-slate-950/50 light:bg-slate-100/80 p-2.5 rounded-xl border border-white/5 dark:border-white/5 light:border-slate-200/80 flex justify-between items-center">
+                  <span className="text-[10px] text-slate-400 dark:text-slate-400 light:text-slate-600 font-bold uppercase">Agency sales:</span>
+                  <span className="text-base font-extrabold text-slate-100 dark:text-white light:text-slate-900">{formatCurrency(totalReceived)}</span>
                 </div>
-                <div className="bg-slate-950/40 p-2.5 rounded-xl border border-white/5 flex justify-between items-center">
-                  <span className="text-[10px] text-indigo-300 font-bold uppercase">Academy tuition:</span>
-                  <span className="text-base font-extrabold text-indigo-400">{formatCurrency(academyRevenue)}</span>
+                <div className="bg-slate-950/40 dark:bg-slate-950/50 light:bg-slate-100/80 p-2.5 rounded-xl border border-white/5 dark:border-white/5 light:border-slate-200/80 flex justify-between items-center">
+                  <span className="text-[10px] text-indigo-300 dark:text-indigo-300 light:text-indigo-700 font-bold uppercase">Academy tuition:</span>
+                  <span className="text-base font-extrabold text-indigo-400 dark:text-indigo-400 light:text-indigo-600">{formatCurrency(academyRevenue)}</span>
                 </div>
               </div>
             </Card>
 
             {/* Card 2: Staff Performance Leaderboard */}
-            <Card variant="glass" className="p-5 flex flex-col min-h-[160px] max-h-[180px] overflow-y-auto scrollbar-none border-white/5">
-              <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block mb-3">Daily Staff Leaderboard</span>
+            <Card variant="glass" className="p-5 flex flex-col min-h-[160px] max-h-[180px] overflow-y-auto scrollbar-none border-white/5 dark:border-white/5 light:border-slate-200">
+              <span className="text-[10px] font-bold text-purple-400 dark:text-purple-400 light:text-purple-600 uppercase tracking-wider block mb-3">Daily Staff Leaderboard</span>
               <div className="space-y-2.5">
                 {dailyLeaderboard?.map((item, index) => (
-                  <div key={item.name} className="flex items-center justify-between text-xs bg-slate-950/40 p-2 rounded-lg border border-white/5">
+                  <div key={item.name} className="flex items-center justify-between text-xs bg-slate-950/40 dark:bg-slate-950/50 light:bg-slate-100/80 p-2 rounded-lg border border-white/5 dark:border-white/5 light:border-slate-200">
                     <div className="flex items-center gap-2">
                       <span className="font-black text-amber-400 text-[11px] px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20">{index + 1}.</span>
-                      <span className="font-bold text-slate-200">{item.name}</span>
+                      <span className="font-bold text-slate-200 dark:text-slate-200 light:text-slate-800">{item.name}</span>
                     </div>
-                    <span className="font-extrabold text-emerald-400">{formatCurrency(item.amount)}</span>
+                    <span className="font-extrabold text-emerald-400 dark:text-emerald-400 light:text-emerald-600">{formatCurrency(item.amount)}</span>
                   </div>
                 ))}
                 {dailyLeaderboard.length === 0 && (
@@ -98,23 +98,27 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
 
             {/* Card 3: Today's Attendance Summaries */}
             <Card variant="glass" glowColor="emerald" className="p-5 flex flex-col justify-between min-h-[160px] border-emerald-500/10">
-              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Today's Attendance Status</span>
-              <div className="grid grid-cols-4 gap-2 text-center mt-3">
-                <div className="bg-slate-950/40 p-2 rounded-xl border border-white/5">
-                  <span className="text-lg font-extrabold text-emerald-400">{todayAttendanceStats.present}</span>
-                  <span className="text-[8px] text-slate-500 block uppercase font-bold mt-0.5">Present</span>
+              <span className="text-[10px] font-bold text-emerald-400 dark:text-emerald-400 light:text-emerald-600 uppercase tracking-wider block">Today's Attendance Status</span>
+              <div className="grid grid-cols-5 gap-1.5 sm:gap-2 text-center mt-3">
+                <div className="bg-slate-950/40 dark:bg-slate-950/50 light:bg-slate-100/80 p-1.5 sm:p-2 rounded-xl border border-white/5 dark:border-white/5 light:border-slate-200">
+                  <span className="text-base sm:text-lg font-extrabold text-emerald-400 dark:text-emerald-400 light:text-emerald-600">{todayAttendanceStats.present}</span>
+                  <span className="text-[7.5px] sm:text-[8px] text-slate-400 dark:text-slate-500 light:text-slate-600 block uppercase font-bold mt-0.5">Present</span>
                 </div>
-                <div className="bg-slate-950/40 p-2 rounded-xl border border-white/5">
-                  <span className="text-lg font-extrabold text-amber-400">{todayAttendanceStats.late}</span>
-                  <span className="text-[8px] text-slate-500 block uppercase font-bold mt-0.5">Late</span>
+                <div className="bg-slate-950/40 dark:bg-slate-950/50 light:bg-slate-100/80 p-1.5 sm:p-2 rounded-xl border border-white/5 dark:border-white/5 light:border-slate-200">
+                  <span className="text-base sm:text-lg font-extrabold text-amber-400 dark:text-amber-400 light:text-amber-600">{todayAttendanceStats.late}</span>
+                  <span className="text-[7.5px] sm:text-[8px] text-slate-400 dark:text-slate-500 light:text-slate-600 block uppercase font-bold mt-0.5">Late</span>
                 </div>
-                <div className="bg-slate-950/40 p-2 rounded-xl border border-white/5">
-                  <span className="text-lg font-extrabold text-purple-400">{todayAttendanceStats.halfDay}</span>
-                  <span className="text-[8px] text-slate-500 block uppercase font-bold mt-0.5">Half</span>
+                <div className="bg-slate-950/40 dark:bg-slate-950/50 light:bg-slate-100/80 p-1.5 sm:p-2 rounded-xl border border-white/5 dark:border-white/5 light:border-slate-200">
+                  <span className="text-base sm:text-lg font-extrabold text-purple-400 dark:text-purple-400 light:text-purple-600">{todayAttendanceStats.halfDay}</span>
+                  <span className="text-[7.5px] sm:text-[8px] text-slate-400 dark:text-slate-500 light:text-slate-600 block uppercase font-bold mt-0.5">Half</span>
                 </div>
-                <div className="bg-slate-950/40 p-2 rounded-xl border border-white/5">
-                  <span className="text-lg font-extrabold text-slate-400">{todayAttendanceStats.leave}</span>
-                  <span className="text-[8px] text-slate-500 block uppercase font-bold mt-0.5">Leave</span>
+                <div className="bg-slate-950/40 dark:bg-slate-950/50 light:bg-slate-100/80 p-1.5 sm:p-2 rounded-xl border border-white/5 dark:border-white/5 light:border-slate-200">
+                  <span className="text-base sm:text-lg font-extrabold text-blue-400 dark:text-blue-400 light:text-blue-600">{todayAttendanceStats.leave}</span>
+                  <span className="text-[7.5px] sm:text-[8px] text-slate-400 dark:text-slate-500 light:text-slate-600 block uppercase font-bold mt-0.5">Leave</span>
+                </div>
+                <div className="bg-slate-950/40 dark:bg-slate-950/50 light:bg-slate-100/80 p-1.5 sm:p-2 rounded-xl border border-white/5 dark:border-white/5 light:border-slate-200">
+                  <span className="text-base sm:text-lg font-extrabold text-indigo-400 dark:text-indigo-400 light:text-indigo-600">{todayAttendanceStats.inOffice || 0}</span>
+                  <span className="text-[7.5px] sm:text-[8px] text-slate-400 dark:text-slate-500 light:text-slate-600 block uppercase font-bold mt-0.5">In Office</span>
                 </div>
               </div>
               <span className="text-[10px] text-slate-500 font-medium block mt-2 text-center">Active tallies for today</span>

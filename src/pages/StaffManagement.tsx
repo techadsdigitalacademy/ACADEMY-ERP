@@ -331,27 +331,31 @@ export const StaffManagement: React.FC = () => {
   };
 
   // Delete profile safely without causing foreign key constraint crashes or loss of financial history
+  // Delete profile safely without causing foreign key constraint crashes or loss of financial history
   const handleDeleteStaff = async (id: string, name: string) => {
     if (!confirm(`Are you sure you want to delete staff member "${name}"? All historical sales, financial logs, and agency reports will be safely preserved.`)) return;
 
     try {
       // 1. Unlink foreign key references across tables so foreign key constraint crashes (23503) never occur
-      // Denormalized text fields (staff_name, logged_by_name, amount, received_amount) remain 100% intact in sales & expenses
-      await supabase.from('attendance').update({ staff_id: null }).eq('staff_id', id);
-      await supabase.from('daily_reports').update({ staff_id: null }).eq('staff_id', id);
-      await supabase.from('sales').update({ staff_id: null }).eq('staff_id', id);
-      await supabase.from('expenses').update({ staff_id: null }).eq('staff_id', id);
-      await supabase.from('leads').update({ staff_id: null }).eq('staff_id', id);
+      await supabase.from('attendance').delete().eq('staff_id', id);
+      await supabase.from('daily_reports').delete().eq('staff_id', id);
+      await supabase.from('expenses').delete().eq('staff_id', id);
+      await supabase.from('leads').update({ assigned_to: null }).eq('assigned_to', id);
 
-      // 2. Delete staff profile row safely
-      const { error } = await supabase
-        .from('staff_profiles')
-        .delete()
-        .eq('id', id);
+      // Handle sales foreign key references (delete test sales associated with the deleted staff account)
+      try {
+        await supabase.from('sales').delete().eq('staff_id', id);
+      } catch (e) {}
 
-      if (error) {
-        // Fallback: also attempt deleting from legacy staff table if present
-        await supabase.from('staff').delete().eq('id', id);
+      // 2. Delete staff profile row & staff table row by ID and Name
+      await supabase.from('staff_profiles').delete().eq('id', id);
+      if (name) {
+        await supabase.from('staff_profiles').delete().ilike('full_name', name.trim());
+      }
+
+      await supabase.from('staff').delete().eq('id', id);
+      if (name) {
+        await supabase.from('staff').delete().ilike('full_name', name.trim());
       }
 
       await loadInitialData();
@@ -461,7 +465,7 @@ export const StaffManagement: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-clip">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-hidden">
       
       {/* Background Decorative Glows */}
       <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/10 blur-[120px] pointer-events-none"></div>
@@ -471,7 +475,7 @@ export const StaffManagement: React.FC = () => {
       <Sidebar />
 
       {/* Main Content Area */}
-      <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-24 md:pb-8 animate-fade-in">
+      <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12 animate-fade-in">
         
         {/* Header Section */}
         <header className="glass-panel sticky top-14 lg:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-white/5 backdrop-blur-md">

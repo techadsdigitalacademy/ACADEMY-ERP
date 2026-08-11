@@ -94,7 +94,7 @@ export default function StaffProfileDrawer({ profile, onClose }: StaffProfileDra
             <img 
               src={profile.avatar_url || getAvatarUrl(profile.full_name, profile.gender)} 
               alt={profile.full_name} 
-              className="w-16 h-16 rounded-3xl object-cover bg-slate-900 border-2 border-slate-800" 
+              className="w-16 h-16 rounded-3xl object-cover object-center bg-slate-900 border-2 border-slate-800" 
             />
           <div>
             <h3 className="font-bold text-white text-base leading-tight">{profile.full_name}</h3>

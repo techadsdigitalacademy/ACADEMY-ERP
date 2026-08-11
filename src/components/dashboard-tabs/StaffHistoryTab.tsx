@@ -1189,11 +1189,11 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
     <section className="space-y-6 pt-2 animate-fade-in max-w-7xl mx-auto">
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-base md:text-lg font-extrabold text-white flex items-center gap-2">
-            <Star className="w-5 h-5 text-indigo-400" />
+          <h2 className="text-base md:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+            <Star className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
             Staff Performance Registers
           </h2>
-          <span className="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded-lg border border-slate-700 font-bold">
+          <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-400 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-bold">
             {validStaffProfiles.length} Accounts ({activeMonthStr})
           </span>
         </div>
@@ -1203,44 +1203,87 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
           <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2 border-l-2 border-indigo-500/30">
             Sales & Field Operations
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
             {salesTeam?.map(member => {
               const cardTarget = monthTargetsMap[member.id] ?? resolveMonthTarget(member, activeMonthStr);
+              const achievedAmt = member.achievedAmount || 0;
+              const targetPct = cardTarget > 0 ? Math.min(Math.round((achievedAmt / cardTarget) * 100), 100) : 0;
+              const avatarSrc = member.avatar_url || getAvatarUrl(member.full_name, member.gender);
+
               return (
                 <div 
                   key={member.id}
                   onClick={() => setSelectedProfile(member)}
-                  className="p-4 rounded-2xl bg-slate-900/30 border border-white/5 hover:border-indigo-500/20 transition-all duration-300 cursor-pointer flex gap-3.5 items-start hover:bg-slate-900/60 group"
+                  className="group relative p-5 rounded-2xl bg-white dark:bg-slate-900/40 backdrop-blur-md border border-slate-200/90 dark:border-white/10 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:bg-slate-50 dark:hover:bg-slate-900/70 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-4"
                 >
-                  <img 
-                    src={member.avatar_url || `https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(member.full_name)}`} 
-                    alt="" 
-                    className="w-12 h-12 rounded-full border border-white/10 group-hover:scale-105 transition-transform shrink-0"
-                  />
-                  <div className="space-y-1.5 min-w-0 flex-1">
-                    <div>
-                      <h4 className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors truncate">{member.full_name}</h4>
-                      <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{member.designation}</p>
+                  {/* Top Header Row */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="relative shrink-0">
+                        <img 
+                          src={avatarSrc} 
+                          alt={member.full_name} 
+                          className="w-12 h-12 rounded-2xl object-cover border-2 border-indigo-500/30 group-hover:border-indigo-400 group-hover:scale-105 transition-all duration-300 bg-slate-100 dark:bg-slate-950"
+                        />
+                        <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full" title="Active Staff"></span>
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-extrabold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors truncate">
+                          {member.full_name}
+                        </h4>
+                        <span className="inline-block mt-0.5 text-[9.5px] font-bold text-indigo-600 dark:text-indigo-300 uppercase tracking-wider bg-indigo-50 dark:bg-indigo-500/15 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-500/20">
+                          {member.designation}
+                        </span>
+                      </div>
                     </div>
 
-                    {/* SALES PERFORMANCE STATS */}
-                    <div className="pt-1.5 border-t border-white/5 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-300">
-                      <div>
-                        <span className="text-slate-500 font-bold uppercase text-[9px] block">Target</span>
-                        <span className="text-slate-200">{formatCurrency(cardTarget)}</span>
+                    <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/50 group-hover:bg-indigo-600 group-hover:text-white text-slate-600 dark:text-slate-400 transition-all border border-slate-200 dark:border-white/5 shrink-0">
+                      <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
+                    </div>
+                  </div>
+
+                  {/* Target Progress Bar (Sales) */}
+                  {cardTarget > 0 && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex justify-between items-center text-[10px] font-bold">
+                        <span className="text-slate-500 dark:text-slate-400 uppercase tracking-wider">Target Goal</span>
+                        <span className={targetPct >= 100 ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-indigo-600 dark:text-indigo-300 font-extrabold'}>
+                          {targetPct}% Achieved
+                        </span>
                       </div>
-                      <div>
-                        <span className="text-slate-500 font-bold uppercase text-[9px] block">Achieved</span>
-                        <span className="text-emerald-400 font-bold">{formatCurrency(member.achievedAmount || 0)}</span>
+                      <div className="w-full bg-slate-100 dark:bg-slate-950/80 h-2 rounded-full overflow-hidden border border-slate-200 dark:border-white/5 p-0.5">
+                        <div 
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            targetPct >= 100 
+                              ? 'bg-gradient-to-r from-emerald-500 to-teal-400 shadow-sm shadow-emerald-500/50' 
+                              : 'bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400'
+                          }`}
+                          style={{ width: `${targetPct}%` }}
+                        ></div>
                       </div>
-                      <div>
-                        <span className="text-slate-500 font-bold uppercase text-[9px] block">Works</span>
-                        <span className="text-indigo-300">{member.salesWorksCount || 0}</span>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 font-bold uppercase text-[9px] block">Att</span>
-                        <span className="text-teal-300">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0}</span>
-                      </div>
+                    </div>
+                  )}
+
+                  {/* Metric Pillars Grid */}
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/80 dark:border-white/5">
+                    <div className="bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 flex flex-col justify-between">
+                      <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Target</span>
+                      <span className="text-xs font-black text-slate-800 dark:text-slate-200 mt-1">{formatCurrency(cardTarget)}</span>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 flex flex-col justify-between">
+                      <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Achieved</span>
+                      <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-1">{formatCurrency(achievedAmt)}</span>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 flex flex-col justify-between">
+                      <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Deals Logged</span>
+                      <span className="text-xs font-black text-indigo-700 dark:text-indigo-300 mt-1">{member.salesWorksCount || 0} Works</span>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 flex flex-col justify-between">
+                      <span className="text-[9px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">Attendance</span>
+                      <span className="text-xs font-black text-teal-700 dark:text-teal-300 mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
                     </div>
                   </div>
                 </div>
@@ -1255,38 +1298,57 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2 border-l-2 border-emerald-500/30">
               Creative & Marketing Team
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {creativeTeam.map(member => (
-                <div 
-                  key={member.id}
-                  onClick={() => setSelectedProfile(member)}
-                  className="p-4 rounded-2xl bg-slate-900/30 border border-white/5 hover:border-emerald-500/20 transition-all duration-300 cursor-pointer flex gap-3.5 items-start hover:bg-slate-900/60 group"
-                >
-                  <img 
-                    src={member.avatar_url || `https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(member.full_name)}`} 
-                    alt="" 
-                    className="w-12 h-12 rounded-full border border-white/10 group-hover:scale-105 transition-transform shrink-0"
-                  />
-                  <div className="space-y-1.5 min-w-0 flex-1">
-                    <div>
-                      <h4 className="text-sm font-bold text-white group-hover:text-emerald-300 transition-colors truncate">{member.full_name}</h4>
-                      <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">{member.designation}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
+              {creativeTeam.map(member => {
+                const avatarSrc = member.avatar_url || getAvatarUrl(member.full_name, member.gender);
+
+                return (
+                  <div 
+                    key={member.id}
+                    onClick={() => setSelectedProfile(member)}
+                    className="group relative p-5 rounded-2xl bg-white dark:bg-slate-900/40 backdrop-blur-md border border-slate-200/90 dark:border-white/10 hover:border-emerald-500/40 dark:hover:border-emerald-500/40 hover:bg-slate-50 dark:hover:bg-slate-900/70 hover:shadow-xl hover:shadow-emerald-500/10 transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-4"
+                  >
+                    {/* Top Header Row */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="relative shrink-0">
+                          <img 
+                            src={avatarSrc} 
+                            alt={member.full_name} 
+                            className="w-12 h-12 rounded-2xl object-cover border-2 border-emerald-500/30 group-hover:border-emerald-400 group-hover:scale-105 transition-all duration-300 bg-slate-100 dark:bg-slate-950"
+                          />
+                          <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full" title="Active Staff"></span>
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-extrabold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-300 transition-colors truncate">
+                            {member.full_name}
+                          </h4>
+                          <span className="inline-block mt-0.5 text-[9.5px] font-bold text-emerald-600 dark:text-emerald-300 uppercase tracking-wider bg-emerald-50 dark:bg-emerald-500/15 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-500/20">
+                            {member.designation}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/50 group-hover:bg-emerald-600 group-hover:text-white text-slate-600 dark:text-slate-400 transition-all border border-slate-200 dark:border-white/5 shrink-0">
+                        <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
+                      </div>
                     </div>
 
-                    {/* CREATIVE/SUPPORT PERFORMANCE STATS */}
-                    <div className="pt-1.5 border-t border-white/5 flex items-center gap-4 text-[11px] font-semibold text-slate-300">
-                      <div>
-                        <span className="text-slate-500 font-bold uppercase text-[9px] block">Works</span>
-                        <span className="text-emerald-300">{member.creativeWorksCount || 0}</span>
+                    {/* Metric Pillars Grid */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/80 dark:border-white/5">
+                      <div className="bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 flex flex-col justify-between">
+                        <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Completed Works</span>
+                        <span className="text-xs font-black text-emerald-700 dark:text-emerald-300 mt-1">{member.creativeWorksCount || 0} Deliverables</span>
                       </div>
-                      <div>
-                        <span className="text-slate-500 font-bold uppercase text-[9px] block">Att</span>
-                        <span className="text-teal-300">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0}</span>
+
+                      <div className="bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 flex flex-col justify-between">
+                        <span className="text-[9px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">Attendance Log</span>
+                        <span className="text-xs font-black text-teal-700 dark:text-teal-300 mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

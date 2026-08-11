@@ -20,16 +20,16 @@ export const Card: React.FC<CardProps> = ({
   const baseStyles = 'rounded-2xl transition-all duration-300 relative overflow-hidden';
   
   const variantStyles = {
-    glass: 'glass-card border border-white/5 shadow-xl shadow-slate-950/40',
-    solid: 'bg-slate-900 border border-slate-800 shadow-xl shadow-slate-950/30',
-    interactive: 'glass-card border border-white/5 hover:border-white/10 hover:bg-slate-800/50 hover:shadow-2xl hover:shadow-indigo-500/5 cursor-pointer hover:-translate-y-1 transform active:scale-98'
+    glass: 'glass-card border border-slate-200/80 dark:border-white/10 bg-white dark:bg-slate-900/60 shadow-lg shadow-slate-200/50 dark:shadow-slate-950/40',
+    solid: 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/60 dark:shadow-slate-950/30',
+    interactive: 'glass-card border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/60 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:shadow-xl hover:shadow-indigo-500/10 cursor-pointer hover:-translate-y-0.5 transform active:scale-98'
   };
 
   const glowStyles = {
     none: '',
-    indigo: 'after:absolute after:top-0 after:left-1/4 after:w-1/2 after:h-px after:bg-gradient-to-r after:from-transparent after:via-indigo-500/40 after:to-transparent',
-    purple: 'after:absolute after:top-0 after:left-1/4 after:w-1/2 after:h-px after:bg-gradient-to-r after:from-transparent after:via-purple-500/40 after:to-transparent',
-    emerald: 'after:absolute after:top-0 after:left-1/4 after:w-1/2 after:h-px after:bg-gradient-to-r after:from-transparent after:via-emerald-500/40 after:to-transparent'
+    indigo: 'glow-indigo',
+    purple: 'glow-purple',
+    emerald: 'glow-emerald'
   };
 
   return (

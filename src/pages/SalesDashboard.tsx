@@ -88,7 +88,7 @@ export const SalesDashboard: React.FC = () => {
 
   const [isAdminView, setIsAdminView] = useState(false);
   const [isClosingReportOpen, setIsClosingReportOpen] = useState(false);
-  const [todayAttendanceStats, setTodayAttendanceStats] = useState({ present: 0, late: 0, halfDay: 0, leave: 0 });
+  const [todayAttendanceStats, setTodayAttendanceStats] = useState({ present: 0, late: 0, halfDay: 0, leave: 0, inOffice: 0 });
   const [academyRevenue, setAcademyRevenue] = useState(0);
   const [dailyLeaderboard, setDailyLeaderboard] = useState<{ name: string; amount: number; avatar?: string }[]>([]);
 
@@ -164,26 +164,111 @@ export const SalesDashboard: React.FC = () => {
             targetsRes,
             salesRes,
             reportsRes,
-            monthAttRes
+            monthAttRes,
+            staffRes
           ] = await Promise.all([
-            supabase.from('attendance').select('status').eq('attendance_date', todayStr),
+            supabase.from('attendance').select('staff_id, status, punch_in').eq('attendance_date', todayStr),
             supabase.from('academy_student_payments').select('amount'),
             supabase.from('staff_profiles').select('*').order('created_at', { ascending: false }),
             supabase.from('staff').select('id, monthly_target_amount, monthly_targets, full_name, avatar_url'),
             supabase.from('sales').select('*'),
             supabase.from('daily_reports').select('*'),
-            supabase.from('attendance').select('staff_id, status, attendance_date')
+            supabase.from('attendance').select('staff_id, status, attendance_date'),
+            supabase.from('staff').select('*, departments(name), roles(role_name)')
           ]);
 
-          // 1. Process Today Attendance
-          let present = 0, late = 0, halfDay = 0, leave = 0;
-          attendanceRes.data?.forEach(a => {
-            if (a.status === 'PRESENT') present++;
-            if (a.status === 'LATE') late++;
-            if (a.status === 'HALF_DAY') halfDay++;
-            if (a.status === 'LEAVE') leave++;
+          // Helper to identify Company Owners (matching AdminAttendance.tsx)
+          const isOwnerProfile = (p: any) => {
+            if (!p || !p.full_name) return true;
+            const cleanName = String(p.full_name || '').trim().toLowerCase();
+            const desig = String(p.designation || '').toLowerCase().trim();
+            const rName = String(p.role_name || p.role || '').toLowerCase().trim();
+
+            if (cleanName.includes('althaf') || cleanName.includes('shibili') || cleanName.includes('ashif')) return true;
+            if (desig.includes('owner') || rName.includes('owner') || desig.includes('managing director') || rName.includes('managing director')) return true;
+
+            return false;
+          };
+
+          // Filter active profiles matching Staff Management directory (excludes Company Owners, tutors, counselors, admins)
+          const profilesData = profilesRes.data || [];
+          const activeProfiles = profilesData.filter((p: any) => {
+            if (!p || !p.full_name) return false;
+            if (p.status === 'INACTIVE' || p.status === 'RESIGNED') return false;
+            if (isOwnerProfile(p)) return false;
+
+            const desig = String(p.designation || '').toLowerCase().trim();
+            const rName = String(p.role_name || p.role || '').toLowerCase().trim();
+
+            const isTutor = desig.includes('tutor') || rName.includes('tutor');
+            const isCounselor = desig.includes('counselor') || rName.includes('counselor');
+            const isAdminDir = desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director');
+
+            if (isAdminDir) return false;
+            if (isTutor || isCounselor) return false;
+
+            return true;
           });
-          setTodayAttendanceStats({ present, late, halfDay, leave });
+
+          const staffByCleanName = new Map<string, any>();
+          (staffRes.data || []).forEach((s: any) => {
+            if (s.full_name) {
+              staffByCleanName.set(s.full_name.trim().toLowerCase(), s);
+            }
+          });
+
+          const todayAttLogs = attendanceRes.data || [];
+
+          const staffList = activeProfiles.map((p: any) => {
+            const sMatch = staffByCleanName.get(p.full_name.trim().toLowerCase());
+            const staffId = sMatch?.id || p.id;
+            const todayRecord = todayAttLogs.find((a: any) => 
+              (a.staff_id === staffId || a.staff_id === p.id)
+            );
+            return {
+              id: staffId,
+              full_name: p.full_name,
+              todayRecord
+            };
+          });
+
+          // Present: strictly present on time (excluding Late and Half Day)
+          const present = staffList.filter(s => {
+            if (!s.todayRecord) return false;
+            const status = s.todayRecord.status;
+            const punchIn = s.todayRecord.punch_in;
+            return status === 'PRESENT' && (!punchIn || punchIn <= '09:30:00');
+          }).length;
+
+          // Late: marked as Late or present with punch_in > 09:30:00
+          const late = staffList.filter(s => {
+            if (!s.todayRecord) return false;
+            const status = s.todayRecord.status;
+            const punchIn = s.todayRecord.punch_in;
+            return status === 'LATE' || (status === 'PRESENT' && punchIn && punchIn > '09:30:00');
+          }).length;
+
+          // Half Day: marked as Half Day
+          const halfDay = staffList.filter(s => {
+            if (!s.todayRecord) return false;
+            return s.todayRecord.status === 'HALF_DAY';
+          }).length;
+
+          // On Leave / Absent: staff who haven't punched in yet or are on leave/absent
+          const leave = staffList.filter(s => {
+            if (!s.todayRecord) return true;
+            const status = s.todayRecord.status;
+            return status === 'LEAVE' || status === 'ABSENT';
+          }).length;
+
+          // In Office: total count of everyone inside the office today (Present + Late + Half Day combined who punched in)
+          const inOffice = staffList.filter(s => {
+            if (!s.todayRecord) return false;
+            const { punch_in, status } = s.todayRecord;
+            return !!punch_in && (status === 'PRESENT' || status === 'LATE' || status === 'HALF_DAY');
+          }).length;
+
+          setTodayAttendanceStats({ present, late, halfDay, leave, inOffice });
 
           // 2. Process Academy Revenue
           const sumRev = paymentsRes.data?.reduce((acc, p) => acc + p.amount, 0) || 0;
@@ -1517,20 +1602,20 @@ export const SalesDashboard: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-clip">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-hidden">
       
       {/* Dynamic background lighting */}
-      <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/15 blur-[130px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-20%] w-[80vw] h-[80vw] rounded-full bg-purple-900/10 blur-[130px] pointer-events-none"></div>
+      <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-500/10 dark:bg-indigo-900/15 blur-[130px] pointer-events-none"></div>
+      <div className="absolute bottom-[-10%] right-[-20%] w-[80vw] h-[80vw] rounded-full bg-purple-500/5 dark:bg-purple-900/10 blur-[130px] pointer-events-none"></div>
 
       {/* Sidebar Navigation */}
       <Sidebar />
 
       {/* Main Container */}
-      <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-24 md:pb-8">
+      <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12">
         
         {/* Header */}
-        <header className="glass-panel sticky top-14 lg:top-0 z-30 px-3 sm:px-6 md:px-8 py-2.5 sm:py-3.5 border-b border-white/5 backdrop-blur-md">
+        <header className="glass-panel sticky top-14 lg:top-0 z-30 px-3 sm:px-6 md:px-8 py-2.5 sm:py-3.5 border-b border-slate-200 dark:border-white/5 backdrop-blur-md">
           <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-4">
             <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4 w-full sm:w-auto">
               <div className="flex items-center gap-2 min-w-0">
@@ -1541,7 +1626,7 @@ export const SalesDashboard: React.FC = () => {
                 >
                   <Menu className="w-5 h-5" />
                 </button>
-                <h1 className="text-xs sm:text-sm md:text-lg font-bold text-white tracking-wide truncate">
+                <h1 className="text-xs sm:text-sm md:text-lg font-bold text-slate-900 dark:text-white tracking-wide truncate">
                   {isAdminView ? 'Admin Control Dashboard' :  'Consultant Sales Terminal'}
                 </h1>
               </div>

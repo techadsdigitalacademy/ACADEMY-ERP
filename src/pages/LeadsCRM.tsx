@@ -547,7 +547,7 @@ export const LeadsCRM: React.FC = () => {
   const totalAllocated = Object.values(staffQuotas).reduce((a, b) => a + b, 0);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-clip">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-hidden">
       
       {/* Background Decorative Glows */}
       <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/10 blur-[120px] pointer-events-none"></div>
@@ -557,7 +557,7 @@ export const LeadsCRM: React.FC = () => {
       <Sidebar />
 
       {/* Main Container */}
-      <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-24 md:pb-8">
+      <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12">
         
         {/* Header */}
         <header className="glass-panel sticky top-14 lg:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-white/5 backdrop-blur-md">
