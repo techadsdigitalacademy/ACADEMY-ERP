@@ -10,6 +10,8 @@ import { ExpenseHistoryTab } from './ExpenseHistoryTab';
 import { SelfieLightboxModal } from '../sales-dashboard/SelfieLightboxModal';
 import { supabase } from '../../services/supabase';
 import { formatCurrency } from '../../services/mockData';
+import { dataCache } from '../../services/dataCache';
+import { TableSkeleton } from '../Skeleton';
 
 interface StaffHistoryTabProps {
   staffProfiles: any[];
@@ -194,26 +196,35 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
   useEffect(() => {
     const fetchGridMonthTargets = async () => {
       try {
-        const { data: staffRows } = await supabase
-          .from('staff')
-          .select('id, full_name, monthly_target_amount, monthly_targets');
+        const cacheKey = `grid_targets_${activeMonthStr}`;
+        const map = await dataCache.fetchWithCache(
+          cacheKey,
+          async () => {
+            const { data: staffRows } = await supabase
+              .from('staff')
+              .select('id, full_name, monthly_target_amount, monthly_targets');
 
-        const map: { [staffId: string]: number } = {};
-        const dbStaffMap: { [name: string]: any } = {};
-        staffRows?.forEach(r => {
-          if (r.id) map[r.id] = resolveMonthTarget(r, activeMonthStr);
-          if (r.full_name) dbStaffMap[r.full_name] = r;
-        });
+            const m: { [staffId: string]: number } = {};
+            const dbStaffMap: { [name: string]: any } = {};
+            staffRows?.forEach(r => {
+              if (r.id) m[r.id] = resolveMonthTarget(r, activeMonthStr);
+              if (r.full_name) dbStaffMap[r.full_name] = r;
+            });
 
-        validStaffProfiles.forEach(staff => {
-          if (map[staff.id] !== undefined) return;
-          const match = dbStaffMap[staff.full_name];
-          if (match) {
-            map[staff.id] = resolveMonthTarget(match, activeMonthStr);
-          } else {
-            map[staff.id] = resolveMonthTarget(staff, activeMonthStr);
-          }
-        });
+            validStaffProfiles.forEach(staff => {
+              if (m[staff.id] !== undefined) return;
+              const match = dbStaffMap[staff.full_name];
+              if (match) {
+                m[staff.id] = resolveMonthTarget(match, activeMonthStr);
+              } else {
+                m[staff.id] = resolveMonthTarget(staff, activeMonthStr);
+              }
+            });
+
+            return m;
+          },
+          { ttlMs: 60000 }
+        );
 
         setMonthTargetsMap(map);
       } catch (err) {
@@ -235,7 +246,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
       fetchProfileDetails(selectedProfile, activeMonthStr);
 
       const handleExpensesChanged = () => {
-        fetchProfileDetails(selectedProfile, activeMonthStr);
+        fetchProfileDetails(selectedProfile, activeMonthStr, true);
       };
 
       window.addEventListener('company_expenses_changed', handleExpensesChanged);
@@ -248,29 +259,46 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
   const fetchProfileDetails = async (p: any, monthFilter: string, isBackground = false) => {
     if (!isBackground) setIsLoadingDetails(true);
     try {
-      let staffRecord: any = null;
-      try {
-        if (p.id) {
-          const { data: byId } = await supabase
-            .from('staff')
-            .select('id, monthly_target_amount, monthly_targets')
-            .eq('id', p.id)
-            .maybeSingle();
-          if (byId) staffRecord = byId;
-        }
+      const cacheKey = `profile_details_${p.id || p.full_name}_${monthFilter}`;
+      const bundle = await dataCache.fetchWithCache(
+        cacheKey,
+        async () => {
+          const staffQuery = p.id
+            ? supabase.from('staff').select('id, full_name, monthly_target_amount, monthly_targets').eq('id', p.id).maybeSingle()
+            : supabase.from('staff').select('id, full_name, monthly_target_amount, monthly_targets').ilike('full_name', p.full_name).maybeSingle();
 
-        if (!staffRecord && p.full_name) {
-          const { data: byName } = await supabase
-            .from('staff')
-            .select('id, monthly_target_amount, monthly_targets')
-            .ilike('full_name', p.full_name)
-            .maybeSingle();
-          if (byName) staffRecord = byName;
-        }
-      } catch (err) {
-        console.warn('Staff record fetch warning:', err);
-      }
+          const [
+            staffRes,
+            salesRes,
+            reportRes,
+            leadRes,
+            exp1Res,
+            exp2Res,
+            exp3Res
+          ] = await Promise.all([
+            staffQuery,
+            supabase.from('sales').select('*').order('created_at', { ascending: false }),
+            supabase.from('daily_reports').select('*').eq('staff_id', p.id).order('report_date', { ascending: false }),
+            supabase.from('leads').select('*').eq('assigned_to', p.id).order('created_at', { ascending: false }),
+            p.id ? supabase.from('expenses').select('*').eq('staff_id', p.id).order('expense_date', { ascending: false }) : Promise.resolve({ data: [] }),
+            p.id ? supabase.from('owner_expenses').select('*').eq('staff_id', p.id).order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+            p.id ? supabase.from('partner_withdrawals').select('*').or(`partner_id.eq.${p.id},partner_name.eq.${p.full_name || ''}`).order('withdrawal_date', { ascending: false }) : Promise.resolve({ data: [] })
+          ]);
 
+          return {
+            staffRecord: staffRes.data || null,
+            allSalesData: salesRes.data || [],
+            reportData: reportRes.data || [],
+            leadData: leadRes.data || [],
+            exp1: exp1Res.data || [],
+            exp2: exp2Res.data || [],
+            exp3: exp3Res.data || []
+          };
+        },
+        { ttlMs: 45000, forceRefresh: isBackground }
+      );
+
+      const staffRecord = bundle.staffRecord;
       const targetStaffId = staffRecord ? staffRecord.id : p.id;
       setSelectedStaffId(targetStaffId);
 
@@ -278,18 +306,12 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
       setProfileTarget(activeTarget);
       setNewTargetInput(activeTarget > 0 ? activeTarget.toString() : '');
 
-      // Fetch Sales & filter strictly for monthFilter
-      const { data: allSalesData } = await supabase
-        .from('sales')
-        .select('*')
-        .order('created_at', { ascending: false });
-
       const targetIdStr = String(targetStaffId || '').trim();
       const pIdStr = String(p.id || '').trim();
       const pNameTrim = String(p.full_name || staffRecord?.full_name || '').trim().toLowerCase();
       const pFirstName = pNameTrim ? pNameTrim.split(' ')[0] : '';
 
-      const matchedSales = (allSalesData || []).filter((s: any) => {
+      const matchedSales = (bundle.allSalesData || []).filter((s: any) => {
         if (!s) return false;
         const sStaffId = String(s.staff_id || '').trim();
         const sUserId = String(s.user_id || '').trim();
@@ -333,110 +355,44 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
         return false;
       });
 
-      // Fetch Daily Reports & filter strictly for monthFilter
-      const { data: reportData } = await supabase
-        .from('daily_reports')
-        .select('*')
-        .eq('staff_id', targetStaffId)
-        .order('report_date', { ascending: false });
+      const filteredReports = (bundle.reportData || []).filter((r: any) => r.report_date?.startsWith(monthFilter));
 
-      const filteredReports = (reportData || []).filter(r => r.report_date?.startsWith(monthFilter));
-
-      // Fetch Assigned Leads & filter for monthFilter if created_at exists
-      const { data: leadData } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('assigned_to', targetStaffId)
-        .order('created_at', { ascending: false });
-
-      const filteredLeads = (leadData || []).filter(l => {
+      const filteredLeads = (bundle.leadData || []).filter((l: any) => {
         if (!l.created_at) return true;
         return l.created_at.startsWith(monthFilter);
       });
 
-      // Fetch Owner Expenses, Partner Withdrawals & LocalStorage with Seed Fallback
-      let rawCombined: any[] = [];
-      try {
-        let exp1: any[] = [];
-        let exp2: any[] = [];
-        let exp3: any[] = [];
-
-        if (targetStaffId) {
-          const { data: res1 } = await supabase
-            .from('expenses')
-            .select('*')
-            .eq('staff_id', targetStaffId)
-            .order('expense_date', { ascending: false });
-          if (res1) exp1 = res1;
-
-          const { data: res2 } = await supabase
-            .from('owner_expenses')
-            .select('*')
-            .eq('staff_id', targetStaffId)
-            .order('created_at', { ascending: false });
-          if (res2) exp2 = res2;
-        }
-
-        const pNameStr = p?.full_name || '';
-        let pwQuery = supabase.from('partner_withdrawals').select('*');
-        if (targetStaffId && pNameStr) {
-          pwQuery = pwQuery.or(`partner_id.eq.${targetStaffId},partner_name.eq.${pNameStr}`);
-        } else if (targetStaffId) {
-          pwQuery = pwQuery.eq('partner_id', targetStaffId);
-        } else if (pNameStr) {
-          pwQuery = pwQuery.eq('partner_name', pNameStr);
-        }
-        const { data: res3 } = await pwQuery.order('withdrawal_date', { ascending: false });
-        if (res3) exp3 = res3;
-
-        let localExp: any[] = [];
-        const keysToTry = ['company_expenses_local_store', 'expenses', 'owner_expenses', 'expenses_list'];
-        keysToTry.forEach(k => {
-          try {
-            const raw = localStorage.getItem(k);
-            if (raw) {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed)) {
-                // Filter local storage items by the exact owner ID or Name
-                const matchingItems = parsed.filter(item => 
-                  item.staff_id === targetStaffId || 
-                  item.logged_by_name === p.full_name ||
-                  item.created_by === targetStaffId
-                );
-                localExp.push(...matchingItems);
-              }
+      let localExp: any[] = [];
+      const keysToTry = ['company_expenses_local_store', 'expenses', 'owner_expenses', 'expenses_list'];
+      keysToTry.forEach(k => {
+        try {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              const matchingItems = parsed.filter((item: any) => 
+                item.staff_id === targetStaffId || 
+                item.logged_by_name === p.full_name ||
+                item.created_by === targetStaffId
+              );
+              localExp.push(...matchingItems);
             }
-          } catch (e) {}
-        });
+          }
+        } catch (e) {}
+      });
 
-        const withdrawalsAsExpenses = (exp3 || []).map((w: any) => ({
-          id: w.id || 'withdrawal-' + (w.created_at || Date.now()),
-          category: 'Partner Withdrawal',
-          description: w.notes || w.description || `Partner Withdrawal (${w.partner_name || p.full_name})`,
-          amount: Number(w.amount) || 0,
-          expense_date: w.withdrawal_date || w.created_at?.substring(0, 10),
-          staff_id: w.partner_id || targetStaffId,
-          created_at: w.created_at || w.withdrawal_date
-        }));
+      const withdrawalsAsExpenses = (bundle.exp3 || []).map((w: any) => ({
+        id: w.id || 'withdrawal-' + (w.created_at || Date.now()),
+        category: 'Partner Withdrawal',
+        description: w.notes || w.description || `Partner Withdrawal (${w.partner_name || p.full_name})`,
+        amount: Number(w.amount) || 0,
+        expense_date: w.withdrawal_date || w.created_at?.substring(0, 10),
+        staff_id: w.partner_id || targetStaffId,
+        created_at: w.created_at || w.withdrawal_date
+      }));
 
-        rawCombined = [...(exp1 || []), ...(exp2 || []), ...withdrawalsAsExpenses, ...localExp];
+      const rawCombined = [...(bundle.exp1 || []), ...(bundle.exp2 || []), ...withdrawalsAsExpenses, ...localExp];
 
-        console.log(`🔍 [Expense Debug] Querying expenses for ${p.full_name}:`, {
-          targetStaffId,
-          profileId: p.id,
-          expensesCount: exp1?.length || 0,
-          ownerExpensesCount: exp2?.length || 0,
-          withdrawalsCount: exp3?.length || 0,
-          localExpCount: localExp.length,
-          totalRaw: rawCombined.length
-        });
-        console.log(`📦 [LocalStorage Expense Items]:`, localExp);
-      } catch (e) {
-        console.warn('Expense fetch info:', e);
-        rawCombined = [];
-      }
-
-      // Bypass restrictive filtering so that ALL expenses logged in local storage or supabase appear immediately
       const seenIds = new Set<string>();
       const finalExpenses: any[] = [];
 
@@ -449,8 +405,6 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
           }
         }
       });
-
-      console.log(`DEBUG OWNER EXPENSES (fetchProfileDetails for ${p.full_name}):`, finalExpenses);
 
       setProfileSales(filteredSales || []);
       setProfileReports(filteredReports || []);
@@ -713,15 +667,8 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
 
         {/* SUB-TAB CONTENTS */}
         {isLoadingDetails ? (
-          <div className="space-y-4 p-4 animate-pulse">
-            <div className="flex gap-4 mb-6">
-              <div className="w-1/4 h-24 bg-slate-800/50 rounded-2xl border border-white/5"></div>
-              <div className="w-1/4 h-24 bg-slate-800/50 rounded-2xl border border-white/5"></div>
-              <div className="w-1/4 h-24 bg-slate-800/50 rounded-2xl border border-white/5"></div>
-              <div className="w-1/4 h-24 bg-slate-800/50 rounded-2xl border border-white/5"></div>
-            </div>
-            <div className="w-full h-12 bg-slate-800/50 rounded-xl mb-4 border border-white/5"></div>
-            <div className="w-full h-64 bg-slate-800/30 rounded-2xl border border-white/5"></div>
+          <div className="p-2 animate-fade-in">
+            <TableSkeleton rows={5} columns={5} />
           </div>
         ) : (
           <>
@@ -1037,7 +984,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                   </div>
                   <div className="flex items-center gap-3 pt-2">
                     <Button 
-                      variant="outline" 
+                      variant="secondary" 
                       className="w-1/2 border-slate-700 text-slate-300 hover:bg-slate-800"
                       onClick={() => setDeletingReport(null)}
                     >
@@ -1160,7 +1107,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
 
                   <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
                     <Button 
-                      variant="outline" 
+                      variant="secondary" 
                       className="border-slate-700 text-slate-300 hover:bg-slate-800"
                       onClick={() => setEditingReport(null)}
                     >

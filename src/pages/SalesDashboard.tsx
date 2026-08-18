@@ -16,6 +16,7 @@ import { AgencyNoticeBoardWidget } from '../components/AgencyNoticeBoardWidget';
 import { NoticeBoardAdminModal } from '../components/NoticeBoardAdminModal';
 import { supabase, supabaseAdmin } from '../services/supabase';
 import { formatCurrency } from '../services/mockData';
+import { dataCache } from '../services/dataCache';
 import { 
   Plus, 
   X,
@@ -150,32 +151,59 @@ export const SalesDashboard: React.FC = () => {
 
 
 
-  // Fetch summaries for Admin View (Optimized parallel fetching)
+  // Fetch summaries for Admin View (Optimized parallel fetching with caching)
   useEffect(() => {
     if (isAdminView && (activeTab === 'sales' || activeTab === 'staff-history')) {
       const loadAdminDashboardData = async () => {
         try {
           const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+          const cacheKey = `admin_dashboard_summaries_${todayStr}`;
 
-          const [
-            attendanceRes,
-            paymentsRes,
-            profilesRes,
-            targetsRes,
-            salesRes,
-            reportsRes,
-            monthAttRes,
-            staffRes
-          ] = await Promise.all([
-            supabase.from('attendance').select('staff_id, status, punch_in').eq('attendance_date', todayStr),
-            supabase.from('academy_student_payments').select('amount'),
-            supabase.from('staff_profiles').select('*').order('created_at', { ascending: false }),
-            supabase.from('staff').select('id, monthly_target_amount, monthly_targets, full_name, avatar_url'),
-            supabase.from('sales').select('*'),
-            supabase.from('daily_reports').select('*'),
-            supabase.from('attendance').select('staff_id, status, attendance_date'),
-            supabase.from('staff').select('*, departments(name), roles(role_name)')
-          ]);
+          const {
+            attendanceData,
+            paymentsData,
+            profilesData,
+            targetsData,
+            salesData,
+            reportsData,
+            monthAttData,
+            staffData
+          } = await dataCache.fetchWithCache(
+            cacheKey,
+            async () => {
+              const [
+                attendanceRes,
+                paymentsRes,
+                profilesRes,
+                targetsRes,
+                salesRes,
+                reportsRes,
+                monthAttRes,
+                staffRes
+              ] = await Promise.all([
+                supabase.from('attendance').select('staff_id, status, punch_in').eq('attendance_date', todayStr),
+                supabase.from('academy_student_payments').select('amount'),
+                supabase.from('staff_profiles').select('*').order('created_at', { ascending: false }),
+                supabase.from('staff').select('id, monthly_target_amount, monthly_targets, full_name, avatar_url'),
+                supabase.from('sales').select('*'),
+                supabase.from('daily_reports').select('*'),
+                supabase.from('attendance').select('staff_id, status, attendance_date'),
+                supabase.from('staff').select('*, departments(name), roles(role_name)')
+              ]);
+
+              return {
+                attendanceData: attendanceRes.data || [],
+                paymentsData: paymentsRes.data || [],
+                profilesData: profilesRes.data || [],
+                targetsData: targetsRes.data || [],
+                salesData: salesRes.data || [],
+                reportsData: reportsRes.data || [],
+                monthAttData: monthAttRes.data || [],
+                staffData: staffRes.data || []
+              };
+            },
+            { ttlMs: 45000 }
+          );
 
           // Helper to identify Company Owners (matching AdminAttendance.tsx)
           const isOwnerProfile = (p: any) => {
@@ -191,8 +219,7 @@ export const SalesDashboard: React.FC = () => {
           };
 
           // Filter active profiles matching Staff Management directory (excludes Company Owners, tutors, counselors, admins)
-          const profilesData = profilesRes.data || [];
-          const activeProfiles = profilesData.filter((p: any) => {
+          const activeProfiles = (profilesData || []).filter((p: any) => {
             if (!p || !p.full_name) return false;
             if (p.status === 'INACTIVE' || p.status === 'RESIGNED') return false;
             if (isOwnerProfile(p)) return false;
@@ -211,13 +238,13 @@ export const SalesDashboard: React.FC = () => {
           });
 
           const staffByCleanName = new Map<string, any>();
-          (staffRes.data || []).forEach((s: any) => {
+          (staffData || []).forEach((s: any) => {
             if (s.full_name) {
               staffByCleanName.set(s.full_name.trim().toLowerCase(), s);
             }
           });
 
-          const todayAttLogs = attendanceRes.data || [];
+          const todayAttLogs = attendanceData || [];
 
           const staffList = activeProfiles.map((p: any) => {
             const sMatch = staffByCleanName.get(p.full_name.trim().toLowerCase());
@@ -271,15 +298,15 @@ export const SalesDashboard: React.FC = () => {
           setTodayAttendanceStats({ present, late, halfDay, leave, inOffice });
 
           // 2. Process Academy Revenue
-          const sumRev = paymentsRes.data?.reduce((acc, p) => acc + p.amount, 0) || 0;
+          const sumRev = (paymentsData || []).reduce((acc: number, p: any) => acc + (Number(p.amount) || 0), 0);
           setAcademyRevenue(sumRev);
 
           // 3. Process Staff Profiles & Performance Stats
-          const profiles = profilesRes.data || [];
-          const targets = targetsRes.data || [];
-          const dbSales = salesRes.data || [];
-          const allReports = reportsRes.data || [];
-          const monthAttendanceFiltered = (monthAttRes.data || []).filter(a => a.attendance_date?.startsWith(selectedMonth));
+          const profiles = profilesData || [];
+          const targets = targetsData || [];
+          const dbSales = salesData || [];
+          const allReports = reportsData || [];
+          const monthAttendanceFiltered = (monthAttData || []).filter((a: any) => a.attendance_date?.startsWith(selectedMonth));
 
           const targetMap: { [key: string]: number } = {};
           const avatarMap: { [key: string]: string } = {};

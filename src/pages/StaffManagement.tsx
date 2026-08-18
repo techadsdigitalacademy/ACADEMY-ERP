@@ -28,8 +28,7 @@ import {
   Star,
   Key,
   UserMinus,
-  UserCheck,
-  UserX
+  UserCheck
 } from 'lucide-react';
 
 import type { StaffProfile } from '../types';

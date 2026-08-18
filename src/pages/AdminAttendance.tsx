@@ -5,26 +5,21 @@ import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { supabase } from '../services/supabase';
+import { dataCache } from '../services/dataCache';
+import { MetricCardsSkeleton, TableSkeleton } from '../components/Skeleton';
 import type { Staff, Attendance } from '../types';
 import { 
   AlertCircle, 
   Search, 
   Filter, 
   MapPin, 
-   
   Award,
-  
   X,
   TrendingUp,
   Briefcase,
-  
-  
-  
-  
   UserCheck,
   Calendar,
   ExternalLink,
-  
   Download,
   FileText,
   Star,
@@ -49,7 +44,6 @@ export const AdminAttendance: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [staffList, setStaffList] = useState<StaffWithAttendance[]>([]);
-  const [attendanceList, setAttendanceList] = useState<Attendance[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Present' | 'Late' | 'Half Day' | 'Leave' | 'Absent'>('All');
   const [adminTab, setAdminTab] = useState<'registry' | 'reports'>('registry');
@@ -202,16 +196,24 @@ export const AdminAttendance: React.FC = () => {
   const [drillLogs, setDrillLogs] = useState<any[]>([]);
   const [loadingDrill, setLoadingDrill] = useState(false);
 
-  const fetchDrillLogs = async (staffId: string) => {
+  const fetchDrillLogs = async (staffId: string, forceRefresh = false) => {
     setLoadingDrill(true);
     try {
-      const { data, error } = await supabase
-        .from('attendance')
-        .select('*')
-        .eq('staff_id', staffId)
-        .order('attendance_date', { ascending: false });
-      if (error) throw error;
-      setDrillLogs(data || []);
+      const cacheKey = `attendance_drill_${staffId}`;
+      const logs = await dataCache.fetchWithCache(
+        cacheKey,
+        async () => {
+          const { data, error } = await supabase
+            .from('attendance')
+            .select('*')
+            .eq('staff_id', staffId)
+            .order('attendance_date', { ascending: false });
+          if (error) throw error;
+          return data || [];
+        },
+        { ttlMs: 60000, forceRefresh }
+      );
+      setDrillLogs(logs);
     } catch (err: any) {
       console.error("Error loading drill logs:", err);
     } finally {
@@ -272,10 +274,6 @@ export const AdminAttendance: React.FC = () => {
     } finally {
       setIsGeneratingReport(false);
     }
-  };
-
-  const downloadReportCSV = () => {
-    handleExportCustomReportExcel();
   };
 
   const handleExportCustomReportExcel = () => {
@@ -522,21 +520,38 @@ export const AdminAttendance: React.FC = () => {
     }
   };
 
-  // Fetch all staff and today's attendance records
-  const loadAttendanceData = async () => {
-    setLoading(true);
+  // Fetch all staff and today's attendance records in parallel with caching
+  const loadAttendanceData = async (forceRefresh = false) => {
+    // Only show full loading state if we have no staff data cached yet
+    if (staffList.length === 0) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const startOfMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
 
-      // 1. Fetch staff members & staff_profiles from Supabase
-      const { data: staffData } = await supabase
-        .from('staff')
-        .select('*, departments(name), roles(role_name)');
+      // Parallelize Supabase requests
+      const cacheKey = `admin_attendance_month_${startOfMonthStr}`;
+      const { staffData, profilesData, attData } = await dataCache.fetchWithCache(
+        cacheKey,
+        async () => {
+          const [staffRes, profilesRes, attRes] = await Promise.all([
+            supabase.from('staff').select('*, departments(name), roles(role_name)'),
+            supabase.from('staff_profiles').select('*'),
+            supabase.from('attendance').select('*').gte('attendance_date', startOfMonthStr)
+          ]);
 
-      const { data: profilesData } = await supabase
-        .from('staff_profiles')
-        .select('*');
+          if (attRes.error) throw attRes.error;
+
+          return {
+            staffData: staffRes.data || [],
+            profilesData: profilesRes.data || [],
+            attData: attRes.data || []
+          };
+        },
+        { ttlMs: 45000, forceRefresh }
+      );
 
       const staffByCleanName = new Map<string, any>();
       (staffData || []).forEach((s: any) => {
@@ -577,7 +592,7 @@ export const AdminAttendance: React.FC = () => {
         return true;
       });
 
-      // Master staff list for reports (includes active + resigned profiles, excludes deleted test staff, excluded roles & owners)
+      // Master staff list for reports
       const validMasterProfiles = (profilesData || []).filter((p: any) => {
         if (!p || !p.full_name) return false;
         if (isOwnerProfile(p)) return false;
@@ -606,18 +621,7 @@ export const AdminAttendance: React.FC = () => {
         };
       }));
 
-      // 2. Fetch current month's attendance records from Supabase
-      const startOfMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
-      const { data: attData, error: attErr } = await supabase
-        .from('attendance')
-        .select('*')
-        .gte('attendance_date', startOfMonthStr);
-
-      if (attErr) throw attErr;
-
-      setAttendanceList(attData || []);
-
-      // 3. Map attendance records onto active staff profiles list
+      // Map attendance records onto active staff profiles list
       const mappedList: StaffWithAttendance[] = activeProfiles.map((p: any) => {
         const sMatch = staffByCleanName.get(p.full_name.trim().toLowerCase());
         const staffId = sMatch?.id || p.id;
@@ -778,7 +782,7 @@ export const AdminAttendance: React.FC = () => {
                 variant="glass" 
                 size="sm" 
                 className="!py-2 !px-3 font-bold text-xs" 
-                onClick={loadAttendanceData}
+                onClick={() => loadAttendanceData(true)}
                 isLoading={loading}
               >
                 Refresh
@@ -790,17 +794,17 @@ export const AdminAttendance: React.FC = () => {
         {/* Main Content Panels */}
         <main className="max-w-6xl w-full mx-auto px-4 md:px-8 mt-6 space-y-6">
           
-          {loading ? (
-            <div className="py-24 text-center">
-              <div className="w-12 h-12 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin mx-auto mb-4"></div>
-              <p className="text-sm font-semibold text-slate-400">Loading daily attendance registry...</p>
+          {loading && staffList.length === 0 ? (
+            <div className="space-y-6 animate-fade-in">
+              <MetricCardsSkeleton count={7} cols="grid-cols-2 md:grid-cols-4 lg:grid-cols-7" />
+              <TableSkeleton rows={8} columns={6} />
             </div>
-          ) : error ? (
+          ) : error && staffList.length === 0 ? (
             <div className="py-16 text-center glass-card rounded-3xl p-8 border border-rose-500/20 max-w-md mx-auto">
               <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-4 animate-bounce" />
               <h3 className="text-lg font-bold text-white mb-2">Failed to Sync Records</h3>
               <p className="text-sm text-slate-400 mb-6">{error}</p>
-              <Button variant="primary" onClick={loadAttendanceData}>Retry Reload</Button>
+              <Button variant="primary" onClick={() => loadAttendanceData(true)}>Retry Reload</Button>
             </div>
           ) : (
             <>

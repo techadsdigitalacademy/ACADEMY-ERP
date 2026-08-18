@@ -6,15 +6,15 @@ import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { supabase } from '../services/supabase';
 import { formatCurrency } from '../services/mockData';
+import { dataCache } from '../services/dataCache';
+import { MetricCardsSkeleton, TableSkeleton } from '../components/Skeleton';
 import { 
-   
   Briefcase, 
   Trash2,
   Plus, 
   X, 
   Download,
   FileText,
-  
   ArrowUpRight,
   ArrowDownRight,
   Activity,
@@ -30,6 +30,10 @@ interface Expense {
   description: string;
   created_at: string;
   staff_id?: string;
+  staff_name?: string;
+  logged_by_name?: string;
+  ashif_amount?: number;
+  shibili_amount?: number;
 }
 
 interface PartnerWithdrawal {
@@ -95,6 +99,7 @@ export const FinanceDashboard: React.FC = () => {
   const [expensesList, setExpensesList] = useState<Expense[]>([]);
   const [withdrawalsList, setWithdrawalsList] = useState<PartnerWithdrawal[]>([]);
   const [staffProfilesMap, setStaffProfilesMap] = useState<Map<string, { name: string; desig: string }>>(new Map());
+  const [staffIdToName, setStaffIdToName] = useState<Map<string, string>>(new Map());
 
   // Modal / Side-Drawer state
   const [isEntryDrawerOpen, setIsEntryDrawerOpen] = useState(false);
@@ -103,7 +108,6 @@ export const FinanceDashboard: React.FC = () => {
 
   // Drill-down Modal State
   const [drilldownCategory, setDrilldownCategory] = useState<ExpenseCategoryGroup | null>(null);
-
 
   // Add Income (Sale) Form states
   const [incClientName, setIncClientName] = useState('');
@@ -121,11 +125,11 @@ export const FinanceDashboard: React.FC = () => {
   const [expDescription, setExpDescription] = useState('');
   const [isAddingExpense, setIsAddingExpense] = useState(false);
 
-
-
-  // Load all finance details
-  const loadFinanceData = async () => {
-    setLoading(true);
+  // Load all finance details in parallel with caching
+  const loadFinanceData = async (forceRefresh = false) => {
+    if (staffIncomesList.length === 0 && expensesList.length === 0) {
+      setLoading(true);
+    }
     setDbError(null);
     try {
       const [year, monthIdx] = selectedLedgerMonth.split('-').map(Number);
@@ -133,32 +137,68 @@ export const FinanceDashboard: React.FC = () => {
       
       const lastDay = new Date(year, monthIdx, 0).getDate();
       const endOfMonthStr = `${year}-${String(monthIdx).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59.999+00:00`;
+      const startOfMonthDateStr = `${year}-${String(monthIdx).padStart(2, '0')}-01`;
       const endOfMonthDateStr = `${year}-${String(monthIdx).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-      // 1. Fetch historical opening balance
-      const { data: settingsData } = await supabase.from('finance_settings').select('historical_opening_balance');
-        let histBal = 0;
-        if (settingsData && settingsData.length > 0) {
-          histBal = Number(settingsData[0].historical_opening_balance) || 0;
-        }
-        setHistoricalBalance(histBal);
+      // Parallelize Supabase requests
+      const cacheKey = `finance_ledger_${selectedLedgerMonth}`;
+      const bundle = await dataCache.fetchWithCache(
+        cacheKey,
+        async () => {
+          const [
+            settingsRes,
+            profilesRes,
+            staffRes,
+            prevSalesRes,
+            prevExpensesRes,
+            prevWithdrawalsRes,
+            currentSalesRes,
+            dbExpRes,
+            refundSalesRes,
+            witRes
+          ] = await Promise.all([
+            supabase.from('finance_settings').select('historical_opening_balance'),
+            supabase.from('staff_profiles').select('id, full_name, designation, status'),
+            supabase.from('staff').select('id, full_name'),
+            supabase.from('sales').select('*, staff(full_name)').lt('created_at', startOfMonthStr),
+            supabase.from('expenses').select('amount').lt('expense_date', startOfMonthDateStr),
+            supabase.from('partner_withdrawals').select('amount').lt('withdrawal_date', startOfMonthDateStr),
+            supabase.from('sales').select('*, staff(full_name)').gte('created_at', startOfMonthStr).lte('created_at', endOfMonthStr),
+            supabase.from('expenses').select('*'),
+            supabase.from('sales').select('*, staff(full_name)').eq('payment_type', 'Refund'),
+            supabase.from('partner_withdrawals').select('*').gte('withdrawal_date', startOfMonthDateStr).lte('withdrawal_date', endOfMonthDateStr)
+          ]);
 
-      // 1b. Fetch active staff profiles & general staff records to create active sets
-      const { data: profilesData } = await supabase
-        .from('staff_profiles')
-        .select('id, full_name, designation, status');
+          return {
+            settingsData: settingsRes.data || [],
+            profilesData: profilesRes.data || [],
+            staffData: staffRes.data || [],
+            prevSales: prevSalesRes.data || [],
+            prevExpenses: prevExpensesRes.data || [],
+            prevWithdrawals: prevWithdrawalsRes.data || [],
+            rawSalesData: currentSalesRes.data || [],
+            dbExpData: dbExpRes.data || [],
+            refundSalesData: refundSalesRes.data || [],
+            witData: witRes.data || []
+          };
+        },
+        { ttlMs: 45000, forceRefresh }
+      );
 
-      const { data: staffData } = await supabase
-        .from('staff')
-        .select('id, full_name');
+      // 1. Process opening balance
+      let histBal = 0;
+      if (bundle.settingsData && bundle.settingsData.length > 0) {
+        histBal = Number(bundle.settingsData[0].historical_opening_balance) || 0;
+      }
+      setHistoricalBalance(histBal);
 
+      // Process profiles & staff mappings
       const profilesMap = new Map<string, { name: string; desig: string }>();
       const staffIdToNameMap = new Map<string, string>();
       const staffIdToDesigMap = new Map<string, string>();
-      const activeStaffIdsSet = new Set<string>();
       const activeStaffNamesSet = new Set<string>();
 
-      (profilesData || []).forEach(p => {
+      (bundle.profilesData || []).forEach(p => {
         if (p.status === 'INACTIVE') return;
         if (!p.full_name) return;
         profilesMap.set(p.id, { name: p.full_name, desig: p.designation || 'Staff' });
@@ -172,7 +212,7 @@ export const FinanceDashboard: React.FC = () => {
         }
       });
 
-      (staffData || []).forEach(s => {
+      (bundle.staffData || []).forEach(s => {
         if (s.id && s.full_name) {
           staffIdToNameMap.set(String(s.id), s.full_name);
           if (!staffIdToDesigMap.has(String(s.id))) {
@@ -186,7 +226,9 @@ export const FinanceDashboard: React.FC = () => {
           }
         }
       });
+
       setStaffProfilesMap(profilesMap);
+      setStaffIdToName(staffIdToNameMap);
 
       const isSaleFromDeletedStaff = (sale: any) => {
         if (!sale) return true;
@@ -194,17 +236,14 @@ export const FinanceDashboard: React.FC = () => {
         const rawName = (sale.staff_name || sale.staff?.full_name || sale.full_name || sale.logged_by_name || '').trim().toLowerCase();
         const sId = sale.staff_id || sale.user_id;
 
-        // 1. Explicit check: If sale contains 'althaf' or 'sana' -> Exclude!
         if (rawName.includes('althaf') || rawName === 'sana' || rawName === 'sana nesrin') {
           return true;
         }
 
-        // 2. If sale has a valid staff_id present in our staff directory -> Keep it!
         if (sId && staffIdToNameMap.has(String(sId))) {
           return false;
         }
 
-        // 3. If sale staff_name matches any active staff member name -> Keep it!
         if (rawName) {
           for (const activeName of activeStaffNamesSet) {
             if (activeName && (activeName === rawName || activeName.split(' ')[0] === rawName)) {
@@ -213,7 +252,6 @@ export const FinanceDashboard: React.FC = () => {
           }
         }
 
-        // 4. Default: Only exclude if staff_id is null AND name is explicitly unassigned or unknown test staff
         if (!sId && (!rawName || rawName === 'unassigned staff' || rawName === 'unassigned' || rawName === 'sana')) {
           return true;
         }
@@ -221,46 +259,19 @@ export const FinanceDashboard: React.FC = () => {
         return false;
       };
 
-      // 2. Calculate opening balance (carry-over of previous month's closing balance)
-      // All-time income before this month (excluding deleted staff sales)
-      const { data: prevSales } = await supabase
-        .from('sales')
-        .select('*, staff(full_name)')
-        .lt('created_at', startOfMonthStr);
-      const activePrevSales = (prevSales || []).filter(s => !isSaleFromDeletedStaff(s));
+      // 2. Calculate opening balance
+      const activePrevSales = (bundle.prevSales || []).filter(s => !isSaleFromDeletedStaff(s));
       const prevSalesSum = activePrevSales.reduce((sum, s) => sum + (Number(s.received_amount) || 0), 0);
-
-      // All-time expenses before this month
-      const { data: prevExpenses } = await supabase
-        .from('expenses')
-        .select('amount')
-        .lt('expense_date', `${year}-${String(monthIdx).padStart(2, '0')}-01`);
-      const prevExpensesSum = prevExpenses?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
-
-      // All-time withdrawals before this month
-      const { data: prevWithdrawals } = await supabase
-        .from('partner_withdrawals')
-        .select('amount')
-        .lt('withdrawal_date', `${year}-${String(monthIdx).padStart(2, '0')}-01`);
-      const prevWithdrawalsSum = prevWithdrawals?.reduce((sum, w) => sum + (w.amount || 0), 0) || 0;
+      const prevExpensesSum = bundle.prevExpenses?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
+      const prevWithdrawalsSum = bundle.prevWithdrawals?.reduce((sum, w) => sum + (w.amount || 0), 0) || 0;
 
       const calculatedOpeningBal = histBal + prevSalesSum - prevExpensesSum - prevWithdrawalsSum;
       setOpeningBalance(calculatedOpeningBal);
 
-      // 3. Fetch sales for the current month
-      const { data: rawSalesData, error: salesErr } = await supabase
-        .from('sales')
-        .select('*, staff(full_name)')
-        .gte('created_at', startOfMonthStr)
-        .lte('created_at', endOfMonthStr);
-
-      if (salesErr) console.warn('Sales fetch error:', salesErr);
-
-      // Filter out deleted staff sales only; keep all active staff sales
-      const activeSalesOnly = (rawSalesData || []).filter(s => !isSaleFromDeletedStaff(s));
+      // 3. Process current month sales
+      const activeSalesOnly = (bundle.rawSalesData || []).filter(s => !isSaleFromDeletedStaff(s));
       setSalesList(activeSalesOnly);
 
-      // Process monthly sales by active staff and owners
       const staffIncomesMap: Record<string, { staffId: string; fullName: string; designation: string; total: number; count: number }> = {};
 
       const isExcludedRoleOrDeletedStaff = (desig: string, name: string) => {
@@ -271,8 +282,7 @@ export const FinanceDashboard: React.FC = () => {
         return false;
       };
 
-      // Seed active profiles & owners into map so their rows display in the table
-      (profilesData || []).forEach(p => {
+      (bundle.profilesData || []).forEach(p => {
         if (p.status === 'INACTIVE' || p.status === 'RESIGNED') return;
         if (!p.full_name) return;
         if (isExcludedRoleOrDeletedStaff(p.designation, p.full_name)) return;
@@ -289,11 +299,8 @@ export const FinanceDashboard: React.FC = () => {
       activeSalesOnly.forEach(sale => {
         let sId = String(sale.staff_id || sale.user_id || '');
         let sName = (sale.staff_id && staffIdToNameMap.get(String(sale.staff_id))) || sale.staff_name || sale.staff?.full_name || '';
-
-        // 1. Check direct hit by staff_id in staffIncomesMap
         let matchedProfileId = sId;
 
-        // 2. If staff_id is missing or unseeded, try exact name equality in staffIncomesMap
         if (!staffIncomesMap[matchedProfileId] && sName) {
           const lowerName = sName.trim().toLowerCase();
           for (const [idKey, item] of Object.entries(staffIncomesMap)) {
@@ -305,7 +312,6 @@ export const FinanceDashboard: React.FC = () => {
           }
         }
 
-        // 3. Fallback: try exact name equality in staffIdToNameMap (only exact string match, no loose substring .includes())
         if (!staffIncomesMap[matchedProfileId] && sName) {
           const lowerName = sName.trim().toLowerCase();
           for (const [idKey, pName] of staffIdToNameMap.entries()) {
@@ -319,17 +325,7 @@ export const FinanceDashboard: React.FC = () => {
 
         const sDesig = staffIdToDesigMap.get(matchedProfileId) || 'Sales Executive';
 
-        if (matchedProfileId && sName && !isExcludedRoleOrDeletedStaff(sDesig, sName)) {
-          if (!staffIncomesMap[matchedProfileId]) {
-            staffIncomesMap[matchedProfileId] = {
-              staffId: matchedProfileId,
-              fullName: sName,
-              designation: sDesig,
-              total: 0,
-              count: 0
-            };
-          }
-
+        if (staffIncomesMap[matchedProfileId]) {
           const currentTotal = parseSafeNumber(staffIncomesMap[matchedProfileId].total);
           const currentCount = parseSafeNumber(staffIncomesMap[matchedProfileId].count);
           const amt = parseSafeNumber(sale.received_amount);
@@ -340,13 +336,21 @@ export const FinanceDashboard: React.FC = () => {
             staffIncomesMap[matchedProfileId].total = currentTotal + amt;
             staffIncomesMap[matchedProfileId].count = currentCount + 1;
           }
+        } else if (matchedProfileId && matchedProfileId !== 'null' && matchedProfileId !== 'undefined') {
+          const amt = parseSafeNumber(sale.received_amount);
+          staffIncomesMap[matchedProfileId] = {
+            staffId: matchedProfileId,
+            fullName: sName || 'Staff Member',
+            designation: sDesig,
+            total: sale.payment_type === 'Refund' ? -amt : amt,
+            count: sale.payment_type === 'Refund' ? 0 : 1
+          };
         } else {
-          // Attribute to Direct Agency Sales so all active sales are transparently accounted for
-          const unassignedKey = 'unassigned_direct_sales';
+          const unassignedKey = 'company_direct';
           if (!staffIncomesMap[unassignedKey]) {
             staffIncomesMap[unassignedKey] = {
               staffId: unassignedKey,
-              fullName: 'Direct Agency Sales',
+              fullName: 'Tech Ads Direct / Unassigned',
               designation: 'Direct Income',
               total: 0,
               count: 0
@@ -365,14 +369,13 @@ export const FinanceDashboard: React.FC = () => {
         }
       });
 
-      // 3. Filter out any unlinked/deleted staff rows (like "althaf" or "sana"), keeping populated income entries
       const staffIncomesArray = Object.values(staffIncomesMap)
         .filter(item => {
           const lower = item.fullName.trim().toLowerCase();
           if (lower.includes('althaf') || lower === 'sana' || lower === 'sana nesrin' || lower === 'unassigned staff') {
             return false;
           }
-          return item.count > 0 || item.totalAmount !== 0 || (profilesMap.has(item.staffId) && item.designation === 'Sales Executive');
+          return item.count > 0 || parseSafeNumber(item.total) !== 0 || (profilesMap.has(item.staffId) && item.designation === 'Sales Executive');
         })
         .map(info => ({
           staffId: info.staffId,
@@ -385,19 +388,8 @@ export const FinanceDashboard: React.FC = () => {
 
       setStaffIncomesList(staffIncomesArray);
 
-      // 4. Fetch expenses for the current month from Supabase & LocalStorage
+      // 4. Process Expenses
       const currentMonthKey = selectedLedgerMonth || `${year}-${String(monthIdx).padStart(2, '0')}`;
-
-      let dbExpData: any[] = [];
-      try {
-        const { data, error } = await supabase
-          .from('expenses')
-          .select('*');
-        if (!error && data) dbExpData = data;
-      } catch (e) {
-        dbExpData = [];
-      }
-
       let localExp: any[] = [];
       const keysToTry = ['company_expenses_local_store', 'expenses', 'owner_expenses', 'expenses_list'];
       keysToTry.forEach(k => {
@@ -412,16 +404,6 @@ export const FinanceDashboard: React.FC = () => {
         } catch (e) {}
       });
 
-      // 4b. Fetch historical sales refunds for active month (payment_type === 'Refund')
-      let refundSalesData: any[] = [];
-      try {
-        const { data: rData } = await supabase
-          .from('sales')
-          .select('*, staff(full_name)')
-          .eq('payment_type', 'Refund');
-        if (rData) refundSalesData = rData;
-      } catch (e) {}
-
       let localSalesRefunds: any[] = [];
       try {
         const rawSales = localStorage.getItem('company_sales_local_store') || localStorage.getItem('sales');
@@ -433,7 +415,7 @@ export const FinanceDashboard: React.FC = () => {
         }
       } catch (e) {}
 
-      const allRefundSales = [...refundSalesData, ...localSalesRefunds].filter(s => !isSaleFromDeletedStaff(s));
+      const allRefundSales = [...bundle.refundSalesData, ...localSalesRefunds].filter(s => !isSaleFromDeletedStaff(s));
       
       const convertedRefundExpenses = allRefundSales.map((s: any, idx: number) => {
         const sDate = s.created_at || s.date || s.sale_date || s.sale_month || '';
@@ -460,9 +442,8 @@ export const FinanceDashboard: React.FC = () => {
         };
       });
 
-      const combinedExp = [...dbExpData, ...localExp, ...convertedRefundExpenses];
+      const combinedExp = [...bundle.dbExpData, ...localExp, ...convertedRefundExpenses];
 
-      // Filter for active selectedLedgerMonth (currentMonthKey) and exclude seed entries
       const filteredExp = combinedExp.filter((e: any) => {
         if (!e) return false;
         if (e.id && String(e.id).startsWith('seed-exp-')) return false;
@@ -492,7 +473,6 @@ export const FinanceDashboard: React.FC = () => {
 
       setExpensesList(finalExpData);
 
-      // Group expenses by valid categories and calculate split
       const validCategories = ['Salary', 'Rent', 'Sales Refund', 'Internet & Recharge', 'Food & Drinks', 'EMI', 'Repair & Maintenance', 'Stationery', 'Electricity', 'Transport', 'Fixed Asset', 'Outwork', 'Return Sales', 'Facebook Ads', 'Marketing & Ads', 'Office & Operations', 'Software & Cloud', 'Client Hospitality', 'Equipment & Hardware', 'Other Expense'];
       const expCategoriesArray: ExpenseCategoryGroup[] = validCategories.map(cat => {
         const items = finalExpData.filter((e: any) => e.category === cat || (cat === 'Other Expense' && !validCategories.includes(e.category)));
@@ -514,7 +494,6 @@ export const FinanceDashboard: React.FC = () => {
           } else if (nameStr.includes('ASHIF')) {
             ashifAmt += (Number(exp.amount) || 0);
           } else if (exp.category === 'Sales Refund' || exp.category === 'Return Sales' || String(exp.id).startsWith('converted-refund-')) {
-            // Automated Sales Refunds processed by marketing/sales executives route directly to Ashif's column
             ashifAmt += (Number(exp.amount) || 0);
           } else {
             ashifAmt += (Number(exp.amount) || 0);
@@ -531,19 +510,10 @@ export const FinanceDashboard: React.FC = () => {
       });
       setExpenseCategories(expCategoriesArray);
 
-      // 5. Fetch partner withdrawals for the current month
-      const { data: witData, error: witErr } = await supabase
-        .from('partner_withdrawals')
-        .select('*')
-        .gte('withdrawal_date', `${year}-${String(monthIdx).padStart(2, '0')}-01`)
-        .lte('withdrawal_date', endOfMonthDateStr);
-
-      if (witErr) throw witErr;
-      setWithdrawalsList(witData || []);
-
-      // Group partner withdrawals by partner name
+      // 5. Process partner withdrawals
+      setWithdrawalsList(bundle.witData || []);
       const witGroupMap: { [partner: string]: number } = {};
-      (witData || []).forEach((wit: PartnerWithdrawal) => {
+      (bundle.witData || []).forEach((wit: PartnerWithdrawal) => {
         witGroupMap[wit.partner_name] = (witGroupMap[wit.partner_name] || 0) + wit.amount;
       });
       setPartnerWithdrawals(witGroupMap);
@@ -798,7 +768,7 @@ export const FinanceDashboard: React.FC = () => {
       csvRows.push(['--- DETAILED SALES LOGS ---']);
       csvRows.push(['Date', 'Staff', 'Client Name', 'Service Package', 'Payment Type', 'Received Amount (₹)', 'Payment Method']);
       (salesList || []).forEach(sale => {
-        const staffName = sale.staff_id ? (staffIdToNameMap.get(String(sale.staff_id)) || sale.staff_name || 'Staff') : 'Staff';
+        const staffName = sale.staff_id ? (staffIdToName.get(String(sale.staff_id)) || sale.staff_name || 'Staff') : 'Staff';
         csvRows.push([
           sale.created_at ? new Date(sale.created_at).toLocaleDateString() : '-',
           staffName,
@@ -1098,15 +1068,13 @@ export const FinanceDashboard: React.FC = () => {
             </div>
           )}
 
-          {loading ? (
-            <div className="space-y-4 animate-pulse w-full mt-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className="h-20 bg-slate-900/60 rounded-xl border border-white/5"></div>
-                ))}
+          {loading && staffIncomesList.length === 0 ? (
+            <div className="space-y-6 animate-fade-in w-full mt-4">
+              <MetricCardsSkeleton count={8} cols="grid-cols-2 sm:grid-cols-4 lg:grid-cols-8" />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <TableSkeleton rows={6} columns={4} />
+                <TableSkeleton rows={6} columns={5} />
               </div>
-              <div className="h-10 bg-slate-900/60 rounded-xl mt-4 w-full"></div>
-              <div className="h-64 bg-slate-900/60 rounded-2xl w-full"></div>
             </div>
           ) : (
             <>

@@ -6,6 +6,7 @@ interface CardProps {
   variant?: 'glass' | 'solid' | 'interactive';
   glowColor?: 'indigo' | 'purple' | 'emerald' | 'none';
   onClick?: () => void;
+  style?: React.CSSProperties;
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -13,7 +14,8 @@ export const Card: React.FC<CardProps> = ({
   className = '',
   variant = 'glass',
   glowColor = 'none',
-  onClick
+  onClick,
+  style
 }) => {
   const isInteractive = variant === 'interactive' || !!onClick;
 
@@ -41,6 +43,7 @@ export const Card: React.FC<CardProps> = ({
         ${className}
       `}
       onClick={onClick}
+      style={style}
     >
       {children}
     </div>
