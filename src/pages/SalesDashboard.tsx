@@ -17,6 +17,7 @@ import { NoticeBoardAdminModal } from '../components/NoticeBoardAdminModal';
 import { supabase, supabaseAdmin } from '../services/supabase';
 import { formatCurrency } from '../services/mockData';
 import { dataCache } from '../services/dataCache';
+import { resetStaffAuthPassword } from '../services/staffAuth';
 import { 
   Plus, 
   X,
@@ -859,40 +860,17 @@ export const SalesDashboard: React.FC = () => {
 
     setIsResettingPassword(true);
     try {
-      // 1. Fetch profile to get auth_user_id
-      const { data: profileRow, error: profileErr } = await supabase
-        .from('staff_profiles')
-        .select('auth_user_id')
-        .eq('id', selectedResetStaff)
-        .maybeSingle();
-
-      if (profileErr) throw profileErr;
-      if (!profileRow) throw new Error('Staff profile not found.');
-
-      // 2. Update Auth password using service role client if available
-      if (profileRow.auth_user_id) {
-        if (!supabaseAdmin) {
-          throw new Error('Supabase Admin client is not initialized. Please verify VITE_SUPABASE_SERVICE_KEY.');
-        }
-        const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(
-          profileRow.auth_user_id,
-          { password: newResetPassword.trim() }
-        );
-        if (authErr) throw authErr;
+      const res = await resetStaffAuthPassword(selectedResetStaff, newResetPassword);
+      if (!res.success) {
+        alert(res.message || 'Failed to reset password.');
+        return;
       }
 
-      // 3. Update plaintext fallback password in db
-      const { error: dbErr } = await supabase
-        .from('staff_profiles')
-        .update({ password: newResetPassword.trim() })
-        .eq('id', selectedResetStaff);
-
-      if (dbErr) throw dbErr;
-
-      alert('Password reset successfully!');
+      alert(res.message);
       setNewResetPassword('');
       setSelectedResetStaff('');
       setIsSettingsOpen(false);
+      dataCache.clearAll();
     } catch (err: any) {
       alert('Failed to reset password: ' + err.message);
     } finally {

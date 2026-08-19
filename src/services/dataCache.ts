@@ -92,6 +92,13 @@ class DataCache {
   }
 
   /**
+   * Clear all cache entries
+   */
+  clearAll(): void {
+    this.cache.clear();
+  }
+
+  /**
    * Invalidate specific key or keys matching pattern (e.g. 'finance_*')
    */
   invalidate(keyPattern?: string): void {

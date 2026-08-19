@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { Staff, Sale, Attendance, DailyReport } from '../types';
-import { supabase } from '../services/supabase';
+import { supabase, supabaseAdmin } from '../services/supabase';
+import { formatStaffEmail, ensureStaffAuthUser, normalizePassword } from '../services/staffAuth';
 
 interface AppContextType {
   activeStaff: Staff | null;
@@ -187,11 +188,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session && session.user) {
-          const { data: profile } = await supabase
+          let { data: profile } = await supabase
             .from('staff_profiles')
             .select('*')
             .eq('auth_user_id', session.user.id)
             .maybeSingle();
+
+          // Self-healing: if not found by auth_user_id, attempt match by email/username
+          if (!profile && session.user.email) {
+            const rawName = session.user.email.replace('@agency.com', '').trim();
+            const { data: matched } = await supabase
+              .from('staff_profiles')
+              .select('*')
+              .or(`username.ilike.${rawName},full_name.ilike.${rawName}`)
+              .maybeSingle();
+
+            if (matched) {
+              await supabase
+                .from('staff_profiles')
+                .update({ auth_user_id: session.user.id })
+                .eq('id', matched.id);
+              profile = { ...matched, auth_user_id: session.user.id };
+            }
+          }
 
           if (profile) {
             let { data: staffRecord } = await supabase
@@ -274,26 +293,89 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [attendance]);
 
   const login = async (username: string, pass: string) => {
-    console.log('Incoming Login Attempt:', { username, pass });
+    console.log('Incoming Login Attempt:', { username });
     try {
       setDbError(null);
       
-      // 1. Authenticate with Supabase Auth using email (username@agency.com)
-      const email = `${username.trim().toLowerCase()}@agency.com`;
+      const email = formatStaffEmail(username);
+      const cleanPass = pass.trim();
+      let authUser: any = null;
+
+      // 1. Authenticate with Supabase Auth using standardized email
       const { data: authData, error: authErr } = await supabase.auth.signInWithPassword({
         email,
-        password: pass
+        password: cleanPass
       });
 
-      if (authErr) throw authErr;
-      if (!authData.user) return false;
+      if (!authErr && authData?.user) {
+        authUser = authData.user;
+      } else {
+        // Fallback: If login fails, check if user exists in staff_profiles with matching password
+        // and automatically heal/provision their Supabase Auth credentials
+        if (supabaseAdmin) {
+          const { data: fallbackProf } = await supabaseAdmin
+            .from('staff_profiles')
+            .select('*')
+            .or(`username.ilike.${username.trim()},full_name.ilike.${username.trim()}`)
+            .maybeSingle();
 
-      // 2. Query staff_profiles table using auth_user_id (now permitted by RLS)
-      const { data: profile, error } = await supabase
+          if (fallbackProf && (fallbackProf.password === cleanPass || fallbackProf.password === normalizePassword(cleanPass))) {
+            const syncedAuthId = await ensureStaffAuthUser({
+              username: fallbackProf.username || fallbackProf.full_name,
+              fullName: fallbackProf.full_name,
+              password: cleanPass
+            });
+
+            if (syncedAuthId) {
+              await supabaseAdmin
+                .from('staff_profiles')
+                .update({ auth_user_id: syncedAuthId })
+                .eq('id', fallbackProf.id);
+
+              const { data: retryAuth, error: retryErr } = await supabase.auth.signInWithPassword({
+                email,
+                password: cleanPass
+              });
+
+              if (!retryErr && retryAuth?.user) {
+                authUser = retryAuth.user;
+              }
+            }
+          }
+        }
+      }
+
+      if (!authUser) {
+        if (authErr) throw authErr;
+        return false;
+      }
+
+      // 2. Query staff_profiles table using auth_user_id
+      let { data: profile, error } = await supabase
         .from('staff_profiles')
         .select('*')
-        .eq('auth_user_id', authData.user.id)
+        .eq('auth_user_id', authUser.id)
         .maybeSingle();
+
+      if (!profile) {
+        // Self-healing fallback: find by username/full_name and map auth_user_id
+        const { data: fallbackProfile } = await supabase
+          .from('staff_profiles')
+          .select('*')
+          .or(`username.ilike.${username.trim()},full_name.ilike.${username.trim()}`)
+          .maybeSingle();
+
+        if (fallbackProfile) {
+          await supabase
+            .from('staff_profiles')
+            .update({ auth_user_id: authUser.id })
+            .eq('id', fallbackProfile.id);
+          profile = { ...fallbackProfile, auth_user_id: authUser.id };
+        }
+      }
+
+      if (error) throw error;
+      if (!profile) return false;
 
       console.log('Supabase profile query result:', { profile, error });
 

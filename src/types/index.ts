@@ -113,4 +113,5 @@ export interface StaffProfile {
   created_at: string;
   base_salary?: number;
   status?: 'ACTIVE' | 'INACTIVE' | 'RESIGNED';
+  password?: string;
 }

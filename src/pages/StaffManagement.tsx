@@ -8,7 +8,13 @@ import { Megaphone } from 'lucide-react';
 import StaffProfileDrawer from '../components/StaffProfileDrawer';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
-import { supabase, supabaseAdmin } from '../services/supabase';
+import { supabase } from '../services/supabase';
+import { 
+  ensureStaffAuthUser, 
+  resetStaffAuthPassword, 
+  normalizePassword 
+} from '../services/staffAuth';
+import { dataCache } from '../services/dataCache';
 import { 
    
   Search, 
@@ -179,25 +185,14 @@ export const StaffManagement: React.FC = () => {
 
     setIsAdding(true);
     try {
-      let createdAuthUserId: string | null = null;
-      let finalPassword = password;
-      if (finalPassword.length < 6) {
-        finalPassword = finalPassword.padEnd(6, "0");
-      }
-      if (supabaseAdmin) {
-        const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, "");
-        const email = `${cleanUsername}@agency.com`;
-        const { data: authUser, error: authErr } = await supabaseAdmin.auth.admin.createUser({
-          email,
-          password: finalPassword,
-          email_confirm: true
-        });
-        if (authErr) {
-          console.error('Supabase Auth user creation failed:', authErr);
-        } else if (authUser?.user) {
-          createdAuthUserId = authUser.user.id;
-        }
-      }
+      const finalPassword = normalizePassword(password);
+      
+      // Ensure Auth user is created/provisioned in Supabase Auth
+      const createdAuthUserId = await ensureStaffAuthUser({
+        username: username.trim(),
+        fullName: fullName.trim(),
+        password: finalPassword
+      });
 
       const { error } = await supabase
         .from('staff_profiles')
@@ -240,6 +235,7 @@ export const StaffManagement: React.FC = () => {
       setShiftEnd('18:00');
       setWeeklyOff('Sunday');
 
+      dataCache.clearAll();
       await loadInitialData();
     } catch (err: any) {
       alert('Failed to add staff member: ' + err.message);
@@ -296,33 +292,15 @@ export const StaffManagement: React.FC = () => {
   const handleResetPassword = async (profile: StaffProfile) => {
     const newPassword = prompt(`Enter new password for ${profile.full_name}:`);
     if (!newPassword || newPassword.trim() === '') return;
-    
-    if (!profile.auth_user_id) {
-      alert('This profile does not have an associated authentication user ID.');
-      return;
-    }
-
-    if (!supabaseAdmin) {
-      alert('Admin privileges not available to reset password.');
-      return;
-    }
 
     try {
-      // Update in Supabase Auth
-      const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(
-        profile.auth_user_id,
-        newPassword.trim().length < 6 ? { password: newPassword.trim().padEnd(6, "0") } : { password: newPassword.trim() }
-      );
-      if (authErr) throw authErr;
-
-      // Update in staff_profiles for reference
-      const { error: dbErr } = await supabase
-        .from('staff_profiles')
-        .update(newPassword.trim().length < 6 ? { password: newPassword.trim().padEnd(6, "0") } : { password: newPassword.trim() })
-        .eq('id', profile.id);
-      if (dbErr) throw dbErr;
-
-      alert(`Password for ${profile.full_name} has been reset successfully!`);
+      const res = await resetStaffAuthPassword(profile.id, newPassword);
+      if (!res.success) {
+        alert(res.message || 'Failed to reset password.');
+        return;
+      }
+      alert(res.message);
+      dataCache.clearAll();
       await loadInitialData();
     } catch (err: any) {
       alert('Failed to reset password: ' + err.message);
@@ -416,6 +394,17 @@ export const StaffManagement: React.FC = () => {
 
     setIsSavingEdit(true);
     try {
+      let resolvedAuthUserId = editingProfile.auth_user_id || null;
+
+      // If username changed or auth user is missing, sync auth user credentials
+      if (!resolvedAuthUserId || editUsername.trim().toLowerCase() !== editingProfile.username.toLowerCase()) {
+        resolvedAuthUserId = await ensureStaffAuthUser({
+          username: editUsername.trim(),
+          fullName: editFullName.trim(),
+          password: editingProfile.password
+        });
+      }
+
       const { error } = await supabase
         .from('staff_profiles')
         .update({
@@ -426,7 +415,8 @@ export const StaffManagement: React.FC = () => {
           shift_start_time: editShiftStart,
           shift_end_time: editShiftEnd,
           weekly_off_day: editWeeklyOff,
-          status: editStatus
+          status: editStatus,
+          ...(resolvedAuthUserId ? { auth_user_id: resolvedAuthUserId } : {})
         })
         .eq('id', editingProfile.id);
 
@@ -440,6 +430,7 @@ export const StaffManagement: React.FC = () => {
         })
         .eq('id', editingProfile.id);
 
+      dataCache.clearAll();
       setIsEditModalOpen(false);
       setEditingProfile(null);
       await loadInitialData();
