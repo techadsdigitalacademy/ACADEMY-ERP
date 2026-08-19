@@ -657,6 +657,21 @@ export const AdminAttendance: React.FC = () => {
 
   useEffect(() => {
     loadAttendanceData();
+
+    const handleStaffChanged = () => {
+      loadAttendanceData(true);
+    };
+    const handleAttendanceChanged = () => {
+      loadAttendanceData(true);
+    };
+
+    window.addEventListener('staff_profiles_changed', handleStaffChanged);
+    window.addEventListener('attendance_data_changed', handleAttendanceChanged);
+
+    return () => {
+      window.removeEventListener('staff_profiles_changed', handleStaffChanged);
+      window.removeEventListener('attendance_data_changed', handleAttendanceChanged);
+    };
   }, []);
 
   // Compute metrics for today (excluding owners)
@@ -740,11 +755,13 @@ export const AdminAttendance: React.FC = () => {
   });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
       
       {/* Background Decorative Glows */}
-      <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/10 blur-[120px] pointer-events-none"></div>
-      <div className="absolute top-[40%] right-[-30%] w-[90vw] h-[90vw] rounded-full bg-purple-900/10 blur-[150px] pointer-events-none"></div>
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/10 blur-[120px]"></div>
+        <div className="absolute top-[40%] right-[-30%] w-[90vw] h-[90vw] rounded-full bg-purple-900/10 blur-[150px]"></div>
+      </div>
 
       {/* Left Sidebar Navigation (Desktop only) */}
       <Sidebar />

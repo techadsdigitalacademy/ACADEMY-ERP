@@ -460,7 +460,18 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
       setProfileTarget(targetVal);
       setNewTargetInput(targetVal.toString());
       setMonthTargetsMap(prev => ({ ...prev, [selectedStaffId]: targetVal }));
-      setSelectedProfile((prev: any) => prev ? { ...prev, monthly_targets: updatedTargets } : prev);
+      setSelectedProfile((prev: any) => prev ? { ...prev, monthly_targets: updatedTargets, monthly_target_amount: targetVal } : prev);
+      
+      // Invalidate relevant cache entries
+      dataCache.invalidate('grid_targets_*');
+      dataCache.invalidate('admin_dashboard_summaries_*');
+      dataCache.invalidate('profile_details_*');
+
+      // Dispatch global event for instant reactivity across all tabs
+      window.dispatchEvent(new CustomEvent('staff_target_updated', {
+        detail: { staffId: selectedStaffId, target: targetVal, month: activeMonthStr }
+      }));
+
       alert(`Target for ${activeMonthStr} set to ${formatCurrency(targetVal)}!`);
     } catch (err: any) {
       alert('Failed to update target: ' + err.message);

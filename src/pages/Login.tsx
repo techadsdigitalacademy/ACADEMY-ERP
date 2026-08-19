@@ -33,11 +33,13 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 py-8 relative overflow-x-clip font-sans">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 py-8 relative w-full max-w-full overflow-x-hidden font-sans">
       
       {/* Decorative Blur Background Circles */}
-      <div className="absolute top-[-20%] left-[-20%] w-[70vw] h-[70vw] rounded-full bg-indigo-900/20 blur-[150px] pointer-events-none"></div>
-      <div className="absolute bottom-[-20%] right-[-20%] w-[70vw] h-[70vw] rounded-full bg-purple-900/20 blur-[150px] pointer-events-none"></div>
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-20%] left-[-20%] w-[70vw] h-[70vw] rounded-full bg-indigo-900/20 blur-[150px]"></div>
+        <div className="absolute bottom-[-20%] right-[-20%] w-[70vw] h-[70vw] rounded-full bg-purple-900/20 blur-[150px]"></div>
+      </div>
 
       <div className="w-full max-w-md z-10 animate-scale-up">
         

@@ -236,6 +236,7 @@ export const StaffManagement: React.FC = () => {
       setWeeklyOff('Sunday');
 
       dataCache.clearAll();
+      window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'add' } }));
       await loadInitialData();
     } catch (err: any) {
       alert('Failed to add staff member: ' + err.message);
@@ -312,6 +313,9 @@ export const StaffManagement: React.FC = () => {
   const handleDeleteStaff = async (id: string, name: string) => {
     if (!confirm(`Are you sure you want to delete staff member "${name}"? All historical sales, financial logs, and agency reports will be safely preserved.`)) return;
 
+    // Optimistic UI state removal
+    setProfiles(prev => prev.filter(p => p.id !== id && (!name || p.full_name?.toLowerCase().trim() !== name.toLowerCase().trim())));
+
     try {
       // 1. Unlink foreign key references across tables so foreign key constraint crashes (23503) never occur
       await supabase.from('attendance').delete().eq('staff_id', id);
@@ -335,10 +339,13 @@ export const StaffManagement: React.FC = () => {
         await supabase.from('staff').delete().ilike('full_name', name.trim());
       }
 
+      dataCache.clearAll();
+      window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'delete', id, name } }));
       await loadInitialData();
       alert(`Staff profile "${name}" deleted successfully. Historical sales, financial ledgers, and reports remain safe and intact.`);
     } catch (err: any) {
       alert('Failed to delete staff member: ' + err.message);
+      await loadInitialData();
     }
   };
 
@@ -353,6 +360,9 @@ export const StaffManagement: React.FC = () => {
 
     if (!confirm(confirmMsg)) return;
 
+    // Optimistic UI state update
+    setProfiles(prev => prev.map(p => p.id === profile.id ? { ...p, status: nextStatus } : p));
+
     try {
       const { error } = await supabase
         .from('staff_profiles')
@@ -366,10 +376,13 @@ export const StaffManagement: React.FC = () => {
         .update({ status: nextStatus })
         .eq('id', profile.id);
 
+      dataCache.clearAll();
+      window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'toggle_resign', id: profile.id, nextStatus } }));
       alert(`Staff member "${profile.full_name}" has been ${isResigned ? 'reactivated' : 'marked as Resigned'}. Historical data remains fully preserved.`);
       await loadInitialData();
     } catch (err: any) {
       alert('Failed to update staff status: ' + err.message);
+      await loadInitialData();
     }
   };
 
@@ -430,12 +443,27 @@ export const StaffManagement: React.FC = () => {
         })
         .eq('id', editingProfile.id);
 
+      // Optimistic UI state update
+      setProfiles(prev => prev.map(p => p.id === editingProfile.id ? {
+        ...p,
+        full_name: editFullName.trim(),
+        designation: editDesignation.trim(),
+        username: editUsername.trim(),
+        gender: editGender,
+        shift_start_time: editShiftStart,
+        shift_end_time: editShiftEnd,
+        weekly_off_day: editWeeklyOff,
+        status: editStatus
+      } : p));
+
       dataCache.clearAll();
+      window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'update', id: editingProfile.id } }));
       setIsEditModalOpen(false);
       setEditingProfile(null);
       await loadInitialData();
     } catch (err: any) {
       alert('Failed to update staff member: ' + err.message);
+      await loadInitialData();
     } finally {
       setIsSavingEdit(false);
     }
@@ -455,11 +483,13 @@ export const StaffManagement: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
       
       {/* Background Decorative Glows */}
-      <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/10 blur-[120px] pointer-events-none"></div>
-      <div className="absolute top-[40%] right-[-30%] w-[90vw] h-[90vw] rounded-full bg-purple-900/10 blur-[150px] pointer-events-none"></div>
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/10 blur-[120px]"></div>
+        <div className="absolute top-[40%] right-[-30%] w-[90vw] h-[90vw] rounded-full bg-purple-900/10 blur-[150px]"></div>
+      </div>
 
       {/* Left Sidebar Navigation (Desktop only) */}
       <Sidebar />

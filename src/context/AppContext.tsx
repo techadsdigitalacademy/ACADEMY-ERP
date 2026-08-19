@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { Staff, Sale, Attendance, DailyReport } from '../types';
 import { supabase, supabaseAdmin } from '../services/supabase';
 import { formatStaffEmail, ensureStaffAuthUser, normalizePassword } from '../services/staffAuth';
+import { dataCache } from '../services/dataCache';
 
 interface AppContextType {
   activeStaff: Staff | null;
@@ -292,6 +293,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTodayAttendance(todayRecord || null);
   }, [attendance]);
 
+  // Real-time synchronization across clients & tabs
+  useEffect(() => {
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sales' },
+        () => {
+          dataCache.clearAll();
+          window.dispatchEvent(new CustomEvent('sales_data_changed'));
+          if (activeStaff?.id) fetchDashboardData(activeStaff.id);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'staff' },
+        () => {
+          dataCache.clearAll();
+          window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'db_sync' } }));
+          if (activeStaff?.id) fetchDashboardData(activeStaff.id);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'staff_profiles' },
+        () => {
+          dataCache.clearAll();
+          window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'db_sync' } }));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'attendance' },
+        () => {
+          dataCache.clearAll();
+          window.dispatchEvent(new CustomEvent('attendance_data_changed'));
+          if (activeStaff?.id) fetchDashboardData(activeStaff.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeStaff?.id]);
+
   const login = async (username: string, pass: string) => {
     console.log('Incoming Login Attempt:', { username });
     try {
@@ -580,6 +627,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
+    dataCache.clearAll();
+    window.dispatchEvent(new CustomEvent('sales_data_changed'));
     await fetchDashboardData(activeStaff.id);
   };
 
@@ -622,6 +671,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw error;
     }
 
+    dataCache.clearAll();
+    window.dispatchEvent(new CustomEvent('sales_data_changed'));
     await fetchDashboardData(activeStaff.id);
   };
 
@@ -654,6 +705,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (newAtt) {
       setAttendance((prev) => [newAtt as Attendance, ...prev]);
     }
+    dataCache.clearAll();
+    window.dispatchEvent(new CustomEvent('attendance_data_changed'));
     await fetchDashboardData(activeStaff.id);
   };
 
@@ -685,6 +738,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         prev.map((item) => (item.id === updatedAtt.id ? (updatedAtt as Attendance) : item))
       );
     }
+    dataCache.clearAll();
+    window.dispatchEvent(new CustomEvent('attendance_data_changed'));
     await fetchDashboardData(activeStaff.id);
   };
 

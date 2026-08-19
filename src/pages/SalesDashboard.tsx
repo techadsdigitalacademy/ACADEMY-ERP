@@ -152,10 +152,10 @@ export const SalesDashboard: React.FC = () => {
 
 
 
-  // Fetch summaries for Admin View (Optimized parallel fetching with caching)
+  // Fetch summaries for Admin View (Optimized parallel fetching with caching & live revalidation)
   useEffect(() => {
     if (isAdminView && (activeTab === 'sales' || activeTab === 'staff-history')) {
-      const loadAdminDashboardData = async () => {
+      const loadAdminDashboardData = async (forceRefresh = false) => {
         try {
           const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
           const cacheKey = `admin_dashboard_summaries_${todayStr}`;
@@ -203,7 +203,7 @@ export const SalesDashboard: React.FC = () => {
                 staffData: staffRes.data || []
               };
             },
-            { ttlMs: 45000 }
+            { ttlMs: 45000, forceRefresh }
           );
 
           // Helper to identify Company Owners (matching AdminAttendance.tsx)
@@ -224,16 +224,18 @@ export const SalesDashboard: React.FC = () => {
             if (!p || !p.full_name) return false;
             if (p.status === 'INACTIVE' || p.status === 'RESIGNED') return false;
             if (isOwnerProfile(p)) return false;
-
+            
             const desig = String(p.designation || '').toLowerCase().trim();
             const rName = String(p.role_name || p.role || '').toLowerCase().trim();
+            const nameStr = String(p.full_name || '').toLowerCase().trim();
+
+            if (nameStr.includes('althaf')) return false;
 
             const isTutor = desig.includes('tutor') || rName.includes('tutor');
             const isCounselor = desig.includes('counselor') || rName.includes('counselor');
-            const isAdminDir = desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director');
+            const isAdmin = desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director');
 
-            if (isAdminDir) return false;
-            if (isTutor || isCounselor) return false;
+            if (isTutor || isCounselor || isAdmin) return false;
 
             return true;
           });
@@ -249,53 +251,39 @@ export const SalesDashboard: React.FC = () => {
 
           const staffList = activeProfiles.map((p: any) => {
             const sMatch = staffByCleanName.get(p.full_name.trim().toLowerCase());
-            const staffId = sMatch?.id || p.id;
-            const todayRecord = todayAttLogs.find((a: any) => 
-              (a.staff_id === staffId || a.staff_id === p.id)
-            );
+            const att = todayAttLogs.find((a: any) => a.staff_id === p.id || (sMatch && a.staff_id === sMatch.id));
             return {
-              id: staffId,
-              full_name: p.full_name,
-              todayRecord
+              id: p.id,
+              name: p.full_name,
+              designation: p.designation || 'Staff',
+              shift: `${(p.shift_start_time || '09:00').substring(0, 5)} - ${(p.shift_end_time || '18:00').substring(0, 5)}`,
+              punchIn: att?.punch_in ? att.punch_in.substring(0, 5) : '-',
+              status: att ? att.status : 'NOT PUNCHED'
             };
           });
 
-          // Present: strictly present on time (excluding Late and Half Day)
-          const present = staffList.filter(s => {
-            if (!s.todayRecord) return false;
-            const status = s.todayRecord.status;
-            const punchIn = s.todayRecord.punch_in;
-            return status === 'PRESENT' && (!punchIn || punchIn <= '09:30:00');
-          }).length;
+          let present = 0;
+          let late = 0;
+          let halfDay = 0;
+          let leave = 0;
+          let inOffice = 0;
 
-          // Late: marked as Late or present with punch_in > 09:30:00
-          const late = staffList.filter(s => {
-            if (!s.todayRecord) return false;
-            const status = s.todayRecord.status;
-            const punchIn = s.todayRecord.punch_in;
-            return status === 'LATE' || (status === 'PRESENT' && punchIn && punchIn > '09:30:00');
-          }).length;
+          staffList.forEach(s => {
+            if (s.status === 'PRESENT') {
+              present++;
+              inOffice++;
+            } else if (s.status === 'LATE') {
+              late++;
+              inOffice++;
+            } else if (s.status === 'HALF_DAY') {
+              halfDay++;
+              inOffice++;
+            } else if (s.status === 'LEAVE' || s.status === 'ABSENT') {
+              leave++;
+            }
+          });
 
-          // Half Day: marked as Half Day
-          const halfDay = staffList.filter(s => {
-            if (!s.todayRecord) return false;
-            return s.todayRecord.status === 'HALF_DAY';
-          }).length;
-
-          // On Leave / Absent: staff who haven't punched in yet or are on leave/absent
-          const leave = staffList.filter(s => {
-            if (!s.todayRecord) return true;
-            const status = s.todayRecord.status;
-            return status === 'LEAVE' || status === 'ABSENT';
-          }).length;
-
-          // In Office: total count of everyone inside the office today (Present + Late + Half Day combined who punched in)
-          const inOffice = staffList.filter(s => {
-            if (!s.todayRecord) return false;
-            const { punch_in, status } = s.todayRecord;
-            return !!punch_in && (status === 'PRESENT' || status === 'LATE' || status === 'HALF_DAY');
-          }).length;
-
+          // 1. Process Attendance Stats
           setTodayAttendanceStats({ present, late, halfDay, leave, inOffice });
 
           // 2. Process Academy Revenue
@@ -311,20 +299,16 @@ export const SalesDashboard: React.FC = () => {
 
           const targetMap: { [key: string]: number } = {};
           const avatarMap: { [key: string]: string } = {};
-          targets.forEach(t => {
+
+          targets.forEach((t: any) => {
             if (t.full_name) {
-              targetMap[t.full_name] = resolveStaffMonthTarget(t, selectedMonth);
+              const resTarget = resolveStaffMonthTarget(t, selectedMonth);
+              targetMap[t.full_name] = resTarget;
               if (t.avatar_url) avatarMap[t.full_name] = t.avatar_url;
             }
           });
 
-          let localSalesData: any[] = [];
-          try {
-            const localStr = localStorage.getItem('company_sales_local_store') || localStorage.getItem('sales');
-            if (localStr) localSalesData = JSON.parse(localStr);
-          } catch (e) {}
-
-          const combinedAllSales = [...dbSales, ...(Array.isArray(localSalesData) ? localSalesData : [])];
+          const combinedAllSales = [...dbSales];
 
           const isSaleInMonth = (s: any, monthKey: string) => {
             if (!s) return false;
@@ -398,6 +382,43 @@ export const SalesDashboard: React.FC = () => {
       };
 
       loadAdminDashboardData();
+
+      // Real-time live listeners for instant optimistic synchronization
+      const handleTargetUpdated = (e: any) => {
+        const { staffId, target } = e?.detail || {};
+        if (staffId && target !== undefined) {
+          setStaffProfiles(prev => prev.map(p => {
+            if (p.id === staffId || p.full_name === staffId) {
+              return { ...p, monthly_target_amount: target };
+            }
+            return p;
+          }));
+        }
+        loadAdminDashboardData(true);
+      };
+
+      const handleStaffProfilesChanged = (e: any) => {
+        const { action, id, name } = e?.detail || {};
+        if (action === 'delete' && id) {
+          setStaffProfiles(prev => prev.filter(p => p.id !== id && (!name || p.full_name?.toLowerCase() !== name.toLowerCase())));
+        }
+        loadAdminDashboardData(true);
+      };
+
+      const handleSalesChanged = () => {
+        loadAdminDashboardData(true);
+        if (activeStaff?.id) fetchDashboardData(activeStaff.id);
+      };
+
+      window.addEventListener('staff_target_updated', handleTargetUpdated);
+      window.addEventListener('staff_profiles_changed', handleStaffProfilesChanged);
+      window.addEventListener('sales_data_changed', handleSalesChanged);
+
+      return () => {
+        window.removeEventListener('staff_target_updated', handleTargetUpdated);
+        window.removeEventListener('staff_profiles_changed', handleStaffProfilesChanged);
+        window.removeEventListener('sales_data_changed', handleSalesChanged);
+      };
     }
   }, [isAdminView, activeTab, selectedMonth]);
 
@@ -1607,11 +1628,13 @@ export const SalesDashboard: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex flex-col lg:flex-row relative w-full overflow-x-hidden">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
       
       {/* Dynamic background lighting */}
-      <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-500/10 dark:bg-indigo-900/15 blur-[130px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-20%] w-[80vw] h-[80vw] rounded-full bg-purple-500/5 dark:bg-purple-900/10 blur-[130px] pointer-events-none"></div>
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-500/10 dark:bg-indigo-900/15 blur-[130px]"></div>
+        <div className="absolute bottom-[-10%] right-[-20%] w-[80vw] h-[80vw] rounded-full bg-purple-500/5 dark:bg-purple-900/10 blur-[130px]"></div>
+      </div>
 
       {/* Sidebar Navigation */}
       <Sidebar />
