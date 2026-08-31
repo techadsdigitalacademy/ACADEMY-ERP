@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
-import { supabase } from '../services/supabase';
+import { supabase, SALES_COLUMNS } from '../services/supabase';
 import { formatCurrency } from '../services/mockData';
 import { dataCache } from '../services/dataCache';
 import { MetricCardsSkeleton, TableSkeleton } from '../components/Skeleton';
@@ -160,12 +160,12 @@ export const FinanceDashboard: React.FC = () => {
             supabase.from('finance_settings').select('historical_opening_balance'),
             supabase.from('staff_profiles').select('id, full_name, designation, status'),
             supabase.from('staff').select('id, full_name'),
-            supabase.from('sales').select('*, staff(full_name)').lt('created_at', startOfMonthStr),
+            supabase.from('sales').select(`${SALES_COLUMNS}, staff(full_name)`).lt('created_at', startOfMonthStr),
             supabase.from('expenses').select('amount').lt('expense_date', startOfMonthDateStr),
             supabase.from('partner_withdrawals').select('amount').lt('withdrawal_date', startOfMonthDateStr),
-            supabase.from('sales').select('*, staff(full_name)').gte('created_at', startOfMonthStr).lte('created_at', endOfMonthStr),
+            supabase.from('sales').select(`${SALES_COLUMNS}, staff(full_name)`).gte('created_at', startOfMonthStr).lte('created_at', endOfMonthStr),
             supabase.from('expenses').select('*'),
-            supabase.from('sales').select('*, staff(full_name)').eq('payment_type', 'Refund'),
+            supabase.from('sales').select(`${SALES_COLUMNS}, staff(full_name)`).eq('payment_type', 'Refund'),
             supabase.from('partner_withdrawals').select('*').gte('withdrawal_date', startOfMonthDateStr).lte('withdrawal_date', endOfMonthDateStr)
           ]);
 
@@ -296,7 +296,7 @@ export const FinanceDashboard: React.FC = () => {
         };
       });
 
-      activeSalesOnly.forEach(sale => {
+      activeSalesOnly.forEach((sale: any) => {
         let sId = String(sale.staff_id || sale.user_id || '');
         let sName = (sale.staff_id && staffIdToNameMap.get(String(sale.staff_id))) || sale.staff_name || sale.staff?.full_name || '';
         let matchedProfileId = sId;

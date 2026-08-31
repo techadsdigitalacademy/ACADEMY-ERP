@@ -39,38 +39,24 @@ export const LogRefundModal: React.FC<LogRefundModalProps> = ({
     try {
       let slipUrl: string | null = null;
       if (slipFile) {
-        try {
-          const fileExt = slipFile.name.split('.').pop();
-          const fileName = `refund_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-          const filePath = `slips/${fileName}`;
+        const fileExt = slipFile.name.split('.').pop();
+        const fileName = `refund_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `slips/${fileName}`;
 
-          const { error: uploadErr } = await supabase.storage
-            .from('payment-slips')
-            .upload(filePath, slipFile);
+        const { error: uploadErr } = await supabase.storage
+          .from('payment_slips')
+          .upload(filePath, slipFile, { cacheControl: '31536000' });
 
-          if (!uploadErr) {
-            const { data: publicUrlData } = supabase.storage
-              .from('payment-slips')
-              .getPublicUrl(filePath);
-            slipUrl = publicUrlData.publicUrl;
-          }
-        } catch (e) {
-          console.warn('Slip upload fallback info:', e);
+        if (uploadErr) {
+          console.error('Refund slip upload failed:', uploadErr);
+          alert('Refund slip upload failed: ' + uploadErr.message + '. Please try again.');
+          return;
         }
 
-        // Base64 Data URL fallback if storage upload yields no public URL
-        if (!slipUrl) {
-          try {
-            slipUrl = await new Promise<string>((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string || '');
-              reader.onerror = () => resolve('');
-              reader.readAsDataURL(slipFile);
-            });
-          } catch (readErr) {
-            console.warn('FileReader slip fallback error:', readErr);
-          }
-        }
+        const { data: publicUrlData } = supabase.storage
+          .from('payment_slips')
+          .getPublicUrl(filePath);
+        slipUrl = publicUrlData.publicUrl;
       }
 
       const currentMonthStr = new Date().toISOString().substring(0, 7);

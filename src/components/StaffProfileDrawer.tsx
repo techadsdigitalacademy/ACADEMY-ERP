@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../services/supabase';
+import { supabase, SALES_COLUMNS } from '../services/supabase';
 import { Card } from './Card';
 import { Button } from './Button';
 import { X } from 'lucide-react';
@@ -55,7 +55,7 @@ export default function StaffProfileDrawer({ profile, onClose }: StaffProfileDra
 
       const { data: saleData } = await supabase
         .from('sales')
-        .select('*')
+        .select(SALES_COLUMNS)
         .eq('staff_id', targetStaffId)
         .order('created_at', { ascending: false });
       

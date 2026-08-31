@@ -15,3 +15,14 @@ export const supabaseAdmin = supabaseServiceKey
       }
     })
   : null;
+
+/**
+ * Explicit column list for `sales` queries.
+ *
+ * `select('*')` pulls `payment_proof_url`, which historically stored full
+ * base64 image data URLs and dominated every response. List and aggregation
+ * views never read it, so they use this list; the two views that open a slip
+ * preview append `, payment_proof_url` themselves.
+ */
+export const SALES_COLUMNS =
+  'id, staff_id, client_name, service_package, payment_type, package_amount, received_amount, balance_amount, sale_month, payment_method, work_description, created_at';

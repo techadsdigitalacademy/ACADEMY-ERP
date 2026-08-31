@@ -64,37 +64,21 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
       const filePath = `slips/${fileName}`;
 
-      let publicUrlStr: string | null = null;
-      const bucketNames = ['payment_proofs', 'payment-slips', 'sales-documents'];
+      const { error: uploadError } = await supabase.storage
+        .from('payment_slips')
+        .upload(filePath, file, { cacheControl: '31536000' });
 
-      for (const bName of bucketNames) {
-        try {
-          const { error: uploadError } = await supabase.storage
-            .from(bName)
-            .upload(filePath, file);
+      if (uploadError) throw uploadError;
 
-          if (!uploadError) {
-            const { data } = supabase.storage.from(bName).getPublicUrl(filePath);
-            publicUrlStr = data?.publicUrl || null;
-            if (publicUrlStr) break;
-          }
-        } catch (bErr) {
-          console.warn(`Bucket ${bName} upload attempt info:`, bErr);
-        }
-      }
+      const { data } = supabase.storage.from('payment_slips').getPublicUrl(filePath);
+      if (!data?.publicUrl) throw new Error('Could not resolve public URL for the uploaded slip.');
 
-      if (publicUrlStr) {
-        setPaymentProofUrl(publicUrlStr);
-      } else {
-        console.warn("Storage bucket not available. Fallback to base64 string.");
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setPaymentProofUrl(reader.result as string);
-        };
-        reader.readAsDataURL(file);
-      }
+      setPaymentProofUrl(data.publicUrl);
     } catch (err: any) {
-      console.warn('File upload error warning:', err);
+      console.error('Payment slip upload failed:', err);
+      alert('Payment slip upload failed: ' + (err.message || 'Unknown error') + '. Please try again.');
+      setUploadedFileName('');
+      setPaymentProofUrl('');
     } finally {
       setIsUploadingProof(false);
     }

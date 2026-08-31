@@ -63,8 +63,8 @@ export const Sidebar: React.FC = () => {
 
     setIsUploadingAvatar(true);
     try {
-      const processedDataUrl = await processAvatarFile(file);
-      await updateAvatar(processedDataUrl);
+      const processedBlob = await processAvatarFile(file);
+      await updateAvatar(processedBlob);
       alert('Profile picture updated successfully!');
     } catch (error: any) {
       console.error('Error uploading avatar:', error);

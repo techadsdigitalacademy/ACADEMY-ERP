@@ -8,7 +8,7 @@ import { AttendanceDashboard } from '../AttendanceDashboard';
 import { EditSaleModal } from '../EditSaleModal';
 import { ExpenseHistoryTab } from './ExpenseHistoryTab';
 import { SelfieLightboxModal } from '../sales-dashboard/SelfieLightboxModal';
-import { supabase } from '../../services/supabase';
+import { supabase, SALES_COLUMNS } from '../../services/supabase';
 import { formatCurrency } from '../../services/mockData';
 import { dataCache } from '../../services/dataCache';
 import { TableSkeleton } from '../Skeleton';
@@ -277,7 +277,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             exp3Res
           ] = await Promise.all([
             staffQuery,
-            supabase.from('sales').select('*').order('created_at', { ascending: false }),
+            supabase.from('sales').select(`${SALES_COLUMNS}, payment_proof_url`).order('created_at', { ascending: false }),
             supabase.from('daily_reports').select('*').eq('staff_id', p.id).order('report_date', { ascending: false }),
             supabase.from('leads').select('*').eq('assigned_to', p.id).order('created_at', { ascending: false }),
             p.id ? supabase.from('expenses').select('*').eq('staff_id', p.id).order('expense_date', { ascending: false }) : Promise.resolve({ data: [] }),

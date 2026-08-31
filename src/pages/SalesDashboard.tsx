@@ -14,7 +14,7 @@ import { SalesDashboardModals } from '../components/sales-dashboard/SalesDashboa
 import { SalesDashboardMetrics } from '../components/sales-dashboard/SalesDashboardMetrics';
 import { AgencyNoticeBoardWidget } from '../components/AgencyNoticeBoardWidget';
 import { NoticeBoardAdminModal } from '../components/NoticeBoardAdminModal';
-import { supabase, supabaseAdmin } from '../services/supabase';
+import { supabase, supabaseAdmin, SALES_COLUMNS } from '../services/supabase';
 import { formatCurrency } from '../services/mockData';
 import { dataCache } from '../services/dataCache';
 import { resetStaffAuthPassword } from '../services/staffAuth';
@@ -186,7 +186,7 @@ export const SalesDashboard: React.FC = () => {
                 supabase.from('academy_student_payments').select('amount'),
                 supabase.from('staff_profiles').select('*').order('created_at', { ascending: false }),
                 supabase.from('staff').select('id, monthly_target_amount, monthly_targets, full_name, avatar_url'),
-                supabase.from('sales').select('*'),
+                supabase.from('sales').select(SALES_COLUMNS),
                 supabase.from('daily_reports').select('*'),
                 supabase.from('attendance').select('staff_id, status, attendance_date'),
                 supabase.from('staff').select('*, departments(name), roles(role_name)')
@@ -332,7 +332,7 @@ export const SalesDashboard: React.FC = () => {
             const target = targetMap[p.full_name] || 0;
             const avatar_url = avatarMap[p.full_name] || undefined;
             
-            const staffSales = monthSalesFiltered.filter(s => 
+            const staffSales = monthSalesFiltered.filter((s: any) => 
               (s.staff_id && p.id && String(s.staff_id) === String(p.id)) ||
               (s.user_id && p.id && String(s.user_id) === String(p.id)) ||
               (s.staff_name && p.full_name && String(s.staff_name).trim().toLowerCase() === String(p.full_name).trim().toLowerCase()) ||
@@ -432,7 +432,7 @@ export const SalesDashboard: React.FC = () => {
 
       // 1. Parallel fetch sales, staff, and profiles for instant calculation
       const [salesRes, staffRes, profilesRes] = await Promise.all([
-        clientToUse.from('sales').select('*').order('created_at', { ascending: false }).limit(300),
+        clientToUse.from('sales').select(`${SALES_COLUMNS}, payment_proof_url`).order('created_at', { ascending: false }).limit(300),
         clientToUse.from('staff').select('id, full_name, avatar_url, designation'),
         clientToUse.from('staff_profiles').select('id, full_name')
       ]);
@@ -719,7 +719,7 @@ export const SalesDashboard: React.FC = () => {
           try {
             const { data: rData } = await supabase
               .from('sales')
-              .select('*')
+              .select(SALES_COLUMNS)
               .eq('payment_type', 'Refund');
             if (rData) refundSalesData = rData;
           } catch (e) {}

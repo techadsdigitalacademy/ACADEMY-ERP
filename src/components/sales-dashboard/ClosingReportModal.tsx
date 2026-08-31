@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../../services/supabase';
+import { supabase, SALES_COLUMNS } from '../../services/supabase';
 import { Card } from '../Card';
 import { Button } from '../Button';
 import { Badge } from '../Badge';
@@ -34,7 +34,7 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
         // 1. Fetch today's agency sales with staff details
         const { data: salesData, error: salesErr } = await supabase
           .from('sales')
-          .select('*, staff:staff_id(full_name)')
+          .select(`${SALES_COLUMNS}, staff:staff_id(full_name)`)
           .order('created_at', { ascending: false })
           .limit(300);
 
@@ -111,7 +111,7 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
 
       const { data: salesData, error } = await supabase
         .from('sales')
-        .select('*, staff:staff_id(full_name)')
+        .select(`${SALES_COLUMNS}, staff:staff_id(full_name)`)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -131,7 +131,7 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
         'Logged Time (IST)'
       ];
 
-      const rows = (salesData || []).map(s => {
+      const rows = (salesData || []).map((s: any) => {
         const saleLocalDate = s.created_at ? new Date(s.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) : '';
         const isToday = saleLocalDate === localTodayStr;
         const staffName = s.staff?.full_name || s.staff_name || 'Safwana';
@@ -184,7 +184,7 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
 
       const { data: salesData, error } = await supabase
         .from('sales')
-        .select('*, staff:staff_id(full_name)')
+        .select(`${SALES_COLUMNS}, staff:staff_id(full_name)`)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -195,7 +195,7 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
         return;
       }
 
-      const rowsHtml = (salesData || []).map(s => {
+      const rowsHtml = (salesData || []).map((s: any) => {
         const saleLocalDate = s.created_at ? new Date(s.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) : '';
         const isToday = saleLocalDate === localTodayStr;
         const staffName = s.staff?.full_name || s.staff_name || 'Staff';

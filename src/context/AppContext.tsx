@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { Staff, Sale, Attendance, DailyReport } from '../types';
-import { supabase, supabaseAdmin } from '../services/supabase';
+import { supabase, supabaseAdmin, SALES_COLUMNS } from '../services/supabase';
 import { formatStaffEmail, ensureStaffAuthUser, normalizePassword } from '../services/staffAuth';
 import { dataCache } from '../services/dataCache';
 
@@ -48,9 +48,22 @@ interface AppContextType {
   setIsAdminMode: (mode: boolean) => void;
   login: (username: string, pass: string) => Promise<boolean>;
   logout: () => void;
-  updateAvatar: (avatarUrl: string) => Promise<void>;
+  updateAvatar: (avatarBlob: Blob) => Promise<void>;
   fetchDashboardData: (staffId: string) => Promise<void>;
 }
+
+/**
+ * Cache keys each realtime-synced table feeds, so a write invalidates only the
+ * entries that actually depend on it. Previously every event called
+ * dataCache.clearAll(), which discarded unrelated cached queries and forced
+ * every open dashboard to refetch everything.
+ */
+const CACHE_KEYS_BY_TABLE: Record<string, string[]> = {
+  sales: ['profile_details_*', 'finance_ledger_*', 'admin_dashboard_summaries_*'],
+  staff: ['grid_targets_*', 'profile_details_*', 'admin_attendance_month_*', 'admin_dashboard_summaries_*'],
+  staff_profiles: ['admin_attendance_month_*', 'admin_dashboard_summaries_*'],
+  attendance: ['attendance_drill_*', 'admin_attendance_month_*', 'admin_dashboard_summaries_*'],
+};
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -136,7 +149,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Fetch sales from Supabase
       let salesQuery = supabase
         .from('sales')
-        .select('*, staff(full_name, avatar_url)')
+        .select(`${SALES_COLUMNS}, staff(full_name)`)
         .order('created_at', { ascending: false });
 
       if (!isAdminUser) {
@@ -146,18 +159,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const { data: salesData, error: salesErr } = await salesQuery;
       if (salesErr) throw salesErr;
 
+      // Attendance and daily reports are only ever read through the month
+      // selector, which offers the last 12 months, so bound both queries to
+      // that window instead of pulling the full history on every fetch.
+      const windowStart = new Date();
+      windowStart.setMonth(windowStart.getMonth() - 11);
+      windowStart.setDate(1);
+      const windowStartStr = windowStart.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
       // Fetch attendance records from Supabase
       const { data: attData, error: attErr } = await supabase
         .from('attendance')
         .select('*')
-        .eq('staff_id', staffId);
+        .eq('staff_id', staffId)
+        .gte('attendance_date', windowStartStr);
 
       if (attErr) throw attErr;
 
       // Fetch daily reports from Supabase
       let reportsQuery = supabase
         .from('daily_reports')
-        .select('*, staff(full_name)');
+        .select('*, staff(full_name)')
+        .gte('report_date', windowStartStr);
 
       if (!isAdminUser) {
         reportsQuery = reportsQuery.eq('staff_id', staffId);
@@ -295,31 +318,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Real-time synchronization across clients & tabs
   useEffect(() => {
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const invalidate = (table: string) => {
+      (CACHE_KEYS_BY_TABLE[table] || []).forEach((key) => dataCache.invalidate(key));
+    };
+
+    // Coalesce bursts of writes into a single refetch rather than firing one
+    // full dashboard reload per event.
+    const scheduleRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        if (activeStaff?.id) fetchDashboardData(activeStaff.id);
+      }, 400);
+    };
+
     const channel = supabase
       .channel('schema-db-changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sales' },
         () => {
-          dataCache.clearAll();
+          invalidate('sales');
           window.dispatchEvent(new CustomEvent('sales_data_changed'));
-          if (activeStaff?.id) fetchDashboardData(activeStaff.id);
+          scheduleRefresh();
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'staff' },
         () => {
-          dataCache.clearAll();
+          invalidate('staff');
           window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'db_sync' } }));
-          if (activeStaff?.id) fetchDashboardData(activeStaff.id);
+          scheduleRefresh();
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'staff_profiles' },
         () => {
-          dataCache.clearAll();
+          invalidate('staff_profiles');
           window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'db_sync' } }));
         }
       )
@@ -327,14 +366,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'postgres_changes',
         { event: '*', schema: 'public', table: 'attendance' },
         () => {
-          dataCache.clearAll();
+          invalidate('attendance');
           window.dispatchEvent(new CustomEvent('attendance_data_changed'));
-          if (activeStaff?.id) fetchDashboardData(activeStaff.id);
+          scheduleRefresh();
         }
       )
       .subscribe();
 
     return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
       supabase.removeChannel(channel);
     };
   }, [activeStaff?.id]);
@@ -531,10 +571,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.removeItem('tech_ads_is_admin');
   };
 
-  const updateAvatar = async (avatarUrl: string) => {
+  const updateAvatar = async (avatarBlob: Blob) => {
     if (!activeStaff) return;
     try {
-      // 1. Update in staff table
+      // 1. Upload to Storage and keep only the public URL in the database
+      const filePath = `${activeStaff.id}/${Date.now()}.jpg`;
+      const { error: uploadErr } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, avatarBlob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: true });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: publicUrlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
+      const avatarUrl = publicUrlData.publicUrl;
+
+      // 2. Update in staff table
       const { error: staffErr } = await supabase
         .from('staff')
         .update({ avatar_url: avatarUrl })

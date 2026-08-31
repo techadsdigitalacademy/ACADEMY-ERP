@@ -142,7 +142,9 @@ export const PunchModal: React.FC<PunchModalProps> = ({
         .from('attendance')
         .upload(fileName, blob, {
           contentType: 'image/jpeg',
-          cacheControl: '3600',
+          // Filenames are timestamped and never rewritten, so they can be
+          // cached indefinitely instead of re-fetched every hour.
+          cacheControl: '31536000',
           upsert: true
         });
 
