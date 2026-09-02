@@ -53,6 +53,42 @@ interface AppContextType {
 }
 
 /**
+ * URL path for each tab. The app renders from a single `activeTab` value, so
+ * the router is just a two-way binding between that value and location.pathname:
+ * every view gets a real, linkable URL and browser back/forward works.
+ */
+const TAB_PATHS: Record<string, string> = {
+  sales: '/sales',
+  history: '/sales-history',
+  'staff-history': '/staff-history',
+  expense_history: '/expense-history',
+  reports: '/reports',
+  attendance: '/attendance',
+  assets: '/assets',
+  leads: '/leads',
+  staff: '/staff',
+  finance: '/finance',
+  withdrawals: '/withdrawals',
+  academy_overview: '/academy',
+  academy_batches: '/academy/batches',
+  academy_students: '/academy/students',
+  academy_attendance: '/academy/attendance',
+  academy_finances: '/academy/finances',
+  academy_staff: '/academy/staff',
+};
+
+const PATH_TABS: Record<string, string> = Object.fromEntries(
+  Object.entries(TAB_PATHS).map(([tab, path]) => [path, tab])
+);
+
+const DEFAULT_TAB = 'sales';
+
+const tabForPath = (pathname: string): string => {
+  const clean = pathname.replace(/\/+$/, '') || '/';
+  return PATH_TABS[clean] || DEFAULT_TAB;
+};
+
+/**
  * Cache keys each realtime-synced table feeds, so a write invalidates only the
  * entries that actually depend on it. Previously every event called
  * dataCache.clearAll(), which discarded unrelated cached queries and forced
@@ -76,7 +112,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [todayAttendance, setTodayAttendance] = useState<Attendance | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets'>('sales');
+  const [activeTab, setActiveTabState] = useState<'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets'>(
+    () => tabForPath(window.location.pathname) as 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets'
+  );
+
+  // Changing tab pushes a history entry so each view is linkable and Back works.
+  const setActiveTab = (tab: 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets') => {
+    setActiveTabState(tab);
+    const path = TAB_PATHS[tab] || TAB_PATHS[DEFAULT_TAB];
+    if (window.location.pathname !== path) {
+      window.history.pushState({ tab }, '', path);
+    }
+  };
   const [isAdminMode, setIsAdminMode] = useState<boolean>(false);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try {
@@ -307,6 +354,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     initializeSession();
+  }, []);
+
+  // Browser back/forward -> tab state
+  useEffect(() => {
+    const onPop = () => setActiveTabState(tabForPath(window.location.pathname) as 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets');
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  // Give the initial view a canonical URL (e.g. "/" -> "/sales").
+  useEffect(() => {
+    const path = TAB_PATHS[activeTab] || TAB_PATHS[DEFAULT_TAB];
+    if (window.location.pathname !== path) {
+      window.history.replaceState({ tab: activeTab }, '', path);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Update today's attendance state whenever attendance array updates
@@ -741,8 +804,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         attendance_date: todayStr,
         punch_in: timeStr,
         selfie_url: selfieUrl || activeStaff.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256&auto=format&fit=crop',
-        lat: lat || 10.9345771,
-        lng: lng || 76.0016118,
+        // Record the real fix only. Substituting the office coordinate here
+        // would file a GPS-less punch as if it happened at the office.
+        lat: lat ?? null,
+        lng: lng ?? null,
         status: status || 'PRESENT'
       })
       .select()

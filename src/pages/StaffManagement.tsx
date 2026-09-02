@@ -483,13 +483,8 @@ export const StaffManagement: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
+    <div className="min-h-screen bg-card text-foreground font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
       
-      {/* Background Decorative Glows */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/10 blur-[120px]"></div>
-        <div className="absolute top-[40%] right-[-30%] w-[90vw] h-[90vw] rounded-full bg-purple-900/10 blur-[150px]"></div>
-      </div>
 
       {/* Left Sidebar Navigation (Desktop only) */}
       <Sidebar />
@@ -498,20 +493,20 @@ export const StaffManagement: React.FC = () => {
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12 animate-fade-in">
         
         {/* Header Section */}
-        <header className="glass-panel sticky top-14 lg:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-white/5 backdrop-blur-md">
+        <header className="bg-card border border-border sticky top-14 lg:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-border">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
-            <h1 className="text-base md:text-xl font-bold text-white tracking-wide flex items-center gap-2">
+            <h1 className="text-base md:text-xl font-bold text-foreground tracking-wide flex items-center gap-2">
               Staff Management Hub
               <Badge variant="indigo" className="text-[10px] py-0.5">Admin Only</Badge>
             </h1>
             <div className="flex items-center gap-3">
               <button 
                 onClick={() => setIsNoticeBoardModalOpen(true)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 rounded-lg text-xs font-bold transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 bg-primary-soft hover:bg-primary-soft text-primary rounded-lg text-xs font-bold transition-colors"
               >
                 <Megaphone className="w-3.5 h-3.5" /> Notice Board
               </button>
-              <span className="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded-lg border border-slate-700 font-bold">{profiles.length} Staff Registry</span>
+              <span className="text-xs bg-muted text-muted-foreground px-2.5 py-1 rounded-lg border border-border font-bold">{profiles.length} Staff Registry</span>
             </div>
           </div>
         </header>
@@ -520,7 +515,7 @@ export const StaffManagement: React.FC = () => {
         <main className="max-w-6xl w-full mx-auto px-4 md:px-8 mt-6 space-y-6">
           
           {dbError && (
-            <div className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-3 text-xs text-rose-400">
+            <div className="p-4 bg-danger-soft border border-danger/20 rounded-lg flex items-center gap-3 text-xs text-danger">
               <ShieldAlert className="w-5 h-5 shrink-0" />
               <div>
                 <p className="font-bold">Database Error</p>
@@ -534,31 +529,31 @@ export const StaffManagement: React.FC = () => {
             
             {/* Holiday Input */}
             <div className="lg:col-span-4">
-              <Card variant="glass" className="p-5 border-white/5 space-y-4">
-                <h3 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-2 border-b border-white/5 pb-2.5">
-                  <Calendar className="w-4.5 h-4.5 text-amber-400" />
+              <Card variant="glass" className="p-5 border-border space-y-4">
+                <h3 className="font-bold text-foreground text-xs uppercase tracking-wider flex items-center gap-2 border-b border-border pb-2.5">
+                  <Calendar className="w-4.5 h-4.5 text-warning" />
                   Mark Special Holiday
                 </h3>
                 <form onSubmit={handleAddHoliday} className="space-y-3.5">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase">Holiday Date</label>
+                    <label className="text-[9px] font-bold text-muted-foreground uppercase">Holiday Date</label>
                     <input 
                       type="date" 
                       required
                       value={holidayDate}
                       onChange={(e) => setHolidayDate(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                      className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase">Holiday Name</label>
+                    <label className="text-[9px] font-bold text-muted-foreground uppercase">Holiday Name</label>
                     <input 
                       type="text" 
                       required
                       placeholder="e.g. Independence Day"
                       value={holidayName}
                       onChange={(e) => setHolidayName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500"
+                      className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
                   <Button 
@@ -576,27 +571,27 @@ export const StaffManagement: React.FC = () => {
 
             {/* Holiday List */}
             <div className="lg:col-span-8">
-              <Card variant="glass" className="p-5 border-white/5 space-y-3">
-                <h3 className="font-bold text-white text-xs uppercase tracking-wider border-b border-white/5 pb-2.5">
+              <Card variant="glass" className="p-5 border-border space-y-3">
+                <h3 className="font-bold text-foreground text-xs uppercase tracking-wider border-b border-border pb-2.5">
                   Registered Holidays Calendar
                 </h3>
                 <div className="flex flex-wrap gap-2.5 max-h-40 overflow-y-auto pr-1 scrollbar-none">
                   {holidays?.map(h => (
-                    <div key={h.id} className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs flex items-center gap-2">
+                    <div key={h.id} className="p-2.5 rounded-md bg-warning-soft border border-warning/20 text-xs flex items-center gap-2">
                       <div>
-                        <span className="font-bold text-amber-300 block">{h.holiday_name}</span>
-                        <span className="text-[9px] text-slate-400 block mt-0.5">{h.holiday_date} (Sunday defaults as Holiday)</span>
+                        <span className="font-bold text-warning block">{h.holiday_name}</span>
+                        <span className="text-[9px] text-muted-foreground block mt-0.5">{h.holiday_date} (Sunday defaults as Holiday)</span>
                       </div>
                       <button 
                         onClick={() => handleDeleteHoliday(h.id, h.holiday_name)}
-                        className="p-1 rounded bg-slate-900/60 hover:bg-slate-800 text-slate-500 hover:text-rose-400 transition-colors"
+                        className="p-1 rounded bg-muted-2 hover:bg-muted text-muted-foreground hover:text-danger transition-colors"
                       >
                         <X className="w-3 h-3" />
                       </button>
                     </div>
                   ))}
                   {holidays.length === 0 && (
-                    <p className="text-xs text-slate-500 py-6 text-center w-full font-medium">No special holidays marked. Standard Sundays apply automatically.</p>
+                    <p className="text-xs text-muted-foreground py-6 text-center w-full font-medium">No special holidays marked. Standard Sundays apply automatically.</p>
                   )}
                 </div>
               </Card>
@@ -609,34 +604,34 @@ export const StaffManagement: React.FC = () => {
             
             {/* Left Column: Add New Member Form */}
             <div className="lg:col-span-4 space-y-4">
-              <Card variant="glass" className="p-5 border-white/5 space-y-4">
-                <div className="flex items-center gap-2 border-b border-white/5 pb-3">
-                  <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <Card variant="glass" className="p-5 border-border space-y-4">
+                <div className="flex items-center gap-2 border-b border-border pb-3">
+                  <div className="p-1.5 rounded-lg bg-primary-soft text-primary border border-primary/20">
                     <Plus className="w-4.5 h-4.5" />
                   </div>
-                  <h3 className="font-bold text-white text-sm uppercase tracking-wider">Add New Member</h3>
+                  <h3 className="font-bold text-foreground text-sm uppercase tracking-wider">Add New Member</h3>
                 </div>
 
                 <form onSubmit={handleAddStaff} className="space-y-3.5">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Staff Name</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Staff Name</label>
                     <input 
                       type="text" 
                       required
                       placeholder="e.g. John Doe"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
+                      className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Designation</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Designation</label>
                     <select 
                       required
                       value={designation}
                       onChange={(e) => setDesignation(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors"
+                      className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary transition-colors"
                     >
                       <option value="">Select Designation</option>
                       <option value="Managing Director">Managing Director</option>
@@ -652,35 +647,35 @@ export const StaffManagement: React.FC = () => {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Username</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Username</label>
                     <input 
                       type="text" 
                       required
                       placeholder="e.g. johndoe"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
+                      className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Password</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Password</label>
                     <input 
                       type="password" 
                       required
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
+                      className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Gender</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Gender</label>
                     <select
                       value={gender}
                       onChange={(e) => setGender(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors"
+                      className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary transition-colors"
                     >
                       <option value="Male">Male</option>
                       <option value="Female">Female</option>
@@ -689,33 +684,33 @@ export const StaffManagement: React.FC = () => {
 
                   <div className="grid grid-cols-2 gap-2.5">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">Shift Start</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase">Shift Start</label>
                       <input 
                         type="time" 
                         required
                         value={shiftStart}
                         onChange={(e) => setShiftStart(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors"
+                        className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary transition-colors"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase">Shift End</label>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase">Shift End</label>
                       <input 
                         type="time" 
                         required
                         value={shiftEnd}
                         onChange={(e) => setShiftEnd(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors"
+                        className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary transition-colors"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Weekly Off</label>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase">Weekly Off</label>
                     <select
                       value={weeklyOff}
                       onChange={(e) => setWeeklyOff(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors"
+                      className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary transition-colors"
                     >
                       <option value="Sunday">Sunday</option>
                       <option value="Monday">Monday</option>
@@ -742,22 +737,22 @@ export const StaffManagement: React.FC = () => {
 
             {/* Right Column: Active Team Members List */}
             <div className="lg:col-span-8 space-y-4">
-              <Card variant="glass" className="p-5 border-white/5 space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-white/5 pb-4">
-                  <h3 className="font-bold text-white text-sm uppercase tracking-wider flex items-center gap-2">
-                    <Star className="w-5 h-5 text-indigo-400" />
+              <Card variant="glass" className="p-5 border-border space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-border pb-4">
+                  <h3 className="font-bold text-foreground text-sm uppercase tracking-wider flex items-center gap-2">
+                    <Star className="w-5 h-5 text-primary" />
                     Active Team Members (Click card to drill-down)
                   </h3>
                   
                   {/* Search registry */}
                   <div className="relative w-full sm:w-60">
-                    <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-500" />
+                    <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-muted-foreground" />
                     <input 
                       type="text" 
                       placeholder="Search name, design..." 
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-8 pr-4 py-2 rounded-xl bg-slate-950/60 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
+                      className="w-full pl-8 pr-4 py-2 rounded-md bg-muted-2 border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
                     />
                   </div>
                 </div>
@@ -767,14 +762,14 @@ export const StaffManagement: React.FC = () => {
                   {loading ? (
                     <div className="col-span-1 md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3.5 w-full">
                       {[...Array(6)].map((_, i) => (
-                        <div key={i} className="animate-pulse bg-slate-900/60 p-4 rounded-2xl border border-white/5 h-28 w-full flex items-center gap-4">
-                          <div className="w-14 h-14 bg-slate-800 rounded-2xl"></div>
+                        <div key={i} className="animate-pulse bg-muted-2 p-4 rounded-lg border border-border h-28 w-full flex items-center gap-4">
+                          <div className="w-14 h-14 bg-muted rounded-lg"></div>
                           <div className="flex-1 space-y-2">
-                            <div className="h-4 bg-slate-800 rounded w-1/2"></div>
-                            <div className="h-3 bg-slate-800 rounded w-1/3"></div>
+                            <div className="h-4 bg-muted rounded w-1/2"></div>
+                            <div className="h-3 bg-muted rounded w-1/3"></div>
                             <div className="flex gap-2 pt-2">
-                               <div className="h-6 w-16 bg-slate-800 rounded-lg"></div>
-                               <div className="h-6 w-16 bg-slate-800 rounded-lg"></div>
+                               <div className="h-6 w-16 bg-muted rounded-lg"></div>
+                               <div className="h-6 w-16 bg-muted rounded-lg"></div>
                             </div>
                           </div>
                         </div>
@@ -785,31 +780,31 @@ export const StaffManagement: React.FC = () => {
                       <div 
                         key={profile.id} 
                         onClick={() => handleSelectProfile(profile)}
-                        className="p-3.5 rounded-2xl bg-slate-950/40 border border-white/5 flex gap-3 hover:border-indigo-500/20 cursor-pointer transition-colors duration-200"
+                        className="p-3.5 rounded-lg bg-muted-2 border border-border flex gap-3 hover:border-primary/20 cursor-pointer transition-colors duration-200"
                       >
                         <img 
                           src={profile.avatar_url || getAvatarUrl(profile.full_name, profile.gender)} 
                           alt={profile.full_name} 
-                          className="w-10 h-10 rounded-full object-cover border-2 border-slate-800"
+                          className="w-10 h-10 rounded-full object-cover border-2 border-border"
                         />
                         <div className="min-w-0 flex-1 flex flex-col justify-between">
                           <div>
                             <div className="flex items-center gap-1.5">
-                              <h4 className="font-bold text-slate-200 text-xs truncate leading-tight">{profile.full_name}</h4>
+                              <h4 className="font-bold text-foreground text-xs truncate leading-tight">{profile.full_name}</h4>
                               {profile.status === 'RESIGNED' && (
                                 <Badge variant="error" className="text-[8px] py-0 px-1 font-bold">RESIGNED</Badge>
                               )}
                             </div>
-                            <span className="text-[10px] text-indigo-300/80 font-bold tracking-tight block mt-0.5">{profile.designation}</span>
+                            <span className="text-[10px] text-primary font-bold tracking-tight block mt-0.5">{profile.designation}</span>
                           </div>
                           
-                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-2.5 text-[9px] text-slate-500 font-medium">
+                          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-2.5 text-[9px] text-muted-foreground font-medium">
                             <span className="flex items-center gap-1">
-                              <Star className="w-3 h-3 text-slate-600" />
+                              <Star className="w-3 h-3 text-muted-foreground" />
                               {profile.shift_start_time.substring(0, 5)} - {profile.shift_end_time.substring(0, 5)}
                             </span>
                             <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-slate-600" />
+                              <Calendar className="w-3 h-3 text-muted-foreground" />
                               Off: {profile.weekly_off_day}
                             </span>
                           </div>
@@ -819,28 +814,28 @@ export const StaffManagement: React.FC = () => {
                         <div className="flex flex-col gap-1.5 shrink-0 justify-center" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => handleResetPassword(profile)}
-                            className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-400 hover:text-amber-300 border border-slate-800 transition-colors"
+                            className="p-1.5 rounded-lg bg-card hover:bg-muted text-warning hover:text-warning border border-border transition-colors"
                             title="Reset Password"
                           >
                             <Key className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleToggleResignStaff(profile)}
-                            className={`p-1.5 rounded-lg border transition-colors ${profile.status === 'RESIGNED' ? 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border-emerald-800/40' : 'bg-slate-900 hover:bg-slate-800 text-rose-400 hover:text-rose-300 border-slate-800'}`}
+                            className={`p-1.5 rounded-lg border transition-colors ${profile.status === 'RESIGNED' ? 'bg-success-soft hover:bg-success-soft text-success border-success/40' : 'bg-card hover:bg-muted text-danger hover:text-danger border-border'}`}
                             title={profile.status === 'RESIGNED' ? 'Reactivate Staff' : 'Mark as Resigned'}
                           >
                             {profile.status === 'RESIGNED' ? <UserCheck className="w-3.5 h-3.5" /> : <UserMinus className="w-3.5 h-3.5" />}
                           </button>
                           <button
                             onClick={() => openEditModal(profile)}
-                            className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-indigo-400 hover:text-indigo-300 border border-slate-800 transition-colors"
+                            className="p-1.5 rounded-lg bg-card hover:bg-muted text-primary hover:text-primary border border-border transition-colors"
                             title="Edit Profile"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleDeleteStaff(profile.id, profile.full_name)}
-                            className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-rose-400 hover:text-rose-300 border border-slate-800 transition-colors"
+                            className="p-1.5 rounded-lg bg-card hover:bg-muted text-danger hover:text-danger border border-border transition-colors"
                             title="Delete Profile"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -849,10 +844,10 @@ export const StaffManagement: React.FC = () => {
                       </div>
                     ))
                   ) : (
-                    <div className="col-span-2 text-center py-16 glass-card border border-dashed border-white/5 rounded-2xl">
-                      <AlertCircle className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                      <p className="text-sm text-slate-400 font-semibold">No active staff members.</p>
-                      <p className="text-xs text-slate-500 mt-1">Use the form to log first entry.</p>
+                    <div className="col-span-2 text-center py-16 bg-card border border-border border border-dashed border-border rounded-lg">
+                      <AlertCircle className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground font-semibold">No active staff members.</p>
+                      <p className="text-xs text-muted-foreground mt-1">Use the form to log first entry.</p>
                     </div>
                   )}
                 </div>
@@ -869,52 +864,52 @@ export const StaffManagement: React.FC = () => {
 
       {/* EDIT STAFF PROFILE MODAL */}
       {isEditModalOpen && editingProfile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md overflow-y-auto animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 overflow-y-auto animate-fade-in">
           <Card 
             variant="solid" 
             glowColor="indigo" 
-            className="w-full max-w-md p-6 bg-slate-900 border border-slate-800 shadow-2xl relative animate-scale-up max-h-[90vh] overflow-y-auto"
+            className="w-full max-w-md p-6 bg-card border border-border shadow-2xl relative animate-scale-up max-h-[90vh] overflow-y-auto"
           >
             <button 
               onClick={() => {
                 setIsEditModalOpen(false);
                 setEditingProfile(null);
               }}
-              className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors duration-200"
+              className="absolute top-4 right-4 p-1.5 rounded-full bg-muted hover:bg-muted text-muted-foreground hover:text-white transition-colors duration-200"
             >
               <X className="w-4.5 h-4.5" />
             </button>
 
             <div className="flex items-center gap-2 mb-5">
-              <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <div className="p-2 rounded-lg bg-primary-soft text-primary border border-primary/20">
                 <Edit2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Edit Team Member</h3>
-                <p className="text-xs text-slate-400">Correct team member credentials or details</p>
+                <h3 className="text-lg font-bold text-foreground">Edit Team Member</h3>
+                <p className="text-xs text-muted-foreground">Correct team member credentials or details</p>
               </div>
             </div>
 
             <form onSubmit={handleUpdateStaff} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Staff Name</label>
+                <label className="text-xs font-semibold text-secondary-foreground">Staff Name</label>
                 <input 
                   type="text" 
                   required
                   placeholder="e.g. John Doe"
                   value={editFullName}
                   onChange={(e) => setEditFullName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 placeholder-slate-650 focus:outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Designation</label>
+                <label className="text-xs font-semibold text-secondary-foreground">Designation</label>
                 <select 
                   required
                   value={editDesignation}
                   onChange={(e) => setEditDesignation(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-sm text-foreground focus:outline-none focus:border-primary transition-colors"
                 >
                   <option value="">Select Designation</option>
                   <option value="Managing Director">Managing Director</option>
@@ -930,23 +925,23 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Username</label>
+                <label className="text-xs font-semibold text-secondary-foreground">Username</label>
                 <input 
                   type="text" 
                   required
                   placeholder="e.g. johndoe"
                   value={editUsername}
                   onChange={(e) => setEditUsername(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 placeholder-slate-650 focus:outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Gender</label>
+                <label className="text-xs font-semibold text-secondary-foreground">Gender</label>
                 <select
                   value={editGender}
                   onChange={(e) => setEditGender(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-sm text-foreground focus:outline-none"
                 >
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
@@ -955,33 +950,33 @@ export const StaffManagement: React.FC = () => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">Shift Start</label>
+                  <label className="text-xs font-semibold text-secondary-foreground">Shift Start</label>
                   <input 
                     type="time" 
                     required
                     value={editShiftStart}
                     onChange={(e) => setEditShiftStart(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-sm text-foreground focus:outline-none"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-300">Shift End</label>
+                  <label className="text-xs font-semibold text-secondary-foreground">Shift End</label>
                   <input 
                     type="time" 
                     required
                     value={editShiftEnd}
                     onChange={(e) => setEditShiftEnd(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none"
+                    className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-sm text-foreground focus:outline-none"
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Weekly Off</label>
+                <label className="text-xs font-semibold text-secondary-foreground">Weekly Off</label>
                 <select
                   value={editWeeklyOff}
                   onChange={(e) => setEditWeeklyOff(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-sm text-foreground focus:outline-none"
                 >
                   <option value="Sunday">Sunday</option>
                   <option value="Monday">Monday</option>
@@ -994,11 +989,11 @@ export const StaffManagement: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Employment Status</label>
+                <label className="text-xs font-semibold text-secondary-foreground">Employment Status</label>
                 <select
                   value={editStatus}
                   onChange={(e) => setEditStatus(e.target.value as any)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none"
+                  className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-sm text-foreground focus:outline-none"
                 >
                   <option value="ACTIVE">Active (Current Staff)</option>
                   <option value="RESIGNED">Resigned (Hide from future registries, keep history)</option>
@@ -1033,11 +1028,11 @@ export const StaffManagement: React.FC = () => {
       )}
 
       {/* Mobile Sticky Bottom Tab Bar Navigation (Hidden on desktop) */}
-      <nav className="fixed bottom-0 left-0 right-0 glass-panel border-t border-white/5 backdrop-blur-md py-2.5 px-6 z-40 md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 bg-card border border-border border-t border-border py-2.5 px-6 z-40 md:hidden">
         <div className="max-w-md mx-auto flex items-center justify-around">
           <button 
             onClick={() => setActiveTab('sales')}
-            className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+            className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
           >
             <Briefcase className="w-5 h-5" />
             <span className="text-[9px] font-medium">Sales Hub</span>
@@ -1045,7 +1040,7 @@ export const StaffManagement: React.FC = () => {
 
           <button 
             onClick={() => setActiveTab('history')}
-            className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+            className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
           >
             <Star className="w-5 h-5" />
             <span className="text-[9px] font-medium">History</span>
@@ -1053,7 +1048,7 @@ export const StaffManagement: React.FC = () => {
           
           <button 
             onClick={() => setActiveTab('attendance')}
-            className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+            className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
           >
             <Star className="w-5 h-5" />
             <span className="text-[9px] font-medium">Attendance</span>
@@ -1063,7 +1058,7 @@ export const StaffManagement: React.FC = () => {
             <>
               <button 
                 onClick={() => setActiveTab('academy_batches')}
-                className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+                className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
               >
                 <Star className="w-5 h-5" />
                 <span className="text-[9px] font-medium">Academy</span>
@@ -1071,7 +1066,7 @@ export const StaffManagement: React.FC = () => {
 
               <button 
                 onClick={() => setActiveTab('leads')}
-                className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+                className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
               >
                 <Star className="w-5 h-5" />
                 <span className="text-[9px] font-medium">Leads</span>

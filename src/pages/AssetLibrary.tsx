@@ -311,33 +311,33 @@ export const AssetLibrary: React.FC = () => {
     switch (category) {
       case 'SMM Videos':
       case 'SMM Video': 
-        return <Video className="w-4 h-4 text-pink-400" />;
+        return <Video className="w-4 h-4 text-primary" />;
       case 'Anchor/Script':
       case 'Anchor Video':
       case 'Anchor Reel Video':
       case 'Script Reel Video': 
-        return <Film className="w-4 h-4 text-purple-400" />;
+        return <Film className="w-4 h-4 text-primary" />;
       case 'Animation & 3D': 
-        return <Play className="w-4 h-4 text-blue-400" />;
+        return <Play className="w-4 h-4 text-primary" />;
       case 'Ai videos':
       case 'AI Video':
       case 'AI Animations': 
-        return <Sparkles className="w-4 h-4 text-amber-400" />;
+        return <Sparkles className="w-4 h-4 text-warning" />;
       case 'Posters & Branding':
       case 'Poster':
       case 'Cover Photos': 
-        return <ImageIcon className="w-4 h-4 text-indigo-400" />;
+        return <ImageIcon className="w-4 h-4 text-primary" />;
       case 'Logo Design':
       case 'Logo Work': 
         return <Star className="w-4 h-4 text-yellow-400" />;
       case 'Brochures':
       case 'Catalog':
       case 'Magazine': 
-        return <FileText className="w-4 h-4 text-emerald-400" />;
+        return <FileText className="w-4 h-4 text-success" />;
       case 'Packaging & Product Designs (Boxes/Bottles)': 
-        return <Box className="w-4 h-4 text-cyan-400" />;
+        return <Box className="w-4 h-4 text-primary" />;
       default: 
-        return <Layout className="w-4 h-4 text-indigo-400" />;
+        return <Layout className="w-4 h-4 text-primary" />;
     }
   };
 
@@ -348,12 +348,7 @@ export const AssetLibrary: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
-      {/* Background Lighting Glows */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/15 blur-[130px]"></div>
-        <div className="absolute bottom-[-10%] right-[-20%] w-[80vw] h-[80vw] rounded-full bg-pink-900/10 blur-[130px]"></div>
-      </div>
+    <div className="min-h-screen bg-card text-foreground font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
 
       <Sidebar />
 
@@ -362,14 +357,14 @@ export const AssetLibrary: React.FC = () => {
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 animate-fade-in">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold uppercase tracking-wider mb-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-soft border border-primary/20 text-primary text-xs font-bold uppercase tracking-wider mb-3">
                 <FolderOpen className="w-3.5 h-3.5" />
                 Asset Library
               </div>
-              <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight">
-                Marketing <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-pink-400">Hub</span>
+              <h1 className="text-3xl md:text-4xl font-extrabold text-foreground tracking-tight">
+                Marketing <span className="text-transparent bg-clip-text">Hub</span>
               </h1>
-              <p className="text-slate-400 mt-2 max-w-2xl text-sm leading-relaxed">
+              <p className="text-muted-foreground mt-2 max-w-2xl text-sm leading-relaxed">
                 Browse, search, and access marketing materials, videos, designs, and Google Drive links.
               </p>
             </div>
@@ -378,13 +373,13 @@ export const AssetLibrary: React.FC = () => {
               {canUpload ? (
                 <Button 
                   onClick={() => setIsAdding(true)}
-                  className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_20px_rgba(79,70,229,0.3)] flex items-center gap-2"
+                  className="bg-primary hover:bg-primary text-white shadow-[0_0_20px_rgba(79,70,229,0.3)] flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Upload Asset</span>
                 </Button>
               ) : (
-                <div className="px-3 py-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-xs font-semibold text-slate-400">
+                <div className="px-3 py-1.5 rounded-lg bg-card/80 border border-border text-xs font-semibold text-muted-foreground">
                   Read-Only Mode
                 </div>
               )}
@@ -392,21 +387,21 @@ export const AssetLibrary: React.FC = () => {
           </div>
 
           {/* Search & Categories Bar */}
-          <Card variant="glass" className="mb-6 p-4 border-white/5 animate-fade-in-up space-y-4">
+          <Card variant="glass" className="mb-6 p-4 border-border animate-fade-in-up space-y-4">
             {/* Real-time Search Input */}
             <div className="relative w-full">
-              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-indigo-400" />
+              <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-primary" />
               <input 
                 type="text" 
                 placeholder="Search by company name, asset title, category, or keyword..." 
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-900/80 border border-indigo-500/20 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/60 focus:ring-1 focus:ring-indigo-500/60 transition-all shadow-inner"
+                className="w-full bg-card/80 border border-primary rounded-md pl-10 pr-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-[var(--ring)] transition-all shadow-inner"
               />
               {searchQuery && (
                 <button 
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -414,16 +409,16 @@ export const AssetLibrary: React.FC = () => {
             </div>
 
             {/* Category Filter Pills */}
-            <div className="flex flex-wrap gap-2 pt-1 border-t border-white/5">
+            <div className="flex flex-wrap gap-2 pt-1 border-t border-border">
               {ALL_CATEGORIES.map(cat => (
                 <button
                   key={cat}
                   onClick={() => setActiveCategory(cat)}
                   className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 flex items-center gap-1.5 ${
-                    activeCategory === cat 
-                      ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/30 ring-1 ring-indigo-400/40' 
-                      : 'bg-slate-900/50 text-slate-400 hover:text-white hover:bg-slate-800 border border-white/5'
-                  }`}
+ activeCategory === cat 
+ ? 'bg-primary text-foreground ring-1 ring-[var(--ring)]' 
+ : 'bg-muted-2 text-muted-foreground hover:text-white hover:bg-muted border border-border'
+ }`}
                 >
                   {cat}
                 </button>
@@ -434,26 +429,26 @@ export const AssetLibrary: React.FC = () => {
           {/* Asset Data Table Container */}
           {loading ? (
             <div className="flex justify-center items-center py-20">
-              <div className="w-8 h-8 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+              <div className="w-8 h-8 border-2 border-primary/20 border-t-indigo-500 rounded-full animate-spin"></div>
             </div>
           ) : dbError ? (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-6 text-center text-red-400">
+            <div className="bg-danger-soft border border-danger/20 rounded-md p-6 text-center text-danger">
               {dbError}
             </div>
           ) : filteredAssets.length === 0 ? (
-            <div className="text-center py-20 bg-slate-900/20 rounded-2xl border border-white/5 border-dashed">
-              <FolderOpen className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-              <h3 className="text-lg font-bold text-white mb-1">No marketing assets found</h3>
-              <p className="text-sm text-slate-400 max-w-sm mx-auto">
+            <div className="text-center py-20 bg-muted-2 rounded-lg border border-border border-dashed">
+              <FolderOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-foreground mb-1">No marketing assets found</h3>
+              <p className="text-sm text-muted-foreground max-w-sm mx-auto">
                 {searchQuery ? `No assets matching "${searchQuery}". Try clearing your search filters.` : 'Upload videos, graphics, or branding materials to populate the hub.'}
               </p>
             </div>
           ) : (
-            <Card variant="glass" className="border-white/5 p-0 overflow-hidden shadow-2xl animate-fade-in-up">
+            <Card variant="glass" className="border-border p-0 overflow-hidden shadow-2xl animate-fade-in-up">
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse min-w-[850px]">
                   <thead>
-                    <tr className="bg-slate-900/80 border-b border-white/10 text-[11px] font-black text-slate-400 uppercase tracking-wider">
+                    <tr className="bg-card/80 border-b border-border text-[11px] font-black text-muted-foreground uppercase tracking-wider">
                       <th className="py-4 px-5">Company / Client</th>
                       <th className="py-4 px-5">Asset Title & Category</th>
                       <th className="py-4 px-5 max-w-xs">Description / Specs</th>
@@ -461,37 +456,37 @@ export const AssetLibrary: React.FC = () => {
                       <th className="py-4 px-5 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5 text-sm">
+                  <tbody className="divide-y divide-border text-sm">
                     {filteredAssets.map((asset) => {
                       const companyTag = getDisplayCompany(asset);
                       const cleanDesc = getCleanDescription(asset);
                       const userCanManage = canManageAsset(asset);
 
                       return (
-                        <tr key={asset.id} className="hover:bg-indigo-500/5 transition-colors group">
+                        <tr key={asset.id} className="hover:bg-primary-soft transition-colors group">
                           {/* Company Name */}
                           <td className="py-4 px-5 align-top">
                             {companyTag ? (
-                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-extrabold whitespace-nowrap">
-                                <Building2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-primary-soft border border-primary/20 text-primary text-xs font-extrabold whitespace-nowrap">
+                                <Building2 className="w-3.5 h-3.5 text-primary shrink-0" />
                                 <span>{companyTag}</span>
                               </div>
                             ) : (
-                              <span className="text-xs text-slate-500 italic">General / Unspecified</span>
+                              <span className="text-xs text-muted-foreground italic">General / Unspecified</span>
                             )}
                           </td>
 
                           {/* Title & Category */}
                           <td className="py-4 px-5 align-top">
                             <div className="flex items-start gap-3">
-                              <div className="p-2 rounded-xl bg-slate-900 border border-white/10 shrink-0 mt-0.5">
+                              <div className="p-2 rounded-md bg-card border border-border shrink-0 mt-0.5">
                                 {getCategoryIcon(asset.category)}
                               </div>
                               <div>
-                                <h4 className="font-bold text-white text-sm group-hover:text-indigo-300 transition-colors leading-snug">
+                                <h4 className="font-bold text-foreground text-sm group-hover:text-primary transition-colors leading-snug">
                                   {asset.title}
                                 </h4>
-                                <span className="inline-block text-[10px] text-indigo-400 font-extrabold uppercase tracking-wider mt-1 px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20">
+                                <span className="inline-block text-[10px] text-primary font-extrabold uppercase tracking-wider mt-1 px-2 py-0.5 rounded bg-primary-soft border border-primary/20">
                                   {asset.category}
                                 </span>
                               </div>
@@ -500,16 +495,16 @@ export const AssetLibrary: React.FC = () => {
 
                           {/* Description */}
                           <td className="py-4 px-5 align-top max-w-xs">
-                            <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                              {cleanDesc || <span className="italic text-slate-600">No notes provided</span>}
+                            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                              {cleanDesc || <span className="italic text-muted-foreground">No notes provided</span>}
                             </p>
                           </td>
 
                           {/* Uploaded By & Date */}
                           <td className="py-4 px-5 align-top whitespace-nowrap">
                             <div className="flex flex-col">
-                              <span className="text-xs font-bold text-slate-200">{asset.staff?.full_name || 'Team Member'}</span>
-                              <span className="text-[10px] text-slate-500 font-semibold">{new Date(asset.asset_date).toLocaleDateString()}</span>
+                              <span className="text-xs font-bold text-foreground">{asset.staff?.full_name || 'Team Member'}</span>
+                              <span className="text-[10px] text-muted-foreground font-semibold">{new Date(asset.asset_date).toLocaleDateString()}</span>
                             </div>
                           </td>
 
@@ -518,13 +513,13 @@ export const AssetLibrary: React.FC = () => {
                             <div className="flex items-center justify-end gap-1.5">
                               <button
                                 onClick={() => handleCopyLink(asset.drive_link, asset.id)}
-                                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-all border border-white/5 flex items-center gap-1"
+                                className="px-2.5 py-1.5 rounded-lg bg-muted hover:bg-muted text-secondary-foreground hover:text-white text-xs font-bold transition-all border border-border flex items-center gap-1"
                                 title="Copy Drive Link"
                               >
                                 {copiedId === asset.id ? (
                                   <>
-                                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                    <span className="text-emerald-400 text-[11px]">Copied</span>
+                                    <Check className="w-3.5 h-3.5 text-success" />
+                                    <span className="text-success text-[11px]">Copied</span>
                                   </>
                                 ) : (
                                   <>
@@ -538,7 +533,7 @@ export const AssetLibrary: React.FC = () => {
                                 href={asset.drive_link} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
-                                className="px-2.5 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 text-xs font-bold transition-all flex items-center gap-1 shadow-sm"
+                                className="px-2.5 py-1.5 rounded-lg bg-primary-soft hover:bg-primary-soft text-primary border border-primary/30 text-xs font-bold transition-all flex items-center gap-1 shadow-sm"
                                 title="Open Google Drive Link"
                               >
                                 <span className="text-[11px]">Drive</span>
@@ -548,7 +543,7 @@ export const AssetLibrary: React.FC = () => {
                               {userCanManage && (
                                 <button
                                   onClick={() => handleOpenEdit(asset)}
-                                  className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 transition-colors"
+                                  className="p-1.5 rounded-lg bg-warning-soft hover:bg-warning-soft text-warning border border-warning/20 transition-colors"
                                   title="Edit Asset"
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
@@ -558,7 +553,7 @@ export const AssetLibrary: React.FC = () => {
                               {userCanManage && (
                                 <button
                                   onClick={() => handleDeleteAsset(asset)}
-                                  className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors"
+                                  className="p-1.5 rounded-lg bg-danger-soft hover:bg-danger-soft text-danger border border-danger/20 transition-colors"
                                   title="Delete Asset"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -579,51 +574,51 @@ export const AssetLibrary: React.FC = () => {
 
       {/* Upload Asset Modal */}
       {isAdding && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in p-4">
-          <Card variant="glass" className="w-full max-w-md border-white/10 p-6 animate-scale-up relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 animate-fade-in p-4">
+          <Card variant="glass" className="w-full max-w-md border-border p-6 animate-scale-up relative">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="text-xl font-bold text-white">Upload Asset Link</h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Role: <span className="text-indigo-400 font-bold">{userDesignation || 'Admin'}</span>
+                <h3 className="text-xl font-bold text-foreground">Upload Asset Link</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Role: <span className="text-primary font-bold">{userDesignation || 'Admin'}</span>
                 </p>
               </div>
-              <button onClick={() => setIsAdding(false)} className="p-2 bg-slate-900 rounded-lg text-slate-400 hover:text-white transition-colors">
+              <button onClick={() => setIsAdding(false)} className="p-2 bg-card rounded-lg text-muted-foreground hover:text-white transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             <form onSubmit={handleAddAsset} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Asset Title</label>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Asset Title</label>
                 <input 
                   type="text" 
                   required
                   value={assetTitle}
                   onChange={e => setAssetTitle(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
+                  className="w-full bg-muted-2 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
                   placeholder="e.g. SMM Reel Promo Q3"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Company / Client Name</label>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Company / Client Name</label>
                 <input 
                   type="text" 
                   required
                   value={companyName}
                   onChange={e => setCompanyName(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
+                  className="w-full bg-muted-2 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
                   placeholder="e.g. TechAds, Apex Real Estate, ABC Brand"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Category</label>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Category</label>
                 <select
                   value={assetCategory}
                   onChange={e => setAssetCategory(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                  className="w-full bg-muted-2 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
                 >
                   {allowedUploadCategories.map(c => (
                     <option key={c} value={c}>{c}</option>
@@ -632,34 +627,34 @@ export const AssetLibrary: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Date</label>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Date</label>
                 <input 
                   type="date" 
                   required
                   value={assetDate}
                   onChange={e => setAssetDate(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                  className="w-full bg-muted-2 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Google Drive File / Folder Link</label>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Google Drive File / Folder Link</label>
                 <input 
                   type="url" 
                   required
                   value={driveLink}
                   onChange={e => setDriveLink(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
+                  className="w-full bg-muted-2 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
                   placeholder="https://drive.google.com/..."
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Description / Notes</label>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Description / Notes</label>
                 <textarea 
                   value={assetDescription}
                   onChange={e => setAssetDescription(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 min-h-[70px]"
+                  className="w-full bg-muted-2 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 min-h-[70px]"
                   placeholder="Notes on resolution, variations, specs..."
                 />
               </div>
@@ -668,7 +663,7 @@ export const AssetLibrary: React.FC = () => {
                 <Button type="button" variant="secondary" onClick={() => setIsAdding(false)} className="flex-1">
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" isLoading={isSubmitting} className="flex-1 bg-indigo-600 hover:bg-indigo-500">
+                <Button type="submit" variant="primary" isLoading={isSubmitting} className="flex-1 bg-primary hover:bg-primary">
                   Save Asset
                 </Button>
               </div>
@@ -679,47 +674,47 @@ export const AssetLibrary: React.FC = () => {
 
       {/* Edit Asset Modal */}
       {editingAsset && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in p-4">
-          <Card variant="glass" className="w-full max-w-md border-white/10 p-6 animate-scale-up relative">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 animate-fade-in p-4">
+          <Card variant="glass" className="w-full max-w-md border-border p-6 animate-scale-up relative">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="text-xl font-bold text-white">Edit Asset</h3>
-                <p className="text-xs text-slate-400 mt-1">Update asset information & Google Drive link</p>
+                <h3 className="text-xl font-bold text-foreground">Edit Asset</h3>
+                <p className="text-xs text-muted-foreground mt-1">Update asset information & Google Drive link</p>
               </div>
-              <button onClick={() => setEditingAsset(null)} className="p-2 bg-slate-900 rounded-lg text-slate-400 hover:text-white transition-colors">
+              <button onClick={() => setEditingAsset(null)} className="p-2 bg-card rounded-lg text-muted-foreground hover:text-white transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
             
             <form onSubmit={handleUpdateAsset} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Asset Title</label>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Asset Title</label>
                 <input 
                   type="text" 
                   required
                   value={editTitle}
                   onChange={e => setEditTitle(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
+                  className="w-full bg-muted-2 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Company / Client Name</label>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Company / Client Name</label>
                 <input 
                   type="text" 
                   required
                   value={editCompanyName}
                   onChange={e => setEditCompanyName(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
+                  className="w-full bg-muted-2 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Category</label>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Category</label>
                 <select
                   value={editCategory}
                   onChange={e => setEditCategory(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                  className="w-full bg-muted-2 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
                 >
                   {ALL_CATEGORIES.filter(c => c !== 'All').map(c => (
                     <option key={c} value={c}>{c}</option>
@@ -728,33 +723,33 @@ export const AssetLibrary: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Date</label>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Date</label>
                 <input 
                   type="date" 
                   required
                   value={editDate}
                   onChange={e => setEditDate(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+                  className="w-full bg-muted-2 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Google Drive Link</label>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Google Drive Link</label>
                 <input 
                   type="url" 
                   required
                   value={editDriveLink}
                   onChange={e => setEditDriveLink(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50"
+                  className="w-full bg-muted-2 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Description / Notes</label>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Description / Notes</label>
                 <textarea 
                   value={editDescription}
                   onChange={e => setEditDescription(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-4 py-2.5 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 min-h-[70px]"
+                  className="w-full bg-muted-2 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 min-h-[70px]"
                 />
               </div>
 
@@ -762,7 +757,7 @@ export const AssetLibrary: React.FC = () => {
                 <Button type="button" variant="secondary" onClick={() => setEditingAsset(null)} className="flex-1">
                   Cancel
                 </Button>
-                <Button type="submit" variant="primary" isLoading={isUpdating} className="flex-1 bg-indigo-600 hover:bg-indigo-500">
+                <Button type="submit" variant="primary" isLoading={isUpdating} className="flex-1 bg-primary hover:bg-primary">
                   Update Asset
                 </Button>
               </div>

@@ -81,25 +81,25 @@ export default function StaffProfileDrawer({ profile, onClose }: StaffProfileDra
   if (!profile) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto animate-fade-in">
-      <Card variant="solid" className="w-full max-w-2xl p-6 bg-slate-900 border border-slate-800 relative animate-scale-up max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 overflow-y-auto animate-fade-in">
+      <Card variant="solid" className="w-full max-w-2xl p-6 bg-card border border-border relative animate-scale-up max-h-[90vh] overflow-y-auto">
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white"
+          className="absolute top-4 right-4 p-1.5 rounded-full bg-muted hover:bg-muted text-muted-foreground hover:text-white"
         >
           <X className="w-4 h-4" />
         </button>
 
-        <div className="flex gap-4 items-center border-b border-white/5 pb-4 mb-4">
+        <div className="flex gap-4 items-center border-b border-border pb-4 mb-4">
             <img 
               src={profile.avatar_url || getAvatarUrl(profile.full_name, profile.gender)} 
               alt={profile.full_name} 
-              className="w-16 h-16 rounded-3xl object-cover object-center bg-slate-900 border-2 border-slate-800" 
+              className="w-16 h-16 rounded-lg object-cover object-center bg-card border-2 border-border" 
             />
           <div>
-            <h3 className="font-bold text-white text-base leading-tight">{profile.full_name}</h3>
-            <p className="text-xs text-indigo-400 font-semibold mt-0.5">{profile.designation}</p>
-            <div className="flex items-center gap-3 text-[10px] text-slate-500 mt-1">
+            <h3 className="font-bold text-foreground text-base leading-tight">{profile.full_name}</h3>
+            <p className="text-xs text-primary font-semibold mt-0.5">{profile.designation}</p>
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground mt-1">
               <span>Shift: {profile.shift_start_time.substring(0, 5)} - {profile.shift_end_time.substring(0, 5)}</span>
               <span>Off: {profile.weekly_off_day}</span>
             </div>
@@ -107,22 +107,22 @@ export default function StaffProfileDrawer({ profile, onClose }: StaffProfileDra
         </div>
 
         {/* Detailed Sub-tabs selectors */}
-        <div className="flex gap-2.5 border-b border-white/5 pb-3.5 mb-4">
+        <div className="flex gap-2.5 border-b border-border pb-3.5 mb-4">
           <button
             onClick={() => setDetailTab('sales')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors border ${detailTab === 'sales' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-950 border-white/5 text-slate-400'}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors border ${detailTab === 'sales' ? 'bg-primary border-primary text-white' : 'bg-card border-border text-muted-foreground'}`}
           >
             Sales History Log
           </button>
           <button
             onClick={() => setDetailTab('attendance')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors border ${detailTab === 'attendance' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-950 border-white/5 text-slate-400'}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors border ${detailTab === 'attendance' ? 'bg-primary border-primary text-white' : 'bg-card border-border text-muted-foreground'}`}
           >
             Attendance
           </button>
           <button
             onClick={() => setDetailTab('reports')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors border ${detailTab === 'reports' ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-950 border-white/5 text-slate-400'}`}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors border ${detailTab === 'reports' ? 'bg-primary border-primary text-white' : 'bg-card border-border text-muted-foreground'}`}
           >
             Daily Reports
           </button>
@@ -174,27 +174,27 @@ export default function StaffProfileDrawer({ profile, onClose }: StaffProfileDra
 
         {detailTab === 'reports' && (
           <div className="space-y-3">
-            <h4 className="text-xs font-bold text-white uppercase">Daily Reports ({profileReports.length})</h4>
-            <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/20 max-h-60 overflow-y-auto">
+            <h4 className="text-xs font-bold text-foreground uppercase">Daily Reports ({profileReports.length})</h4>
+            <div className="overflow-x-auto rounded-md border border-border bg-muted-2 max-h-60 overflow-y-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase">
+                  <tr className="border-b border-border bg-muted-2 text-[9px] font-bold text-muted-foreground uppercase">
                     <th className="py-2.5 px-3">Date</th>
                     <th className="py-2.5 px-3">Work Type</th>
                     <th className="py-2.5 px-3">Description</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5 text-slate-300">
+                <tbody className="divide-y divide-border text-secondary-foreground">
                   {profileReports.map((r) => (
                     <tr key={r.id}>
-                      <td className="py-2.5 px-3 font-mono text-slate-400">{r.report_date}</td>
-                      <td className="py-2.5 px-3 font-bold text-emerald-400">{r.work_type}</td>
-                      <td className="py-2.5 px-3 text-slate-300 truncate max-w-xs">{r.description || '-'}</td>
+                      <td className="py-2.5 px-3 font-mono text-muted-foreground">{r.report_date}</td>
+                      <td className="py-2.5 px-3 font-bold text-success">{r.work_type}</td>
+                      <td className="py-2.5 px-3 text-secondary-foreground truncate max-w-xs">{r.description || '-'}</td>
                     </tr>
                   ))}
                   {profileReports.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="text-center py-6 text-slate-500 font-bold">No daily reports recorded.</td>
+                      <td colSpan={3} className="text-center py-6 text-muted-foreground font-bold">No daily reports recorded.</td>
                     </tr>
                   )}
                 </tbody>
@@ -203,7 +203,7 @@ export default function StaffProfileDrawer({ profile, onClose }: StaffProfileDra
           </div>
         )}
 
-        <div className="mt-6 pt-2 border-t border-slate-800">
+        <div className="mt-6 pt-2 border-t border-border">
           <Button 
             variant="secondary" 
             fullWidth 

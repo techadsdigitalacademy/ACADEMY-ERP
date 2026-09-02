@@ -12,15 +12,15 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   const variantStyles = {
     rectangular: 'rounded-none',
     circular: 'rounded-full',
-    rounded: 'rounded-xl'
+    rounded: 'rounded-md'
   }[variant];
 
   return (
     <div
-      className={`relative overflow-hidden bg-slate-800/40 dark:bg-slate-800/40 light:bg-slate-200/80 animate-pulse ${variantStyles} ${className}`}
+      className={`relative overflow-hidden bg-muted ${variantStyles} ${className}`}
     >
       <div 
-        className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/5 dark:via-white/5 light:via-black/5 to-transparent animate-[shimmer_2s_infinite]"
+        className="absolute inset-0 -translate-x-full from-transparent via-black/[.04] dark:via-white/[.06] to-transparent animate-[shimmer_1.6s_infinite]"
       />
     </div>
   );
@@ -35,7 +35,7 @@ export const MetricCardsSkeleton: React.FC<{ count?: number; cols?: string }> = 
       {Array.from({ length: count }).map((_, idx) => (
         <div 
           key={idx} 
-          className="glass-card p-3 rounded-2xl border border-white/5 flex flex-col justify-between min-h-[82px] animate-pulse"
+          className="surface p-3.5 rounded-lg flex flex-col justify-between min-h-[82px]"
         >
           <Skeleton className="h-3 w-16 mb-2 rounded-md" />
           <Skeleton className="h-6 w-24 rounded-lg mt-1" />
@@ -50,25 +50,25 @@ export const TableSkeleton: React.FC<{ rows?: number; columns?: number }> = ({
   columns = 6
 }) => {
   return (
-    <div className="glass-card rounded-2xl border border-white/5 overflow-hidden w-full">
+    <div className="surface rounded-lg overflow-hidden w-full">
       {/* Header */}
-      <div className="p-4 border-b border-white/5 flex items-center justify-between gap-4">
+      <div className="p-4 border-b border-border flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Skeleton className="h-8 w-8 rounded-lg" />
           <Skeleton className="h-5 w-40 rounded-md" />
         </div>
-        <Skeleton className="h-8 w-28 rounded-xl" />
+        <Skeleton className="h-8 w-28 rounded-md" />
       </div>
 
       {/* Table Head */}
-      <div className="bg-slate-900/40 px-4 py-3 border-b border-white/5 flex gap-4">
+      <div className="bg-muted-2 px-4 py-3 border-b border-border flex gap-4">
         {Array.from({ length: columns }).map((_, idx) => (
           <Skeleton key={idx} className="h-4 flex-1 rounded-md" />
         ))}
       </div>
 
       {/* Table Rows */}
-      <div className="divide-y divide-white/5">
+      <div className="divide-y divide-border">
         {Array.from({ length: rows }).map((_, rIdx) => (
           <div key={rIdx} className="px-4 py-3.5 flex items-center gap-4">
             {Array.from({ length: columns }).map((_, cIdx) => (
@@ -86,7 +86,7 @@ export const TableSkeleton: React.FC<{ rows?: number; columns?: number }> = ({
 
 export const ChartSkeleton: React.FC<{ height?: string }> = ({ height = 'h-72' }) => {
   return (
-    <div className={`glass-card p-5 rounded-2xl border border-white/5 w-full flex flex-col justify-between ${height}`}>
+    <div className={`surface p-5 rounded-lg w-full flex flex-col justify-between ${height}`}>
       <div className="flex items-center justify-between mb-4">
         <Skeleton className="h-5 w-48 rounded-md" />
         <Skeleton className="h-4 w-24 rounded-md" />
@@ -110,7 +110,7 @@ export const StaffGridSkeleton: React.FC<{ count?: number }> = ({ count = 6 }) =
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
       {Array.from({ length: count }).map((_, idx) => (
-        <div key={idx} className="glass-card p-4 rounded-2xl border border-white/5 flex flex-col gap-3 animate-pulse">
+        <div key={idx} className="surface p-4 rounded-lg flex flex-col gap-3">
           <div className="flex items-center gap-3">
             <Skeleton variant="circular" className="w-12 h-12 flex-shrink-0" />
             <div className="flex-1 space-y-1.5">
@@ -118,10 +118,10 @@ export const StaffGridSkeleton: React.FC<{ count?: number }> = ({ count = 6 }) =
               <Skeleton className="h-3 w-1/2 rounded-md" />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/5">
-            <Skeleton className="h-10 rounded-xl" />
-            <Skeleton className="h-10 rounded-xl" />
-            <Skeleton className="h-10 rounded-xl" />
+          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border">
+            <Skeleton className="h-10 rounded-md" />
+            <Skeleton className="h-10 rounded-md" />
+            <Skeleton className="h-10 rounded-md" />
           </div>
         </div>
       ))}
@@ -131,18 +131,18 @@ export const StaffGridSkeleton: React.FC<{ count?: number }> = ({ count = 6 }) =
 
 export const PageLoader: React.FC = () => {
   return (
-    <div className="min-h-screen w-full flex flex-col bg-[#090d16] p-4 md:p-8 space-y-6 animate-pulse">
+    <div className="min-h-screen w-full flex flex-col bg-background p-4 md:p-8 space-y-6">
       {/* Top Navbar Skeleton */}
-      <div className="glass-panel rounded-2xl px-6 py-4 flex items-center justify-between border border-white/5">
+      <div className="surface rounded-lg px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Skeleton className="w-10 h-10 rounded-xl" />
+          <Skeleton className="w-10 h-10 rounded-md" />
           <div className="space-y-1.5">
             <Skeleton className="h-5 w-40 rounded-md" />
             <Skeleton className="h-3 w-28 rounded-md" />
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <Skeleton className="h-9 w-24 rounded-xl" />
+          <Skeleton className="h-9 w-24 rounded-md" />
           <Skeleton variant="circular" className="w-9 h-9" />
         </div>
       </div>
@@ -157,10 +157,10 @@ export const PageLoader: React.FC = () => {
         </div>
         <div className="space-y-6">
           <ChartSkeleton height="h-64" />
-          <div className="glass-card p-4 rounded-2xl border border-white/5 space-y-3">
+          <div className="surface p-4 rounded-lg space-y-3">
             <Skeleton className="h-5 w-32 rounded-md" />
-            <Skeleton className="h-14 w-full rounded-xl" />
-            <Skeleton className="h-14 w-full rounded-xl" />
+            <Skeleton className="h-14 w-full rounded-md" />
+            <Skeleton className="h-14 w-full rounded-md" />
           </div>
         </div>
       </div>

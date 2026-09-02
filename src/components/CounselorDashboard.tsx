@@ -52,7 +52,7 @@ export const CounselorDashboard: React.FC<CounselorDashboardProps> = () => {
   if (isLoading) {
     return (
       <div className="mt-8 space-y-10 animate-pulse">
-        <div className="h-40 bg-slate-800/50 rounded-2xl w-full"></div>
+        <div className="h-40 bg-muted rounded-lg w-full"></div>
       </div>
     );
   }
@@ -63,13 +63,13 @@ export const CounselorDashboard: React.FC<CounselorDashboardProps> = () => {
       {/* Upcoming Batches - Top Priority for Counselor */}
       <div className="space-y-6">
         <div className="flex items-center gap-3">
-          <GraduationCap className="w-6 h-6 text-indigo-400" />
-          <h3 className="text-lg font-bold text-white">Upcoming Batches (Admissions)</h3>
+          <GraduationCap className="w-6 h-6 text-primary" />
+          <h3 className="text-lg font-bold text-foreground">Upcoming Batches (Admissions)</h3>
         </div>
         
         {upcomingBatches.length === 0 ? (
-          <Card variant="glass" className="p-6 border-white/5 bg-slate-900/50">
-            <p className="text-slate-400 text-sm text-center italic">No upcoming batches at the moment.</p>
+          <Card variant="glass" className="p-6 border-border bg-muted-2">
+            <p className="text-muted-foreground text-sm text-center italic">No upcoming batches at the moment.</p>
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -79,22 +79,22 @@ export const CounselorDashboard: React.FC<CounselorDashboardProps> = () => {
               const progress = Math.min(100, Math.round((enrolled / target) * 100));
               
               return (
-                <Card key={batch.id} variant="glass" className="p-5 border-white/5 hover:bg-slate-800/50 transition-all relative overflow-hidden">
+                <Card key={batch.id} variant="glass" className="p-5 border-border hover:bg-muted transition-all relative overflow-hidden">
                   <div className="flex justify-between items-start mb-4 relative z-10">
                     <div>
-                      <h4 className="font-bold text-white text-lg mb-1">{batch.batch_name}</h4>
-                      <p className="text-xs font-mono text-indigo-400">{batch.batch_code} • {batch.batch_type || 'Offline'}</p>
+                      <h4 className="font-bold text-foreground text-lg mb-1">{batch.batch_name}</h4>
+                      <p className="text-xs font-mono text-primary">{batch.batch_code} • {batch.batch_type || 'Offline'}</p>
                     </div>
                   </div>
                   
                   <div className="space-y-2 relative z-10">
                     <div className="flex justify-between text-xs">
-                      <span className="text-slate-400">Enrolled Students</span>
-                      <span className="font-bold text-white">{enrolled} / {target}</span>
+                      <span className="text-muted-foreground">Enrolled Students</span>
+                      <span className="font-bold text-foreground">{enrolled} / {target}</span>
                     </div>
-                    <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
                       <div 
-                        className={`h-full rounded-full transition-all duration-500 ${progress >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                        className={`h-full rounded-full transition-all duration-500 ${progress >= 100 ? 'bg-success' : 'bg-primary'}`}
                         style={{ width: `${progress}%` }}
                       ></div>
                     </div>
@@ -109,22 +109,22 @@ export const CounselorDashboard: React.FC<CounselorDashboardProps> = () => {
       {/* Active Batches */}
       <div className="space-y-6">
         <div className="flex items-center gap-3">
-          <BookOpen className="w-6 h-6 text-emerald-400" />
-          <h3 className="text-lg font-bold text-white">Active Batches (Overview)</h3>
+          <BookOpen className="w-6 h-6 text-success" />
+          <h3 className="text-lg font-bold text-foreground">Active Batches (Overview)</h3>
         </div>
         
         {activeBatches.length === 0 ? (
-          <Card variant="glass" className="p-6 border-white/5 bg-slate-900/50">
-            <p className="text-slate-400 text-sm text-center italic">No active batches at the moment.</p>
+          <Card variant="glass" className="p-6 border-border bg-muted-2">
+            <p className="text-muted-foreground text-sm text-center italic">No active batches at the moment.</p>
           </Card>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {activeBatches?.map(batch => (
-              <Card key={batch.id} variant="glass" className="p-4 border-l-4 border-l-emerald-500 border-white/5 hover:bg-slate-800/50 transition-all">
-                <h4 className="font-bold text-white mb-1 truncate">{batch.batch_name}</h4>
+              <Card key={batch.id} variant="glass" className="p-4 border-l-4 border-l-emerald-500 border-border hover:bg-muted transition-all">
+                <h4 className="font-bold text-foreground mb-1 truncate">{batch.batch_name}</h4>
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-mono text-emerald-400">{batch.batch_code}</span>
-                  <span className="text-slate-400 flex items-center gap-1"><Users className="w-3 h-3" /> {getStudentCount(batch.id)}</span>
+                  <span className="font-mono text-success">{batch.batch_code}</span>
+                  <span className="text-muted-foreground flex items-center gap-1"><Users className="w-3 h-3" /> {getStudentCount(batch.id)}</span>
                 </div>
               </Card>
             ))}

@@ -3,16 +3,111 @@
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant light (&:where(.light, .light *));
 
-@theme {
-  --font-sans: "Plus Jakarta Sans", sans-serif;
+/* ---------------------------------------------------------------------------
+   Design tokens
+   Flat surfaces, hairline borders, neutral zinc scale. Semantic names are
+   exposed to Tailwind below, so components use bg-card / border-border /
+   text-muted-foreground rather than hard-coded slate shades.
+   --------------------------------------------------------------------------- */
+:root {
+  --background: #fafafa;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --muted: #f4f4f5;
+  --muted-2: #fafafa;
+
+  --foreground: #09090b;
+  --secondary-foreground: #52525b;
+  --muted-foreground: #71717a;
+
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+
+  --primary: #4f46e5;
+  --primary-foreground: #ffffff;
+  --primary-soft: color-mix(in srgb, var(--primary) 9%, var(--card));
+
+  --success: #059669;
+  --success-soft: #ecfdf5;
+  --warning: #d97706;
+  --warning-soft: #fffbeb;
+  --danger: #e11d48;
+  --danger-soft: #fff1f2;
+
+  --ring: color-mix(in srgb, var(--primary) 35%, transparent);
+  --shadow-card: 0 1px 2px rgba(9, 9, 11, .05);
+  --shadow-pop: 0 8px 24px -6px rgba(9, 9, 11, .12), 0 2px 6px rgba(9, 9, 11, .04);
+
+  --radius: .5rem;
 }
 
-/* Base resets and smooth theme transition settings */
+.dark {
+  --background: #09090b;
+  --card: #131316;
+  --popover: #17171a;
+  --muted: #1c1c20;
+  --muted-2: #161619;
+
+  --foreground: #fafafa;
+  --secondary-foreground: #a1a1aa;
+  --muted-foreground: #71717a;
+
+  --border: #26262b;
+  --border-strong: #3f3f46;
+
+  --primary: #6366f1;
+  --primary-foreground: #ffffff;
+  --primary-soft: color-mix(in srgb, var(--primary) 20%, var(--card));
+
+  --success: #10b981;
+  --success-soft: #052e26;
+  --warning: #f59e0b;
+  --warning-soft: #2e2005;
+  --danger: #f43f5e;
+  --danger-soft: #300a13;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-pop: 0 8px 24px -6px rgba(0, 0, 0, .6), 0 2px 6px rgba(0, 0, 0, .3);
+}
+
+@theme inline {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-background: var(--background);
+  --color-card: var(--card);
+  --color-popover: var(--popover);
+  --color-muted: var(--muted);
+  --color-muted-2: var(--muted-2);
+
+  --color-foreground: var(--foreground);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+}
+
 @layer base {
   *,
   *::before,
   *::after {
     box-sizing: border-box;
+    border-color: var(--border);
   }
 
   html {
@@ -35,11 +130,12 @@
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: auto;
-    background-color: #090d16;
-    color: #f8fafc;
+    background-color: var(--background);
+    color: var(--foreground);
     font-family: var(--font-sans);
+    font-size: 14px;
     -webkit-tap-highlight-color: transparent;
-    transition: background-color 0.3s ease, color 0.3s ease;
+    transition: background-color .2s ease, color .2s ease;
     touch-action: pan-y;
   }
 
@@ -52,109 +148,38 @@
     position: relative;
   }
 
-  html.light body {
-    background-color: #f8fafc;
-    color: #0f172a;
+  /* Money and counts line up column-wise. */
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.02em;
   }
 }
 
-/* Glassmorphism & PowerBI Dashboard Utility Classes */
-.glass-panel {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+/* ---------------------------------------------------------------------------
+   Surfaces
+   --------------------------------------------------------------------------- */
+.surface {
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
 }
 
-html.light .glass-panel {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+.surface-muted {
+  background: var(--muted-2);
+  border: 1px solid var(--border);
 }
 
-.glass-card {
-  background: rgba(30, 41, 59, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
 }
 
-html.light .glass-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.06);
-}
-
-/* PowerBI Metric Card Glow Accents */
-.glow-indigo {
-  position: relative;
-}
-.glow-indigo::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 15%;
-  right: 15%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.8), transparent);
-  border-radius: 9999px;
-}
-
-.glow-emerald {
-  position: relative;
-}
-.glow-emerald::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 15%;
-  right: 15%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.8), transparent);
-  border-radius: 9999px;
-}
-
-.glow-purple {
-  position: relative;
-}
-.glow-purple::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 15%;
-  right: 15%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.8), transparent);
-  border-radius: 9999px;
-}
-
-/* Gradient Borders & Content Containers */
-.gradient-border {
-  position: relative;
-  border-radius: 1rem;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.25));
-  padding: 1px;
-}
-
-.gradient-border-content {
-  background: rgb(15, 23, 42);
-  border-radius: calc(1rem - 1px);
-}
-
-html.light .gradient-border-content {
-  background: rgb(255, 255, 255);
-}
-
-/* Custom Scrollbars */
+/* ---------------------------------------------------------------------------
+   Scrollbars
+   --------------------------------------------------------------------------- */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 9px;
+  height: 9px;
 }
 
 ::-webkit-scrollbar-track {
@@ -162,14 +187,11 @@ html.light .gradient-border-content {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
+  background: var(--border-strong);
   border-radius: 9999px;
+  border: 3px solid var(--background);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
-}
-
-html.light ::-webkit-scrollbar-thumb {
-  background: rgba(203, 213, 225, 0.8);
+  background: var(--muted-foreground);
 }

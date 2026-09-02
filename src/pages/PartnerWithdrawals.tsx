@@ -286,25 +286,25 @@ export const PartnerWithdrawals: React.FC = () => {
   const totalWithdrawn = filteredWithdrawals.reduce((sum, w) => sum + w.amount, 0);
 
   return (
-    <div className="min-h-screen bg-[#020817] text-slate-200 font-sans flex flex-col lg:flex-row relative w-full overflow-x-hidden selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-[#020817] text-foreground font-sans flex flex-col lg:flex-row relative w-full overflow-x-hidden selection:bg-primary-soft">
       {/* Global Sidebar */}
       <Sidebar />
       {/* Main Content */}
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12">
         {/* Header */}
-        <header className="flex-shrink-0 px-4 md:px-8 py-6 border-b border-white/5 bg-slate-950/50 backdrop-blur-xl sticky top-14 lg:top-0 z-20 flex justify-between items-center">
+        <header className="flex-shrink-0 px-4 md:px-8 py-6 border-b border-border bg-muted-2 sticky top-14 lg:top-0 z-20 flex justify-between items-center">
           <div>
-            <h2 className="text-xl md:text-2xl font-black text-white tracking-tight flex items-center gap-3">
-              <Star className="w-6 h-6 text-purple-400" />
+            <h2 className="text-xl md:text-2xl font-black text-foreground tracking-tight flex items-center gap-3">
+              <Star className="w-6 h-6 text-primary" />
               Partner Withdrawals
             </h2>
-            <p className="text-xs text-slate-400 mt-1 font-medium">Manage and review MD profit withdrawals.</p>
+            <p className="text-xs text-muted-foreground mt-1 font-medium">Manage and review MD profit withdrawals.</p>
           </div>
           {!isOwner && (
             <Button 
               onClick={() => setIsAdding(true)} 
               variant="primary" 
-              className="flex items-center gap-2 text-sm shadow-lg shadow-indigo-500/20"
+              className="flex items-center gap-2 text-sm"
             >
               <Plus className="w-4 h-4" /> Log Withdrawal
             </Button>
@@ -314,7 +314,7 @@ export const PartnerWithdrawals: React.FC = () => {
         <main className="flex-1 p-4 md:p-8">
           <div className="max-w-6xl mx-auto space-y-6">
             {dbError && (
-              <div className="p-4 bg-rose-500/10 border border-rose-500/25 rounded-2xl flex items-center gap-3 text-rose-450 text-xs">
+              <div className="p-4 bg-danger-soft border border-danger/25 rounded-lg flex items-center gap-3 text-danger text-xs">
                 <AlertCircle className="w-5 h-5" />
                 <span className="font-bold">Database Error:</span> {dbError}
               </div>
@@ -322,22 +322,22 @@ export const PartnerWithdrawals: React.FC = () => {
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Card variant="glass" className="p-5 flex flex-col justify-between border-white/5 bg-slate-900/40">
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Withdrawn</span>
-                <p className="text-2xl font-black text-purple-400 mt-2">{formatCurrency(totalWithdrawn)}</p>
+              <Card variant="glass" className="p-5 flex flex-col justify-between border-border bg-muted-2">
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Total Withdrawn</span>
+                <p className="text-2xl font-black text-primary mt-2">{formatCurrency(totalWithdrawn)}</p>
               </Card>
 
               {isAdminView && (
                 <>
-                  <Card variant="glass" className="p-5 flex flex-col justify-between border-white/5 bg-slate-900/40">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">SHIBILI's Withdrawals</span>
-                    <p className="text-xl font-bold text-slate-200 mt-2">
+                  <Card variant="glass" className="p-5 flex flex-col justify-between border-border bg-muted-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">SHIBILI's Withdrawals</span>
+                    <p className="text-xl font-bold text-foreground mt-2">
                       {formatCurrency(withdrawals.filter(w => w.partner_name === 'SHIBILI').reduce((sum, w) => sum + w.amount, 0))}
                     </p>
                   </Card>
-                  <Card variant="glass" className="p-5 flex flex-col justify-between border-white/5 bg-slate-900/40">
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">ASHIF's Withdrawals</span>
-                    <p className="text-xl font-bold text-slate-200 mt-2">
+                  <Card variant="glass" className="p-5 flex flex-col justify-between border-border bg-muted-2">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">ASHIF's Withdrawals</span>
+                    <p className="text-xl font-bold text-foreground mt-2">
                       {formatCurrency(withdrawals.filter(w => w.partner_name === 'ASHIF').reduce((sum, w) => sum + w.amount, 0))}
                     </p>
                   </Card>
@@ -346,17 +346,17 @@ export const PartnerWithdrawals: React.FC = () => {
             </div>
 
             {/* Ledger Table */}
-            <Card variant="glass" className="border-white/5 overflow-hidden">
-              <div className="p-5 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <h3 className="font-bold text-white flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-400" />
+            <Card variant="glass" className="border-border overflow-hidden">
+              <div className="p-5 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <h3 className="font-bold text-foreground flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-muted-foreground" />
                   Withdrawal Ledger
                 </h3>
                 <div className="flex flex-col sm:flex-row items-center gap-3">
-                  <div className="flex items-center gap-1.5 border-r border-white/10 pr-3">
+                  <div className="flex items-center gap-1.5 border-r border-border pr-3">
                     <button
                       onClick={handleExportExcel}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-bold transition-all cursor-pointer shadow-sm whitespace-nowrap"
                       title="Export Withdrawal Ledger to Excel / CSV"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -364,7 +364,7 @@ export const PartnerWithdrawals: React.FC = () => {
                     </button>
                     <button
                       onClick={handleExportPDF}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft hover:bg-danger-soft text-danger border border-danger/30 text-xs font-bold transition-all cursor-pointer shadow-sm whitespace-nowrap"
                       title="Export Withdrawal Ledger to PDF"
                     >
                       <FileText className="w-3.5 h-3.5" />
@@ -372,13 +372,13 @@ export const PartnerWithdrawals: React.FC = () => {
                     </button>
                   </div>
                   <div className="relative w-full sm:w-auto">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
                     <input 
                       type="text" 
                       placeholder="Search by name or description..." 
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full md:w-64 pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                      className="w-full md:w-64 pl-9 pr-4 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary transition-colors"
                     />
                   </div>
                 </div>
@@ -386,13 +386,13 @@ export const PartnerWithdrawals: React.FC = () => {
 
               <div className="overflow-x-auto">
                 {loading ? (
-                  <div className="p-8 text-center text-slate-400 text-sm font-bold uppercase tracking-wider">Loading withdrawals...</div>
+                  <div className="p-8 text-center text-muted-foreground text-sm font-bold uppercase tracking-wider">Loading withdrawals...</div>
                 ) : filteredWithdrawals.length === 0 ? (
-                  <div className="p-8 text-center text-slate-500 text-sm font-bold uppercase tracking-wider">No withdrawals found.</div>
+                  <div className="p-8 text-center text-muted-foreground text-sm font-bold uppercase tracking-wider">No withdrawals found.</div>
                 ) : (
                   <table className="w-full text-left border-collapse text-sm">
                     <thead>
-                      <tr className="bg-slate-900/60 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-white/5">
+                      <tr className="bg-muted-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border">
                         <th className="py-3 px-5">Date</th>
                         <th className="py-3 px-5">Partner</th>
                         <th className="py-3 px-5">Description</th>
@@ -400,26 +400,26 @@ export const PartnerWithdrawals: React.FC = () => {
                         {!isOwner && <th className="py-3 px-5 text-center">Actions</th>}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5">
+                    <tbody className="divide-y divide-border">
                       {filteredWithdrawals.map(w => (
-                        <tr key={w.id} className="hover:bg-slate-800/30 transition-colors">
-                          <td className="py-3 px-5 text-slate-400 font-medium whitespace-nowrap">{w.withdrawal_date}</td>
+                        <tr key={w.id} className="hover:bg-muted transition-colors">
+                          <td className="py-3 px-5 text-muted-foreground font-medium whitespace-nowrap">{w.withdrawal_date}</td>
                           <td className="py-3 px-5">
                             <Badge variant={w.partner_name === 'SHIBILI' ? 'purple' : 'indigo'} className="text-[10px] py-1">
                               {w.partner_name}
                             </Badge>
                           </td>
-                          <td className="py-3 px-5 text-slate-300 font-medium max-w-xs truncate" title={w.description}>
+                          <td className="py-3 px-5 text-secondary-foreground font-medium max-w-xs truncate" title={w.description}>
                             {w.description || 'N/A'}
                           </td>
-                          <td className="py-3 px-5 text-right font-black text-purple-400">
+                          <td className="py-3 px-5 text-right font-black text-primary">
                             {formatCurrency(w.amount)}
                           </td>
                           {!isOwner && (
                             <td className="py-3 px-5 text-center">
                               <button
                                 onClick={() => handleDeleteWithdrawal(w.id, w.partner_name, w.amount)}
-                                className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/25 transition-all"
+                                className="p-1.5 rounded-lg bg-danger-soft text-danger hover:bg-danger-soft transition-all"
                                 title="Delete Entry"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -439,28 +439,28 @@ export const PartnerWithdrawals: React.FC = () => {
 
       {/* ADD WITHDRAWAL MODAL */}
       {isAdding && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <Card variant="solid" className="w-full max-w-sm p-6 bg-slate-900 border border-slate-800 relative animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-fade-in">
+          <Card variant="solid" className="w-full max-w-sm p-6 bg-card border border-border relative animate-scale-up">
             <button 
               onClick={() => setIsAdding(false)}
-              className="absolute top-4 right-4 text-slate-450 hover:text-white"
+              className="absolute top-4 right-4 text-muted-foreground hover:text-white"
             >
               <X className="w-4 h-4" />
             </button>
             
-            <h3 className="font-bold text-white text-base mb-4 flex items-center gap-2">
-              <Star className="w-5 h-5 text-indigo-400" />
+            <h3 className="font-bold text-foreground text-base mb-4 flex items-center gap-2">
+              <Star className="w-5 h-5 text-primary" />
               Log Partner Withdrawal
             </h3>
 
             <form onSubmit={handleAddWithdrawal} className="space-y-4 text-xs">
               <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase block">Partner Name</label>
+                <label className="text-[9px] font-bold text-muted-foreground uppercase block">Partner Name</label>
                 <select
                   value={partnerName}
                   onChange={(e) => setPartnerName(e.target.value)}
                   disabled={isOwner}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                  className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary disabled:opacity-50"
                 >
                   <option value="SHIBILI">SHIBILI</option>
                   <option value="ASHIF">ASHIF</option>
@@ -468,36 +468,36 @@ export const PartnerWithdrawals: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase block">Amount (₹)</label>
+                <label className="text-[9px] font-bold text-muted-foreground uppercase block">Amount (₹)</label>
                 <input 
                   type="number" 
                   required
                   placeholder="e.g. 25000"
                   value={witAmount}
                   onChange={(e) => setWitAmount(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase block">Date</label>
+                <label className="text-[9px] font-bold text-muted-foreground uppercase block">Date</label>
                 <input 
                   type="date" 
                   required
                   value={witDate}
                   onChange={(e) => setWitDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase block">Description</label>
+                <label className="text-[9px] font-bold text-muted-foreground uppercase block">Description</label>
                 <input 
                   type="text" 
                   placeholder="e.g. Monthly withdrawal"
                   value={witDescription}
                   onChange={(e) => setWitDescription(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+                  className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                 />
               </div>
 

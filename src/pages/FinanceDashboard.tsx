@@ -70,15 +70,19 @@ const parseSafeNumber = (val: any): number => {
 };
 
 export const FinanceDashboard: React.FC = () => {
-  const { activeStaff, setActiveTab, isAdminMode, addSale,  } = useApp();
+  const { activeStaff, setActiveTab, isAdminMode, addSale, isLoading } = useApp();
 
   if (!activeStaff) return null;
 
+  // Wait for the session to resolve before enforcing the permission
+  // redirect - isAdminMode is false while loading, which would otherwise
+  // bounce a deep link away from this page on first paint.
   useEffect(() => {
+    if (isLoading) return;
     if (!isAdminMode) {
       setActiveTab('sales');
     }
-  }, [isAdminMode]);
+  }, [isAdminMode, isLoading]);
 
   // Selected ledger month (e.g. '2026-07')
   const [selectedLedgerMonth, setSelectedLedgerMonth] = useState<string>(new Date().toISOString().slice(0, 7));
@@ -998,12 +1002,7 @@ export const FinanceDashboard: React.FC = () => {
   const finalCompanyBalance = openingBalance + summaryTotalIncome - summaryTotalExpenses - summaryTotalWithdrawals;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
-      {/* Background Lighting Glows */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/15 blur-[130px]"></div>
-        <div className="absolute bottom-[-10%] right-[-20%] w-[80vw] h-[80vw] rounded-full bg-purple-900/10 blur-[130px]"></div>
-      </div>
+    <div className="min-h-screen bg-card text-foreground font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
 
       {/* Left Sidebar Navigation (Desktop only) */}
       <Sidebar />
@@ -1012,17 +1011,17 @@ export const FinanceDashboard: React.FC = () => {
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12">
         
         {/* Header Bar */}
-        <header className="glass-panel sticky top-14 lg:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-white/5 backdrop-blur-md">
+        <header className="bg-card border border-border sticky top-14 lg:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-border">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <h1 className="text-base md:text-lg font-bold text-white tracking-wide flex items-center gap-2">
-                <Briefcase className="w-5 h-5 text-indigo-400" />
+              <h1 className="text-base md:text-lg font-bold text-foreground tracking-wide flex items-center gap-2">
+                <Briefcase className="w-5 h-5 text-primary" />
                 Financial Control Center
               </h1>
               <select
                 value={selectedLedgerMonth}
                 onChange={(e) => setSelectedLedgerMonth(e.target.value)}
-                className="px-2.5 py-1 rounded-xl bg-slate-900 border border-white/10 text-xs font-bold text-slate-350 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                className="px-2.5 py-1 rounded-md bg-card border border-border text-xs font-bold text-muted-foreground focus:outline-none focus:border-primary transition-all cursor-pointer"
               >
                 {getLedgerMonthOptions().map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -1030,7 +1029,7 @@ export const FinanceDashboard: React.FC = () => {
               </select>
               <button 
                 onClick={() => { setTempHistoricalBalance(historicalBalance.toString()); setIsSettingsOpen(true); }}
-                className="p-1.5 rounded-lg bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                className="p-1.5 rounded-lg bg-muted hover:bg-muted text-muted-foreground hover:text-white transition-colors"
                 title="Finance "
               >
                 <Star className="w-4 h-4" />
@@ -1040,7 +1039,7 @@ export const FinanceDashboard: React.FC = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleExportFinanceExcel}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-extrabold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-extrabold transition-all cursor-pointer shadow-sm whitespace-nowrap"
                 title="Export Master Financial Report to Excel / CSV"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -1048,7 +1047,7 @@ export const FinanceDashboard: React.FC = () => {
               </button>
               <button
                 onClick={handleExportFinancePDF}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-extrabold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-danger-soft hover:bg-danger-soft text-danger border border-danger/30 text-xs font-extrabold transition-all cursor-pointer shadow-sm whitespace-nowrap"
                 title="Export Master Financial Report to PDF"
               >
                 <FileText className="w-3.5 h-3.5" />
@@ -1057,7 +1056,7 @@ export const FinanceDashboard: React.FC = () => {
               <Button
                 variant="secondary"
                 size="sm"
-                className="!py-1.5 !px-3 shadow-md rounded-xl text-xs font-bold shrink-0 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/10"
+                className="!py-1.5 !px-3 shadow-md rounded-md text-xs font-bold shrink-0 border border-primary/20 text-primary hover:bg-primary-soft"
                 onClick={() => setIsAnalyticsModalOpen(true)}
                 icon={<Activity className="w-3.5 h-3.5" />}
               >
@@ -1066,7 +1065,7 @@ export const FinanceDashboard: React.FC = () => {
               <Button 
                 variant="primary" 
                 size="sm" 
-                className="!py-1.5 !px-3 shadow-md rounded-xl text-xs font-bold shrink-0" 
+                className="!py-1.5 !px-3 shadow-md rounded-md text-xs font-bold shrink-0" 
                 onClick={() => setIsEntryDrawerOpen(true)}
                 icon={<Plus className="w-3.5 h-3.5" />}
               >
@@ -1079,7 +1078,7 @@ export const FinanceDashboard: React.FC = () => {
         {/* Main Content Area */}
         <main className="max-w-6xl w-full mx-auto px-4 md:px-8 mt-6 space-y-6">
           {dbError && (
-            <div className="p-4 bg-rose-500/10 border border-rose-500/25 rounded-2xl flex items-center gap-3 text-rose-450 text-xs">
+            <div className="p-4 bg-danger-soft border border-danger/25 rounded-lg flex items-center gap-3 text-danger text-xs">
               <span className="font-bold">Database Error:</span> {dbError}
             </div>
           )}
@@ -1096,41 +1095,41 @@ export const FinanceDashboard: React.FC = () => {
             <>
               {/* Overview Metrics Cards */}
               <div className="grid grid-cols-2 md:grid-cols-8 gap-3">
-                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-white/5 dark:border-white/5 light:border-slate-200 bg-slate-900/40 dark:bg-slate-900/40 light:bg-white">
-                  <span className="text-[8.5px] font-bold text-slate-400 dark:text-slate-400 light:text-slate-600 uppercase tracking-wider">Opening Bal</span>
-                  <p className="text-sm md:text-base font-extrabold text-slate-100 dark:text-white light:text-slate-900 mt-1.5">{formatCurrency(openingBalance)}</p>
+                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-border dark:border-border light:border-border bg-muted-2 dark:bg-muted-2 light:bg-card">
+                  <span className="text-[8.5px] font-bold text-muted-foreground dark:text-muted-foreground light:text-muted-foreground uppercase tracking-wider">Opening Bal</span>
+                  <p className="text-sm md:text-base font-extrabold text-foreground dark:text-white light:text-foreground mt-1.5">{formatCurrency(openingBalance)}</p>
                 </Card>
 
-                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-white/5 dark:border-white/5 light:border-slate-200 bg-slate-900/40 dark:bg-slate-900/40 light:bg-white">
-                  <span className="text-[8.5px] font-bold text-emerald-400 dark:text-emerald-400 light:text-emerald-600 uppercase tracking-wider">Total Income</span>
-                  <p className="text-sm md:text-base font-extrabold text-emerald-400 dark:text-emerald-400 light:text-emerald-600 mt-1.5">{formatCurrency(summaryTotalIncome)}</p>
+                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-border dark:border-border light:border-border bg-muted-2 dark:bg-muted-2 light:bg-card">
+                  <span className="text-[8.5px] font-bold text-success dark:text-success light:text-success uppercase tracking-wider">Total Income</span>
+                  <p className="text-sm md:text-base font-extrabold text-success dark:text-success light:text-success mt-1.5">{formatCurrency(summaryTotalIncome)}</p>
                 </Card>
 
-                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-white/5 dark:border-white/5 light:border-slate-200 bg-slate-900/40 dark:bg-slate-900/40 light:bg-white">
-                  <span className="text-[8.5px] font-bold text-rose-400 dark:text-rose-400 light:text-rose-600 uppercase tracking-wider">Total Expenses</span>
-                  <p className="text-sm md:text-base font-extrabold text-rose-400 dark:text-rose-400 light:text-rose-600 mt-1.5">{formatCurrency(summaryTotalExpenses)}</p>
+                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-border dark:border-border light:border-border bg-muted-2 dark:bg-muted-2 light:bg-card">
+                  <span className="text-[8.5px] font-bold text-danger dark:text-danger light:text-danger uppercase tracking-wider">Total Expenses</span>
+                  <p className="text-sm md:text-base font-extrabold text-danger dark:text-danger light:text-danger mt-1.5">{formatCurrency(summaryTotalExpenses)}</p>
                 </Card>
 
-                <Card variant="solid" className={`p-4 flex flex-col justify-between shadow-lg relative overflow-hidden md:col-span-2 ${summaryNetProfit >= 0 ? 'bg-emerald-900/10 border-emerald-500/40 shadow-emerald-500/10' : 'bg-rose-900/10 border-rose-500/40 shadow-rose-500/10'}`}>
-                  <div className={`absolute top-0 right-0 w-16 h-16 rounded-bl-full blur-xl ${summaryNetProfit >= 0 ? 'bg-emerald-500/20' : 'bg-rose-500/20'}`}></div>
+                <Card variant="solid" className={`p-4 flex flex-col justify-between shadow-lg relative overflow-hidden md:col-span-2 ${summaryNetProfit >= 0 ? 'bg-success-soft border-success/40 ' : 'bg-danger-soft border-danger/40 '}`}>
+                  <div className={`absolute top-0 right-0 w-16 h-16 rounded-bl-full blur-xl ${summaryNetProfit >= 0 ? 'bg-success-soft' : 'bg-danger-soft'}`}></div>
                   <div className="flex justify-between items-start relative z-10">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${summaryNetProfit >= 0 ? 'text-emerald-300 dark:text-emerald-300 light:text-emerald-700' : 'text-rose-300 dark:text-rose-300 light:text-rose-700'}`}>Net Profit/Loss</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider ${summaryNetProfit >= 0 ? 'text-success dark:text-success light:text-success' : 'text-danger dark:text-danger light:text-danger'}`}>Net Profit/Loss</span>
                     <Badge variant={summaryNetProfit >= 0 ? 'success' : 'error'} className="text-[10px] py-0.5 font-bold">
                       {summaryTotalIncome > 0 ? ((summaryNetProfit / summaryTotalIncome) * 100).toFixed(1) : 0}%
                     </Badge>
                   </div>
-                  <p className={`text-lg md:text-2xl font-black mt-1 relative z-10 ${summaryNetProfit >= 0 ? 'text-emerald-400 dark:text-emerald-400 light:text-emerald-600' : 'text-rose-400 dark:text-rose-400 light:text-rose-600'}`}>{formatCurrency(summaryNetProfit)}</p>
+                  <p className={`text-lg md:text-2xl font-black mt-1 relative z-10 ${summaryNetProfit >= 0 ? 'text-success dark:text-success light:text-success' : 'text-danger dark:text-danger light:text-danger'}`}>{formatCurrency(summaryNetProfit)}</p>
                 </Card>
 
-                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-white/5 dark:border-white/5 light:border-slate-200 bg-slate-900/40 dark:bg-slate-900/40 light:bg-white">
-                  <span className="text-[8.5px] font-bold text-purple-400 dark:text-purple-400 light:text-purple-600 uppercase tracking-wider">Partner Withdraw</span>
-                  <p className="text-sm md:text-base font-extrabold text-purple-400 dark:text-purple-400 light:text-purple-600 mt-1.5">{formatCurrency(summaryTotalWithdrawals)}</p>
+                <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-border dark:border-border light:border-border bg-muted-2 dark:bg-muted-2 light:bg-card">
+                  <span className="text-[8.5px] font-bold text-primary dark:text-primary light:text-primary uppercase tracking-wider">Partner Withdraw</span>
+                  <p className="text-sm md:text-base font-extrabold text-primary dark:text-primary light:text-primary mt-1.5">{formatCurrency(summaryTotalWithdrawals)}</p>
                 </Card>
 
-                <Card variant="solid" className="p-4 flex flex-col justify-between border-indigo-500/40 bg-indigo-900/10 shadow-lg shadow-indigo-500/10 relative overflow-hidden md:col-span-2">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/20 rounded-bl-full blur-xl"></div>
-                  <span className="text-[10px] font-bold text-indigo-300 dark:text-indigo-300 light:text-indigo-700 uppercase tracking-wider relative z-10">Company Remaining Balance</span>
-                  <p className="text-lg md:text-2xl font-black text-indigo-400 dark:text-indigo-400 light:text-indigo-600 mt-1 relative z-10">{formatCurrency(finalCompanyBalance)}</p>
+                <Card variant="solid" className="p-4 flex flex-col justify-between border-primary/40 bg-primary-soft relative overflow-hidden md:col-span-2">
+                  <div className="absolute top-0 right-0 w-16 h-16 bg-primary-soft rounded-bl-full blur-xl"></div>
+                  <span className="text-[10px] font-bold text-primary dark:text-primary light:text-primary uppercase tracking-wider relative z-10">Company Remaining Balance</span>
+                  <p className="text-lg md:text-2xl font-black text-primary dark:text-primary light:text-primary mt-1 relative z-10">{formatCurrency(finalCompanyBalance)}</p>
                 </Card>
               </div>
 
@@ -1138,44 +1137,44 @@ export const FinanceDashboard: React.FC = () => {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 
                 {/* LEFT COLUMN: Income List by Staff */}
-                <Card variant="glass" className="p-5 border-white/5 dark:border-white/5 light:border-slate-200 space-y-4">
-                  <div className="flex items-center justify-between border-b border-white/5 dark:border-white/5 light:border-slate-200 pb-3">
-                    <h3 className="font-bold text-slate-100 dark:text-white light:text-slate-900 text-xs uppercase tracking-wider flex items-center gap-2">
-                      <ArrowUpRight className="w-5 h-5 text-emerald-400 animate-pulse" />
+                <Card variant="glass" className="p-5 border-border dark:border-border light:border-border space-y-4">
+                  <div className="flex items-center justify-between border-b border-border dark:border-border light:border-border pb-3">
+                    <h3 className="font-bold text-foreground dark:text-white light:text-foreground text-xs uppercase tracking-wider flex items-center gap-2">
+                      <ArrowUpRight className="w-5 h-5 text-success animate-pulse" />
                       Monthly Incomes (Sales by Staff)
                     </h3>
                     <Badge variant="success" className="text-[9px] py-0.5">{staffIncomesList.length} staff</Badge>
                   </div>
 
-                  <div className="overflow-x-auto rounded-xl border border-white/5 dark:border-white/5 light:border-slate-200">
+                  <div className="overflow-x-auto rounded-md border border-border dark:border-border light:border-border">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="bg-slate-900/60 dark:bg-slate-900/60 light:bg-slate-100 text-[9px] font-bold text-slate-400 dark:text-slate-400 light:text-slate-600 uppercase tracking-wider border-b border-white/5 dark:border-white/5 light:border-slate-200">
+                        <tr className="bg-muted-2 dark:bg-muted-2 light:bg-muted text-[9px] font-bold text-muted-foreground dark:text-muted-foreground light:text-muted-foreground uppercase tracking-wider border-b border-border dark:border-border light:border-border">
                           <th className="py-2.5 px-3">Staff Member</th>
                           <th className="py-2.5 px-3">Designation</th>
                           <th className="py-2.5 px-3 text-center">Sales Count</th>
                           <th className="py-2.5 px-3 text-right">Total Income</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/5 dark:divide-white/5 light:divide-slate-200">
+                      <tbody className="divide-y divide-border dark:divide-border light:divide-border">
                         {staffIncomesList.map(item => (
-                          <tr key={`inc-${item.staffId}`} className="hover:bg-slate-900/30 dark:hover:bg-slate-900/30 light:hover:bg-slate-100/60 transition-colors">
-                            <td className="py-2.5 px-3 font-semibold text-slate-200 dark:text-slate-200 light:text-slate-900">{item.fullName}</td>
-                            <td className="py-2.5 px-3 text-slate-400 dark:text-slate-400 light:text-slate-600">{item.designation}</td>
-                            <td className="py-2.5 px-3 text-center text-slate-500 font-bold">{item.count}</td>
-                            <td className="py-2.5 px-3 text-right font-extrabold text-emerald-400">{formatCurrency(item.totalAmount)}</td>
+                          <tr key={`inc-${item.staffId}`} className="hover:bg-muted-2 dark:hover:bg-muted-2 light:hover:bg-muted transition-colors">
+                            <td className="py-2.5 px-3 font-semibold text-foreground dark:text-foreground light:text-foreground">{item.fullName}</td>
+                            <td className="py-2.5 px-3 text-muted-foreground dark:text-muted-foreground light:text-muted-foreground">{item.designation}</td>
+                            <td className="py-2.5 px-3 text-center text-muted-foreground font-bold">{item.count}</td>
+                            <td className="py-2.5 px-3 text-right font-extrabold text-success">{formatCurrency(item.totalAmount)}</td>
                           </tr>
                         ))}
                         {staffIncomesList.length === 0 && (
                           <tr>
-                            <td colSpan={4} className="text-center py-6 text-slate-500 font-bold uppercase text-[10px]">No sales recorded.</td>
+                            <td colSpan={4} className="text-center py-6 text-muted-foreground font-bold uppercase text-[10px]">No sales recorded.</td>
                           </tr>
                         )}
                       </tbody>
-                      <tfoot className="border-t border-white/10 bg-slate-900/40 text-white font-extrabold">
+                      <tfoot className="border-t border-border bg-muted-2 text-foreground font-extrabold">
                         <tr>
-                          <td colSpan={3} className="py-2.5 px-3 uppercase text-[9px] text-slate-400 text-right">Total Monthly Income:</td>
-                          <td className="py-2.5 px-3 text-right text-emerald-400 font-extrabold">{formatCurrency(summaryTotalIncome)}</td>
+                          <td colSpan={3} className="py-2.5 px-3 uppercase text-[9px] text-muted-foreground text-right">Total Monthly Income:</td>
+                          <td className="py-2.5 px-3 text-right text-success font-extrabold">{formatCurrency(summaryTotalIncome)}</td>
                         </tr>
                       </tfoot>
                     </table>
@@ -1183,19 +1182,19 @@ export const FinanceDashboard: React.FC = () => {
                 </Card>
 
                 {/* RIGHT COLUMN: Expenses Organized by Categories + Partner Withdrawals */}
-                <Card variant="glass" className="p-5 border-white/5 space-y-5">
-                  <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                    <h3 className="font-bold text-white text-xs uppercase tracking-wider flex items-center gap-2">
-                      <ArrowDownRight className="w-5 h-5 text-rose-400 animate-pulse" />
+                <Card variant="glass" className="p-5 border-border space-y-5">
+                  <div className="flex items-center justify-between border-b border-border pb-3">
+                    <h3 className="font-bold text-foreground text-xs uppercase tracking-wider flex items-center gap-2">
+                      <ArrowDownRight className="w-5 h-5 text-danger animate-pulse" />
                       Monthly Expenses
                     </h3>
                     <Badge variant="error" className="text-[9px] py-0.5">{expensesList.length} entries</Badge>
                   </div>
 
                   {/* Categorized Expenses with Splits */}
-                  <div className="grid grid-cols-1 gap-2 border border-white/5 bg-slate-900/30 rounded-xl p-3">
+                  <div className="grid grid-cols-1 gap-2 border border-border bg-muted-2 rounded-md p-3">
                     {/* Header Row */}
-                    <div className="flex items-center text-[10px] font-bold text-slate-500 uppercase tracking-widest px-2 pb-2 border-b border-white/5">
+                    <div className="flex items-center text-[10px] font-bold text-muted-foreground uppercase tracking-widest px-2 pb-2 border-b border-border">
                       <div className="flex-1">Category</div>
                       <div className="w-20 text-right">ASHIF</div>
                       <div className="w-20 text-right">SHIBILI</div>
@@ -1206,44 +1205,44 @@ export const FinanceDashboard: React.FC = () => {
                       <div 
                         key={`cat-${cat.category}`} 
                         onClick={() => cat.items.length > 0 && setDrilldownCategory(cat)}
-                        className={`flex items-center px-2 py-2.5 rounded-lg transition-all ${cat.items.length > 0 ? 'hover:bg-slate-800/50 cursor-pointer' : 'opacity-60'}`}
+                        className={`flex items-center px-2 py-2.5 rounded-lg transition-all ${cat.items.length > 0 ? 'hover:bg-muted cursor-pointer' : 'opacity-60'}`}
                       >
-                        <div className="flex-1 flex items-center gap-2 text-xs font-bold text-slate-200">
+                        <div className="flex-1 flex items-center gap-2 text-xs font-bold text-foreground">
                           {cat.category}
                           {cat.items.length > 0 && <Badge variant="purple" className="text-[8px] py-0 px-1 font-extrabold">{cat.items.length}</Badge>}
                         </div>
-                        <div className="w-20 text-right text-[11px] font-medium text-slate-400">{cat.ashifAmount > 0 ? formatCurrency(cat.ashifAmount) : '-'}</div>
-                        <div className="w-20 text-right text-[11px] font-medium text-slate-400">{cat.shibiliAmount > 0 ? formatCurrency(cat.shibiliAmount) : '-'}</div>
-                        <div className="w-24 text-right text-xs font-extrabold text-rose-400">{formatCurrency(cat.totalAmount)}</div>
+                        <div className="w-20 text-right text-[11px] font-medium text-muted-foreground">{cat.ashifAmount > 0 ? formatCurrency(cat.ashifAmount) : '-'}</div>
+                        <div className="w-20 text-right text-[11px] font-medium text-muted-foreground">{cat.shibiliAmount > 0 ? formatCurrency(cat.shibiliAmount) : '-'}</div>
+                        <div className="w-24 text-right text-xs font-extrabold text-danger">{formatCurrency(cat.totalAmount)}</div>
                       </div>
                     ))}
                     
                     {/* Grand Totals */}
-                    <div className="flex items-center px-2 py-3 mt-2 border-t border-white/10 bg-slate-900/50 rounded-lg">
-                      <div className="flex-1 text-[10px] font-black text-slate-400 uppercase tracking-wider">Grand Total</div>
-                      <div className="w-20 text-right text-[11px] font-bold text-slate-300">
+                    <div className="flex items-center px-2 py-3 mt-2 border-t border-border bg-muted-2 rounded-lg">
+                      <div className="flex-1 text-[10px] font-black text-muted-foreground uppercase tracking-wider">Grand Total</div>
+                      <div className="w-20 text-right text-[11px] font-bold text-secondary-foreground">
                         {formatCurrency(expenseCategories.reduce((sum, cat) => sum + cat.ashifAmount, 0))}
                       </div>
-                      <div className="w-20 text-right text-[11px] font-bold text-slate-300">
+                      <div className="w-20 text-right text-[11px] font-bold text-secondary-foreground">
                         {formatCurrency(expenseCategories.reduce((sum, cat) => sum + cat.shibiliAmount, 0))}
                       </div>
-                      <div className="w-24 text-right text-sm font-black text-rose-500">
+                      <div className="w-24 text-right text-sm font-black text-danger">
                         {formatCurrency(summaryTotalExpenses)}
                       </div>
                     </div>
                   </div>
 
                   {/* Partner Withdrawals Read-Only Book */}
-                  <div className="pt-4 border-t border-white/5">
-                    <h3 className="font-bold text-white text-[11px] uppercase tracking-wider flex items-center gap-2 mb-3">
-                      <Star className="w-4 h-4 text-purple-400" />
+                  <div className="pt-4 border-t border-border">
+                    <h3 className="font-bold text-foreground text-[11px] uppercase tracking-wider flex items-center gap-2 mb-3">
+                      <Star className="w-4 h-4 text-primary" />
                       Partner Withdrawals Book
                     </h3>
                     <div className="grid grid-cols-2 gap-3">
                       {['SHIBILI', 'ASHIF'].map((partnerName) => (
-                        <div key={`wit-${partnerName}`} className="p-4 rounded-xl border border-white/5 bg-slate-950/40 flex flex-col items-center justify-center space-y-2">
-                          <span className="font-extrabold text-[10px] text-slate-400 uppercase tracking-widest">{partnerName}</span>
-                          <span className="font-black text-purple-400 text-lg">
+                        <div key={`wit-${partnerName}`} className="p-4 rounded-md border border-border bg-muted-2 flex flex-col items-center justify-center space-y-2">
+                          <span className="font-extrabold text-[10px] text-muted-foreground uppercase tracking-widest">{partnerName}</span>
+                          <span className="font-black text-primary text-lg">
                             {formatCurrency(partnerWithdrawals[partnerName] || 0)}
                           </span>
                         </div>
@@ -1260,7 +1259,7 @@ export const FinanceDashboard: React.FC = () => {
                 <Button 
                   variant="glass" 
                   onClick={handleExportFinanceExcel}
-                  className="flex items-center gap-2 font-bold text-xs uppercase text-emerald-400 border-emerald-500/20 hover:bg-slate-800"
+                  className="flex items-center gap-2 font-bold text-xs uppercase text-success border-success/20 hover:bg-muted"
                   icon={<Download className="w-4 h-4" />}
                 >
                   Export Excel
@@ -1268,7 +1267,7 @@ export const FinanceDashboard: React.FC = () => {
                 <Button 
                   variant="glass" 
                   onClick={handleExportFinancePDF}
-                  className="flex items-center gap-2 font-bold text-xs uppercase text-rose-400 border-rose-500/20 hover:bg-slate-800"
+                  className="flex items-center gap-2 font-bold text-xs uppercase text-danger border-danger/20 hover:bg-muted"
                   icon={<FileText className="w-4 h-4" />}
                 >
                   Export PDF
@@ -1281,38 +1280,38 @@ export const FinanceDashboard: React.FC = () => {
 
       {/* TRANSACTION DATA ENTRY SLIDE-DRAWER */}
       {isEntryDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/75 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/75 animate-fade-in">
           {/* Backdrop Click */}
           <div className="absolute inset-0 cursor-pointer" onClick={() => setIsEntryDrawerOpen(false)} />
           
           {/* Drawer Body */}
-          <div className="w-full max-w-sm h-full bg-slate-900 border-l border-slate-800 p-6 flex flex-col justify-between relative shadow-2xl animate-slide-in-right z-10 overflow-y-auto">
+          <div className="w-full max-w-sm h-full bg-card border-l border-border p-6 flex flex-col justify-between relative shadow-2xl animate-slide-in-right z-10 overflow-y-auto">
             <div>
               <div className="flex justify-between items-start mb-2">
-                <h3 className="font-bold text-white text-base flex items-center gap-2">
-                  <Star className="w-5 h-5 text-indigo-400" />
+                <h3 className="font-bold text-foreground text-base flex items-center gap-2">
+                  <Star className="w-5 h-5 text-primary" />
                   Financial Data Entry
                 </h3>
                 <button 
                   onClick={() => setIsEntryDrawerOpen(false)}
-                  className="p-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 hover:text-white hover:bg-slate-850 transition-colors"
+                  className="p-1 rounded-lg bg-card border border-border text-muted-foreground hover:text-white hover:bg-card transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <p className="text-[11px] text-slate-400 mb-4">Select the tab below to log incomes or expenses.</p>
+              <p className="text-[11px] text-muted-foreground mb-4">Select the tab below to log incomes or expenses.</p>
 
               {/* Entry Tab Selector */}
-              <div className="flex border-b border-white/5 mb-5 text-xs font-bold uppercase tracking-wider">
+              <div className="flex border-b border-border mb-5 text-xs font-bold uppercase tracking-wider">
                 <button 
                   onClick={() => setEntryTab('income')}
-                  className={`flex-1 pb-2 border-b-2 text-center transition-all ${entryTab === 'income' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-500 hover:text-slate-355'}`}
+                  className={`flex-1 pb-2 border-b-2 text-center transition-all ${entryTab === 'income' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-muted-foreground'}`}
                 >
                   Log Income
                 </button>
                 <button 
                   onClick={() => setEntryTab('expense')}
-                  className={`flex-1 pb-2 border-b-2 text-center transition-all ${entryTab === 'expense' ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-500 hover:text-slate-355'}`}
+                  className={`flex-1 pb-2 border-b-2 text-center transition-all ${entryTab === 'expense' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-muted-foreground'}`}
                 >
                   Log Expense
                 </button>
@@ -1322,30 +1321,30 @@ export const FinanceDashboard: React.FC = () => {
               {entryTab === 'income' && (
                 <form onSubmit={handleAddIncome} className="space-y-4 text-xs text-left">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block">Client Name</label>
+                    <label className="text-[9px] font-bold text-muted-foreground uppercase block">Client Name</label>
                     <input 
                       type="text" 
                       required
                       placeholder="e.g. Acme Corp"
                       value={incClientName}
                       onChange={(e) => setIncClientName(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block">Service Package</label>
+                    <label className="text-[9px] font-bold text-muted-foreground uppercase block">Service Package</label>
                     <input 
                       type="text" 
                       required
                       placeholder="e.g. SEO & Content Pack"
                       value={incServicePkg}
                       onChange={(e) => setIncServicePkg(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-3.5">
                     <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block">Status</label>
+                      <label className="text-[9px] font-bold text-muted-foreground uppercase block">Status</label>
                       <select
                         value={incPaymentType}
                         onChange={(e) => {
@@ -1357,7 +1356,7 @@ export const FinanceDashboard: React.FC = () => {
                             setIncPackageAmt('0');
                           }
                         }}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                       >
                         <option value="Advance">Advance</option>
                         <option value="Full">Full Payment</option>
@@ -1365,11 +1364,11 @@ export const FinanceDashboard: React.FC = () => {
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block">Method</label>
+                      <label className="text-[9px] font-bold text-muted-foreground uppercase block">Method</label>
                       <select
                         value={incPaymentMethod}
                         onChange={(e) => setIncPaymentMethod(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                       >
                         <option value="UPI">UPI</option>
                         <option value="Bank Transfer">Bank Transfer</option>
@@ -1379,7 +1378,7 @@ export const FinanceDashboard: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-3.5">
                     <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block">Package Amount (₹)</label>
+                      <label className="text-[9px] font-bold text-muted-foreground uppercase block">Package Amount (₹)</label>
                       <input 
                         type="number" 
                         required
@@ -1392,18 +1391,18 @@ export const FinanceDashboard: React.FC = () => {
                             setIncRecAmt(val);
                           }
                         }}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white disabled:opacity-50 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground disabled:opacity-50 focus:outline-none focus:border-primary"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-slate-400 uppercase block">Received Amount (₹)</label>
+                      <label className="text-[9px] font-bold text-muted-foreground uppercase block">Received Amount (₹)</label>
                       <input 
                         type="number" 
                         required
                         disabled={incPaymentType === 'Full'}
                         value={incRecAmt}
                         onChange={(e) => setIncRecAmt(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white disabled:opacity-50 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground disabled:opacity-50 focus:outline-none focus:border-primary"
                       />
                     </div>
                   </div>
@@ -1420,11 +1419,11 @@ export const FinanceDashboard: React.FC = () => {
               {entryTab === 'expense' && (
                 <form onSubmit={handleAddExpense} className="space-y-4 text-xs text-left">
                   <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block">Category</label>
+                    <label className="text-[9px] font-bold text-muted-foreground uppercase block">Category</label>
                     <select
                       value={expCategory}
                       onChange={(e) => setExpCategory(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                     >
                       <option value="Salary">Salary</option>
                       <option value="Rent">Rent</option>
@@ -1443,34 +1442,34 @@ export const FinanceDashboard: React.FC = () => {
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block">Amount (₹)</label>
+                    <label className="text-[9px] font-bold text-muted-foreground uppercase block">Amount (₹)</label>
                     <input 
                       type="number" 
                       required
                       placeholder="e.g. 15000"
                       value={expAmount}
                       onChange={(e) => setExpAmount(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block">Date</label>
+                    <label className="text-[9px] font-bold text-muted-foreground uppercase block">Date</label>
                     <input 
                       type="date" 
                       required
                       value={expDate}
                       onChange={(e) => setExpDate(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase block">Description</label>
+                    <label className="text-[9px] font-bold text-muted-foreground uppercase block">Description</label>
                     <input 
                       type="text" 
                       placeholder="e.g. Office rent for July"
                       value={expDescription}
                       onChange={(e) => setExpDescription(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+                      className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
                     />
                   </div>
 
@@ -1488,24 +1487,24 @@ export const FinanceDashboard: React.FC = () => {
 
       {/* EXPENSE CATEGORY DRILL-DOWN MODAL */}
       {drilldownCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <Card variant="solid" className="w-full max-w-lg p-6 bg-slate-900 border border-slate-800 relative animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-fade-in">
+          <Card variant="solid" className="w-full max-w-lg p-6 bg-card border border-border relative animate-scale-up">
             <button 
               onClick={() => setDrilldownCategory(null)}
-              className="absolute top-4 right-4 text-slate-450 hover:text-white"
+              className="absolute top-4 right-4 text-muted-foreground hover:text-white"
             >
               <X className="w-4 h-4" />
             </button>
-            <h3 className="font-bold text-white text-base mb-1.5 flex items-center gap-2">
-              <Star className="w-5 h-5 text-indigo-400" />
+            <h3 className="font-bold text-foreground text-base mb-1.5 flex items-center gap-2">
+              <Star className="w-5 h-5 text-primary" />
               Drill-down: {drilldownCategory.category} Category
             </h3>
-            <p className="text-[11px] text-slate-450 mb-4 uppercase font-semibold">Total Category Sum: <span className="text-rose-400 font-extrabold">{formatCurrency(drilldownCategory.totalAmount)}</span></p>
+            <p className="text-[11px] text-muted-foreground mb-4 uppercase font-semibold">Total Category Sum: <span className="text-danger font-extrabold">{formatCurrency(drilldownCategory.totalAmount)}</span></p>
 
-            <div className="overflow-y-auto max-h-96 rounded-xl border border-white/5 scrollbar-none">
+            <div className="overflow-y-auto max-h-96 rounded-md border border-border scrollbar-none">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-slate-950/60 text-[9px] font-bold text-slate-400 uppercase tracking-wider border-b border-white/5">
+                  <tr className="bg-muted-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border">
                     <th className="py-2.5 px-3">Date</th>
                     <th className="py-2.5 px-3">Description</th>
                     <th className="py-2.5 px-3">Logged By</th>
@@ -1513,19 +1512,19 @@ export const FinanceDashboard: React.FC = () => {
                     <th className="py-2.5 px-3 text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5 text-[11px]">
+                <tbody className="divide-y divide-border text-[11px]">
                   {drilldownCategory.items.map(item => {
                     const loggedByName = (item as any).staff_name || (item as any).logged_by_name || (item as any).created_by || staffProfilesMap.get(item.staff_id || '')?.name || 'Staff';
                     return (
-                      <tr key={item.id} className="hover:bg-slate-850/50 transition-colors">
-                        <td className="py-2 px-3 text-slate-500 font-medium">{item.expense_date}</td>
-                        <td className="py-2 px-3 text-slate-200 font-semibold">{item.description || item.category}</td>
-                        <td className="py-2 px-3 text-slate-400">{loggedByName}</td>
-                        <td className="py-2 px-3 text-right font-bold text-rose-400">{formatCurrency(item.amount)}</td>
+                      <tr key={item.id} className="hover:bg-muted-2 transition-colors">
+                        <td className="py-2 px-3 text-muted-foreground font-medium">{item.expense_date}</td>
+                        <td className="py-2 px-3 text-foreground font-semibold">{item.description || item.category}</td>
+                        <td className="py-2 px-3 text-muted-foreground">{loggedByName}</td>
+                        <td className="py-2 px-3 text-right font-bold text-danger">{formatCurrency(item.amount)}</td>
                         <td className="py-2 px-3 text-center">
                           <button
                             onClick={() => handleDeleteExpense(item.id, item.category, item.amount, item)}
-                            className="p-1 rounded bg-rose-500/10 text-rose-400 hover:bg-rose-500/25 transition-all cursor-pointer"
+                            className="p-1 rounded bg-danger-soft text-danger hover:bg-danger-soft transition-all cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -1545,30 +1544,30 @@ export const FinanceDashboard: React.FC = () => {
 
       {/* FINANCE SETTINGS MODAL */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
-          <Card variant="solid" className="w-full max-w-sm p-6 bg-slate-900 border border-slate-800 relative animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 overflow-y-auto animate-fade-in">
+          <Card variant="solid" className="w-full max-w-sm p-6 bg-card border border-border relative animate-scale-up">
             <button 
               onClick={() => setIsSettingsOpen(false)}
-              className="absolute top-4 right-4 text-slate-450 hover:text-white"
+              className="absolute top-4 right-4 text-muted-foreground hover:text-white"
             >
               <X className="w-4 h-4" />
             </button>
-            <h3 className="font-bold text-white text-base mb-4 flex items-center gap-2">
-              <Star className="w-5 h-5 text-indigo-400" />
+            <h3 className="font-bold text-foreground text-base mb-4 flex items-center gap-2">
+              <Star className="w-5 h-5 text-primary" />
               Finance 
             </h3>
             
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-350 mb-1.5">Historical Opening Balance (₹)</label>
+                <label className="block text-xs font-bold text-muted-foreground mb-1.5">Historical Opening Balance (₹)</label>
                 <input
                   type="number"
                   value={tempHistoricalBalance}
                   onChange={(e) => setTempHistoricalBalance(e.target.value)}
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3.5 py-2.5 text-sm font-semibold text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full bg-card border border-border rounded-md px-3.5 py-2.5 text-sm font-semibold text-foreground focus:outline-none focus:border-primary transition-colors"
                   placeholder="e.g. 500000"
                 />
-                <p className="text-[10px] text-slate-500 mt-2 leading-relaxed">
+                <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
                   This balance is added to all-time profits and subtracted by all-time withdrawals to determine the final company remaining balance.
                 </p>
               </div>
@@ -1587,19 +1586,19 @@ export const FinanceDashboard: React.FC = () => {
 
       {/* Analytics Modal */}
       {isAnalyticsModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in p-4">
-          <Card variant="glass" className="w-full max-w-4xl border-white/10 p-6 animate-scale-up relative">
-            <div className="flex justify-between items-center mb-6 border-b border-white/5 pb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 animate-fade-in p-4">
+          <Card variant="glass" className="w-full max-w-4xl border-border p-6 animate-scale-up relative">
+            <div className="flex justify-between items-center mb-6 border-b border-border pb-4">
               <div>
-                <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                  <Activity className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-xl font-bold text-foreground flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-primary" />
                   Financial Analytics ({selectedLedgerMonth})
                 </h3>
-                <p className="text-xs text-slate-400 mt-1">Income vs Expenses visualization</p>
+                <p className="text-xs text-muted-foreground mt-1">Income vs Expenses visualization</p>
               </div>
               <button 
                 onClick={() => setIsAnalyticsModalOpen(false)} 
-                className="p-2 bg-slate-900 rounded-lg text-slate-400 hover:text-white transition-colors"
+                className="p-2 bg-card rounded-lg text-muted-foreground hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>

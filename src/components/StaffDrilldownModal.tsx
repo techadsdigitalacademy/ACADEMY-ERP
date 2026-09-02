@@ -88,28 +88,28 @@ export const StaffDrilldownModal: React.FC<StaffDrilldownModalProps> = ({ profil
   const isTutor = profile.designation.toLowerCase().includes('tutor');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto animate-fade-in">
-      <Card variant="solid" className="w-full max-w-4xl bg-slate-900 border border-slate-700 relative shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 overflow-y-auto animate-fade-in">
+      <Card variant="solid" className="w-full max-w-4xl bg-card border border-border relative shadow-2xl flex flex-col max-h-[90vh]">
         
         {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-white/5 shrink-0">
+        <div className="flex justify-between items-center p-6 border-b border-border shrink-0">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center overflow-hidden shrink-0">
+            <div className="w-12 h-12 rounded-md bg-primary-soft border border-primary/30 flex items-center justify-center overflow-hidden shrink-0">
               <img src={`https://avatar.iran.liara.run/public/${profile.gender.toLowerCase() === 'female' ? 'girl' : 'boy'}?username=${encodeURIComponent(profile.full_name)}`} alt={profile.full_name} className="w-full h-full object-cover" />
             </div>
             <div>
-              <h2 className="text-xl font-black text-white">{profile.full_name}</h2>
-              <p className="text-sm text-indigo-400 font-medium">{profile.designation}</p>
+              <h2 className="text-xl font-black text-foreground">{profile.full_name}</h2>
+              <p className="text-sm text-primary font-medium">{profile.designation}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <button 
               onClick={() => { onClose(); onEdit(); }}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition-colors"
+              className="px-4 py-2 bg-muted hover:bg-muted text-foreground rounded-lg text-xs font-bold transition-colors"
             >
               Edit Profile
             </button>
-            <button onClick={onClose} className="p-2 bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-colors">
+            <button onClick={onClose} className="p-2 bg-muted hover:bg-muted text-muted-foreground hover:text-white rounded-lg transition-colors">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -120,56 +120,56 @@ export const StaffDrilldownModal: React.FC<StaffDrilldownModalProps> = ({ profil
           
           {/* Profile Quick Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-white/5">
-              <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Base Salary</p>
-              <p className="text-lg font-black text-white">{formatCurrency(profile.base_salary || 0)}</p>
+            <div className="bg-muted rounded-md p-4 border border-border">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Base Salary</p>
+              <p className="text-lg font-black text-foreground">{formatCurrency(profile.base_salary || 0)}</p>
             </div>
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-white/5">
-              <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Shift Timing</p>
-              <p className="text-sm font-bold text-white mt-1.5">{profile.shift_start_time.substring(0, 5)} - {profile.shift_end_time.substring(0, 5)}</p>
+            <div className="bg-muted rounded-md p-4 border border-border">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Shift Timing</p>
+              <p className="text-sm font-bold text-foreground mt-1.5">{profile.shift_start_time.substring(0, 5)} - {profile.shift_end_time.substring(0, 5)}</p>
             </div>
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-white/5">
-              <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Weekly Off</p>
-              <p className="text-sm font-bold text-white mt-1.5">{profile.weekly_off_day}</p>
+            <div className="bg-muted rounded-md p-4 border border-border">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Weekly Off</p>
+              <p className="text-sm font-bold text-foreground mt-1.5">{profile.weekly_off_day}</p>
             </div>
-            <div className="bg-slate-800/50 rounded-xl p-4 border border-white/5">
-              <p className="text-[10px] uppercase font-bold text-slate-400 mb-1">Status</p>
-              <p className="text-sm font-bold text-emerald-400 mt-1.5">Active</p>
+            <div className="bg-muted rounded-md p-4 border border-border">
+              <p className="text-[10px] uppercase font-bold text-muted-foreground mb-1">Status</p>
+              <p className="text-sm font-bold text-success mt-1.5">Active</p>
             </div>
           </div>
 
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold text-white">Monthly Overview</h3>
+            <h3 className="text-lg font-bold text-foreground">Monthly Overview</h3>
             <input 
               type="month" 
               value={month}
               onChange={(e) => setMonth(e.target.value)}
-              className="bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-1.5 text-sm"
+              className="bg-muted border border-border text-foreground rounded-lg px-3 py-1.5 text-sm"
             />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* Attendance Record */}
-            <Card variant="glass" className="p-5 border-white/5">
-              <h4 className="font-bold text-white mb-4 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-indigo-400"/> Attendance Record</h4>
+            <Card variant="glass" className="p-5 border-border">
+              <h4 className="font-bold text-foreground mb-4 flex items-center gap-2"><CalendarDays className="w-4 h-4 text-primary"/> Attendance Record</h4>
               {isLoading ? (
-                <div className="py-8 text-center text-slate-500 text-sm animate-pulse">Loading...</div>
+                <div className="py-8 text-center text-muted-foreground text-sm animate-pulse">Loading...</div>
               ) : attendance.length === 0 ? (
-                <div className="py-8 text-center text-slate-500 text-sm">No attendance records for {month}</div>
+                <div className="py-8 text-center text-muted-foreground text-sm">No attendance records for {month}</div>
               ) : (
                 <div className="space-y-2">
                   {attendance.map(record => (
-                    <div key={record.id} className="flex justify-between items-center p-3 rounded-xl bg-slate-900/50 border border-white/5">
+                    <div key={record.id} className="flex justify-between items-center p-3 rounded-md bg-muted-2 border border-border">
                       <div className="flex items-center gap-3">
-                        <div className="text-sm font-bold text-slate-300">{record.date}</div>
+                        <div className="text-sm font-bold text-secondary-foreground">{record.date}</div>
                         {record.status === 'Present' ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <CheckCircle2 className="w-4 h-4 text-success" />
                         ) : (
-                          <XCircle className="w-4 h-4 text-rose-400" />
+                          <XCircle className="w-4 h-4 text-danger" />
                         )}
                       </div>
-                      <div className="text-xs font-medium px-2.5 py-1 rounded-md bg-slate-800 text-slate-400">
+                      <div className="text-xs font-medium px-2.5 py-1 rounded-md bg-muted text-muted-foreground">
                         {record.check_in ? record.check_in.substring(0, 5) : '--:--'} to {record.check_out ? record.check_out.substring(0, 5) : '--:--'}
                       </div>
                     </div>
@@ -180,24 +180,24 @@ export const StaffDrilldownModal: React.FC<StaffDrilldownModalProps> = ({ profil
 
             {/* Fee History (Tutors Only) */}
             {isTutor && (
-              <Card variant="glass" className="p-5 border-white/5">
-                <h4 className="font-bold text-white mb-4 flex items-center gap-2"><Wallet className="w-4 h-4 text-emerald-400"/> Fee Collection (Assigned Batches)</h4>
+              <Card variant="glass" className="p-5 border-border">
+                <h4 className="font-bold text-foreground mb-4 flex items-center gap-2"><Wallet className="w-4 h-4 text-success"/> Fee Collection (Assigned Batches)</h4>
                 {isLoading ? (
-                  <div className="py-8 text-center text-slate-500 text-sm animate-pulse">Loading...</div>
+                  <div className="py-8 text-center text-muted-foreground text-sm animate-pulse">Loading...</div>
                 ) : feeHistory.length === 0 ? (
-                  <div className="py-8 text-center text-slate-500 text-sm">No fees collected in {month}</div>
+                  <div className="py-8 text-center text-muted-foreground text-sm">No fees collected in {month}</div>
                 ) : (
                   <div className="space-y-3">
                     {feeHistory.map(fee => (
-                      <div key={fee.id} className="p-3 rounded-xl bg-slate-900/50 border border-white/5">
+                      <div key={fee.id} className="p-3 rounded-md bg-muted-2 border border-border">
                         <div className="flex justify-between items-start mb-2">
                           <div>
-                            <p className="text-sm font-bold text-white">{fee.student_name}</p>
-                            <p className="text-[10px] text-indigo-400 uppercase tracking-wider">{fee.batch_name}</p>
+                            <p className="text-sm font-bold text-foreground">{fee.student_name}</p>
+                            <p className="text-[10px] text-primary uppercase tracking-wider">{fee.batch_name}</p>
                           </div>
-                          <p className="text-sm font-black text-emerald-400">{formatCurrency(fee.amount_paid)}</p>
+                          <p className="text-sm font-black text-success">{formatCurrency(fee.amount_paid)}</p>
                         </div>
-                        <div className="flex justify-between items-center text-xs text-slate-500">
+                        <div className="flex justify-between items-center text-xs text-muted-foreground">
                           <span>{fee.payment_date}</span>
                           <span>{fee.payment_method}</span>
                         </div>

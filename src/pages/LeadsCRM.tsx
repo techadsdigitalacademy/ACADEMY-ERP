@@ -539,21 +539,16 @@ export const LeadsCRM: React.FC = () => {
   };
 
   const columns: { title: Lead['status']; badgeColor: string }[] = [
-    { title: 'NEW LEAD', badgeColor: 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' },
-    { title: 'CONTACTED', badgeColor: 'bg-amber-500/10 text-amber-400 border border-amber-500/20' },
-    { title: 'PROPOSAL SENT', badgeColor: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' }
+    { title: 'NEW LEAD', badgeColor: 'bg-primary-soft text-primary border border-primary/20' },
+    { title: 'CONTACTED', badgeColor: 'bg-warning-soft text-warning border border-warning/20' },
+    { title: 'PROPOSAL SENT', badgeColor: 'bg-success-soft text-success border border-success/20' }
   ];
 
   const totalAllocated = Object.values(staffQuotas).reduce((a, b) => a + b, 0);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
+    <div className="min-h-screen bg-card text-foreground font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
       
-      {/* Background Decorative Glows */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/10 blur-[120px]"></div>
-        <div className="absolute top-[40%] right-[-30%] w-[90vw] h-[90vw] rounded-full bg-purple-900/10 blur-[150px]"></div>
-      </div>
 
       {/* Left Sidebar Navigation (Desktop only) */}
       <Sidebar />
@@ -562,10 +557,10 @@ export const LeadsCRM: React.FC = () => {
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12">
         
         {/* Header */}
-        <header className="glass-panel sticky top-14 lg:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-white/5 backdrop-blur-md">
+        <header className="bg-card border border-border sticky top-14 lg:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-border">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <h1 className="text-base md:text-xl font-bold text-white tracking-wide flex items-center gap-2">
+              <h1 className="text-base md:text-xl font-bold text-foreground tracking-wide flex items-center gap-2">
                 Leads & Call Logs
                 <Badge variant="indigo" className="text-[10px] py-0.5 uppercase tracking-wide">
                   {isAdminView ? 'Admin Portal' : 'Staff Portal'}
@@ -574,7 +569,7 @@ export const LeadsCRM: React.FC = () => {
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="px-2.5 py-1 rounded-xl bg-slate-900 border border-white/10 text-xs font-bold text-slate-350 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                className="px-2.5 py-1 rounded-md bg-card border border-border text-xs font-bold text-muted-foreground focus:outline-none focus:border-primary transition-all cursor-pointer"
               >
                 {getMonthOptions().map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -587,7 +582,7 @@ export const LeadsCRM: React.FC = () => {
                 <Button 
                   variant="glass" 
                   size="sm" 
-                  className="!py-2 !px-3 font-bold text-xs flex items-center gap-1.5 border border-white/10 hover:bg-slate-800" 
+                  className="!py-2 !px-3 font-bold text-xs flex items-center gap-1.5 border border-border hover:bg-muted" 
                   onClick={() => {
                     setParsedLeads([]);
                     setBulkProjectName('');
@@ -596,7 +591,7 @@ export const LeadsCRM: React.FC = () => {
                     setIsBulkModalOpen(true);
                   }}
                 >
-                  <Upload className="w-4 h-4 text-indigo-400" />
+                  <Upload className="w-4 h-4 text-primary" />
                   <span>Bulk Distribution</span>
                 </Button>
               )}
@@ -605,7 +600,7 @@ export const LeadsCRM: React.FC = () => {
                 <Button 
                   variant="primary" 
                   size="sm" 
-                  className="!py-2 !px-3 font-bold text-xs flex items-center gap-1 shadow-md shadow-indigo-500/20" 
+                  className="!py-2 !px-3 font-bold text-xs flex items-center gap-1" 
                   onClick={() => {
                     setLeadName('');
                     setAssignedTo('');
@@ -630,12 +625,12 @@ export const LeadsCRM: React.FC = () => {
           {/* Daily Date Filter Picker */}
           {activeStaff.designation !== 'Digital Marketer' && (
             <div className="flex justify-end items-center gap-2 mb-2 animate-fade-in">
-              <span className="text-[10px] font-bold text-slate-400 uppercase">View Stats for Date:</span>
+              <span className="text-[10px] font-bold text-muted-foreground uppercase">View Stats for Date:</span>
               <input
                 type="date"
                 value={filterDate}
                 onChange={(e) => setFilterDate(e.target.value)}
-                className="px-2.5 py-1.5 rounded-xl bg-slate-950 border border-white/10 text-xs font-bold text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                className="px-2.5 py-1.5 rounded-md bg-card border border-border text-xs font-bold text-foreground focus:outline-none focus:border-primary cursor-pointer"
               />
             </div>
           )}
@@ -674,55 +669,55 @@ export const LeadsCRM: React.FC = () => {
               return (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5 items-start animate-fade-in">
                   {/* Total Leads Received Card */}
-                  <Card variant="glass" glowColor="none" className="p-4 flex flex-col justify-between border-white/5 min-h-[105px]">
+                  <Card variant="glass" glowColor="none" className="p-4 flex flex-col justify-between border-border min-h-[105px]">
                     <div className="flex justify-between items-start">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Leads Received</span>
-                      <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total Leads Received</span>
+                      <div className="p-1.5 rounded-lg bg-primary-soft text-primary">
                         <Star className="w-4 h-4" />
                       </div>
                     </div>
-                    <p className="text-2xl font-extrabold text-white mt-2">{totalLeadsReceived}</p>
-                    <span className="text-[9px] text-indigo-400 font-medium block mt-1.5">
+                    <p className="text-2xl font-extrabold text-foreground mt-2">{totalLeadsReceived}</p>
+                    <span className="text-[9px] text-primary font-medium block mt-1.5">
                       Leads assigned on {filterDate}
                     </span>
                   </Card>
 
                   {/* Total Calls Widget */}
-                  <Card variant="glass" glowColor="none" className="p-4 flex flex-col justify-between border-white/5 min-h-[105px]">
+                  <Card variant="glass" glowColor="none" className="p-4 flex flex-col justify-between border-border min-h-[105px]">
                     <div className="flex justify-between items-start">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Calls</span>
-                      <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total Calls</span>
+                      <div className="p-1.5 rounded-lg bg-primary-soft text-primary">
                         <PhoneCall className="w-4 h-4" />
                       </div>
                     </div>
-                    <p className="text-2xl font-extrabold text-white mt-2">{totalCallsCount}</p>
-                    <span className="text-[9px] text-indigo-400 font-medium block mt-1.5">
+                    <p className="text-2xl font-extrabold text-foreground mt-2">{totalCallsCount}</p>
+                    <span className="text-[9px] text-primary font-medium block mt-1.5">
                       Calls made on {filterDate}
                     </span>
                   </Card>
 
                   {/* Positive Cases Widget */}
-                  <Card variant="glass" glowColor="emerald" className="p-4 flex flex-col justify-between border-emerald-500/10 min-h-[105px]">
+                  <Card variant="glass" glowColor="emerald" className="p-4 flex flex-col justify-between border-success/10 min-h-[105px]">
                     <div className="flex justify-between items-start">
-                      <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Positive Leads</span>
-                      <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400">
+                      <span className="text-[10px] font-bold text-success uppercase tracking-wider">Positive Leads</span>
+                      <div className="p-1.5 rounded-lg bg-success-soft text-success">
                         <Star className="w-4 h-4" />
                       </div>
                     </div>
-                    <p className="text-2xl font-extrabold text-emerald-400 mt-2">{positiveLeadsCount}</p>
-                    <span className="text-[9px] text-emerald-500 font-medium block mt-1.5">Proposal / Negotiation status</span>
+                    <p className="text-2xl font-extrabold text-success mt-2">{positiveLeadsCount}</p>
+                    <span className="text-[9px] text-success font-medium block mt-1.5">Proposal / Negotiation status</span>
                   </Card>
 
                   {/* Closed Works Widget */}
-                  <Card variant="glass" glowColor="purple" className="p-4 flex flex-col justify-between border-purple-500/10 min-h-[105px]">
+                  <Card variant="glass" glowColor="purple" className="p-4 flex flex-col justify-between border-primary/10 min-h-[105px]">
                     <div className="flex justify-between items-start">
-                      <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Closed Works</span>
-                      <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-400">
+                      <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Closed Works</span>
+                      <div className="p-1.5 rounded-lg bg-primary-soft text-primary">
                         <CheckCircle2 className="w-4 h-4" />
                       </div>
                     </div>
-                    <p className="text-2xl font-extrabold text-purple-400 mt-2">{closedWorksCount}</p>
-                    <span className="text-[9px] text-purple-500 font-medium block mt-1.5">Won / Closed status</span>
+                    <p className="text-2xl font-extrabold text-primary mt-2">{closedWorksCount}</p>
+                    <span className="text-[9px] text-primary font-medium block mt-1.5">Won / Closed status</span>
                   </Card>
                 </div>
               );
@@ -735,32 +730,32 @@ export const LeadsCRM: React.FC = () => {
 
             return (
               <div className="space-y-6 animate-fade-in max-w-4xl">
-                <Card variant="glass" className="p-5 border-white/5 space-y-4 max-w-2xl">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-white/5 pb-3 gap-3">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Card variant="glass" className="p-5 border-border space-y-4 max-w-2xl">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-border pb-3 gap-3">
+                    <h3 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
                       <span>Daily Distribution Report</span>
-                      <span className="text-[10px] text-slate-500 font-medium normal-case">({formattedDate})</span>
+                      <span className="text-[10px] text-muted-foreground font-medium normal-case">({formattedDate})</span>
                     </h3>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-slate-450 uppercase">Date:</span>
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase">Date:</span>
                       <input 
                         type="date" 
                         value={distributionDate}
                         onChange={(e) => setDistributionDate(e.target.value)}
-                        className="px-2.5 py-1.5 rounded-xl bg-slate-950 border border-white/10 text-xs font-bold text-slate-200 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                        className="px-2.5 py-1.5 rounded-md bg-card border border-border text-xs font-bold text-foreground focus:outline-none focus:border-primary cursor-pointer"
                       />
                     </div>
                   </div>
                   
-                  <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/20">
+                  <div className="overflow-x-auto rounded-md border border-border bg-muted-2">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="border-b border-white/5 bg-slate-950/50 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <tr className="border-b border-border bg-muted-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                           <th className="py-3 px-4">Sales Executive</th>
                           <th className="py-3 px-4 text-center">Leads Assigned on this Date</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+                      <tbody className="divide-y divide-border text-secondary-foreground font-semibold">
                         {salesExecutives.map(staff => {
                           const staffDateCount = assignmentLogs.filter(log => {
                             if (log.staff_id !== staff.id) return false;
@@ -769,15 +764,15 @@ export const LeadsCRM: React.FC = () => {
                           }).length;
 
                           return (
-                            <tr key={staff.id} className="hover:bg-slate-900/10">
-                              <td className="py-3 px-4 text-white font-bold">{staff.full_name}</td>
-                              <td className="py-3 px-4 text-center text-indigo-400 font-extrabold text-sm">{staffDateCount}</td>
+                            <tr key={staff.id} className="hover:bg-muted-2">
+                              <td className="py-3 px-4 text-foreground font-bold">{staff.full_name}</td>
+                              <td className="py-3 px-4 text-center text-primary font-extrabold text-sm">{staffDateCount}</td>
                             </tr>
                           );
                         })}
                         {salesExecutives.length === 0 && (
                           <tr>
-                            <td colSpan={2} className="text-center py-8 text-slate-600 font-semibold">No Sales Executives registered.</td>
+                            <td colSpan={2} className="text-center py-8 text-muted-foreground font-semibold">No Sales Executives registered.</td>
                           </tr>
                         )}
                       </tbody>
@@ -786,15 +781,15 @@ export const LeadsCRM: React.FC = () => {
                 </Card>
 
                 {/* Leads Directory Table */}
-                <Card variant="glass" className="p-5 border-white/5 space-y-4">
-                  <div className="border-b border-white/5 pb-3">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Leads Directory</h3>
-                    <p className="text-[10px] text-slate-500 font-medium mt-1">Manage and reassign all system leads</p>
+                <Card variant="glass" className="p-5 border-border space-y-4">
+                  <div className="border-b border-border pb-3">
+                    <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Leads Directory</h3>
+                    <p className="text-[10px] text-muted-foreground font-medium mt-1">Manage and reassign all system leads</p>
                   </div>
-                  <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/20 max-h-96 overflow-y-auto">
+                  <div className="overflow-x-auto rounded-md border border-border bg-muted-2 max-h-96 overflow-y-auto">
                     <table className="w-full text-left border-collapse text-xs">
                       <thead>
-                        <tr className="border-b border-white/5 bg-slate-950/50 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <tr className="border-b border-border bg-muted-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                           <th className="py-2.5 px-3">Lead Name</th>
                           <th className="py-2.5 px-3">Project</th>
                           <th className="py-2.5 px-3">Location</th>
@@ -804,26 +799,26 @@ export const LeadsCRM: React.FC = () => {
                           <th className="py-2.5 px-3 text-center">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+                      <tbody className="divide-y divide-border text-secondary-foreground font-semibold">
                         {leadsList.map(lead => {
                           const matchedStaff = staffRegistry.find(s => s.id === lead.assigned_to);
                           return (
-                            <tr key={lead.id} className="hover:bg-slate-900/10">
-                              <td className="py-2.5 px-3 text-white font-bold">{lead.lead_name}</td>
-                              <td className="py-2.5 px-3 text-slate-400">{lead.project_name || '-'}</td>
-                              <td className="py-2.5 px-3 text-slate-400">{lead.location || '-'}</td>
-                              <td className="py-2.5 px-3 text-indigo-400 font-medium">{lead.whatsapp_number || '-'}</td>
+                            <tr key={lead.id} className="hover:bg-muted-2">
+                              <td className="py-2.5 px-3 text-foreground font-bold">{lead.lead_name}</td>
+                              <td className="py-2.5 px-3 text-muted-foreground">{lead.project_name || '-'}</td>
+                              <td className="py-2.5 px-3 text-muted-foreground">{lead.location || '-'}</td>
+                              <td className="py-2.5 px-3 text-primary font-medium">{lead.whatsapp_number || '-'}</td>
                               <td className="py-2.5 px-3">
                                 <Badge variant={lead.status === 'WON' ? 'success' : 'indigo'} className="text-[9px] py-0.5 px-1.5">
                                   {lead.status}
                                 </Badge>
                               </td>
-                              <td className="py-2.5 px-3 text-slate-350">{matchedStaff?.full_name || 'Unassigned'}</td>
+                              <td className="py-2.5 px-3 text-muted-foreground">{matchedStaff?.full_name || 'Unassigned'}</td>
                               <td className="py-2.5 px-3 text-center">
                                 <Button 
                                   variant="glass" 
                                   size="sm"
-                                  className="!py-1 !px-2 text-[10px] font-bold border border-white/10 hover:bg-slate-800"
+                                  className="!py-1 !px-2 text-[10px] font-bold border border-border hover:bg-muted"
                                   onClick={() => handleOpenEditLeadModal(lead)}
                                 >
                                   Edit / Reassign
@@ -834,7 +829,7 @@ export const LeadsCRM: React.FC = () => {
                         })}
                         {leadsList.length === 0 && (
                           <tr>
-                            <td colSpan={7} className="text-center py-8 text-slate-600 font-semibold">No leads found.</td>
+                            <td colSpan={7} className="text-center py-8 text-muted-foreground font-semibold">No leads found.</td>
                           </tr>
                         )}
                       </tbody>
@@ -850,7 +845,7 @@ export const LeadsCRM: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start animate-fade-in">
               {/* Sales Executives Grid */}
               <div className="lg:col-span-2 space-y-4">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sales Executives</h3>
+                <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Sales Executives</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {salesExecutives.map(staff => {
                     const assignedCount = leadsList.filter(l => {
@@ -880,36 +875,36 @@ export const LeadsCRM: React.FC = () => {
                       <Card 
                         key={staff.id} 
                         variant="glass" 
-                        className="p-4 border-white/5 hover:border-indigo-500/30 cursor-pointer transition-all duration-200"
+                        className="p-4 border-border hover:border-primary/30 cursor-pointer transition-all duration-200"
                         onClick={() => setSelectedSalesExec(staff)}
                       >
                         <div className="flex items-center gap-3 mb-3">
                           <img 
                             src={staff.avatar_url || `https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(staff.full_name)}`} 
                             alt={staff.full_name} 
-                            className="w-10 h-10 rounded-full border border-slate-700 object-cover"
+                            className="w-10 h-10 rounded-full border border-border object-cover"
                           />
                           <div>
-                            <h4 className="text-xs font-extrabold text-white">{staff.full_name}</h4>
-                            <span className="text-[8px] text-slate-500 font-bold uppercase">Sales Executive</span>
+                            <h4 className="text-xs font-extrabold text-foreground">{staff.full_name}</h4>
+                            <span className="text-[8px] text-muted-foreground font-bold uppercase">Sales Executive</span>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2 text-[10px] bg-slate-950/20 p-2.5 rounded-xl border border-white/5">
+                        <div className="grid grid-cols-2 gap-2 text-[10px] bg-muted-2 p-2.5 rounded-md border border-border">
                           <div>
-                            <span className="text-slate-550 block font-bold uppercase text-[8px]">Leads</span>
-                            <span className="text-white font-extrabold">{assignedCount}</span>
+                            <span className="text-muted-foreground block font-bold uppercase text-[8px]">Leads</span>
+                            <span className="text-foreground font-extrabold">{assignedCount}</span>
                           </div>
                           <div>
-                            <span className="text-slate-550 block font-bold uppercase text-[8px]">Calls</span>
-                            <span className="text-indigo-400 font-extrabold">{callsCount}</span>
+                            <span className="text-muted-foreground block font-bold uppercase text-[8px]">Calls</span>
+                            <span className="text-primary font-extrabold">{callsCount}</span>
                           </div>
                           <div>
-                            <span className="text-slate-550 block font-bold uppercase text-[8px]">Positive</span>
-                            <span className="text-emerald-400 font-extrabold">{positiveCount}</span>
+                            <span className="text-muted-foreground block font-bold uppercase text-[8px]">Positive</span>
+                            <span className="text-success font-extrabold">{positiveCount}</span>
                           </div>
                           <div>
-                            <span className="text-slate-550 block font-bold uppercase text-[8px]">Closed</span>
-                            <span className="text-purple-400 font-extrabold">{closedCount}</span>
+                            <span className="text-muted-foreground block font-bold uppercase text-[8px]">Closed</span>
+                            <span className="text-primary font-extrabold">{closedCount}</span>
                           </div>
                         </div>
                       </Card>
@@ -920,14 +915,14 @@ export const LeadsCRM: React.FC = () => {
 
               {/* Call Activity Calendar (Retained on the right for Admin overall company daily calls) */}
               <div className="lg:col-span-1 space-y-4">
-                <Card variant="glass" className="p-4 border-white/5">
-                  <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <CalendarIcon className="w-3.5 h-3.5 text-purple-400" />
+                <Card variant="glass" className="p-4 border-border">
+                  <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <CalendarIcon className="w-3.5 h-3.5 text-primary" />
                     Overall Call Calendar ({selectedMonth})
                   </h3>
                   
                   {/* Calendar Grid */}
-                  <div className="grid grid-cols-7 gap-1 text-[9px] text-center font-bold text-slate-500 uppercase tracking-tight mb-2 border-b border-white/5 pb-1">
+                  <div className="grid grid-cols-7 gap-1 text-[9px] text-center font-bold text-muted-foreground uppercase tracking-tight mb-2 border-b border-border pb-1">
                     {weekDays.map(d => <div key={d}>{d}</div>)}
                   </div>
 
@@ -947,11 +942,11 @@ export const LeadsCRM: React.FC = () => {
                           key={`day-${day}`}
                           onClick={() => handleDrillDate(day)}
                           disabled={!hasCalls}
-                          className={`p-1.5 rounded-lg font-bold flex flex-col items-center justify-between transition-all duration-200 ${hasPositive ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20' : hasCalls ? 'bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/25' : 'bg-slate-950/20 border border-white/5 text-slate-600 cursor-default'}`}
+                          className={`p-1.5 rounded-lg font-bold flex flex-col items-center justify-between transition-all duration-200 ${hasPositive ? 'bg-success-soft border border-success/30 text-success hover:bg-success-soft' : hasCalls ? 'bg-primary-soft border border-primary/20 text-primary hover:bg-primary-soft' : 'bg-muted-2 border border-border text-muted-foreground cursor-default'}`}
                         >
                           <span>{day}</span>
                           {hasCalls && (
-                            <span className="text-[7px] font-extrabold bg-slate-900 px-1 rounded-full text-slate-300 mt-0.5 leading-none">
+                            <span className="text-[7px] font-extrabold bg-card px-1 rounded-full text-secondary-foreground mt-0.5 leading-none">
                               {dayCalls.length}
                             </span>
                           )}
@@ -966,12 +961,12 @@ export const LeadsCRM: React.FC = () => {
 
           {/* Detailed Leads view if Sales Executive is selected by Admin */}
           {isAdminView && selectedSalesExec && (
-            <div className="flex items-center justify-between border-b border-white/5 pb-3 animate-fade-in">
+            <div className="flex items-center justify-between border-b border-border pb-3 animate-fade-in">
               <Button 
                 variant="glass" 
                 size="sm" 
                 onClick={() => setSelectedSalesExec(null)}
-                className="!py-2 !px-3 text-xs font-bold text-slate-350 border border-white/10 hover:bg-slate-800"
+                className="!py-2 !px-3 text-xs font-bold text-muted-foreground border border-border hover:bg-muted"
               >
                 ← Back to Sales Executives
               </Button>
@@ -979,9 +974,9 @@ export const LeadsCRM: React.FC = () => {
                 <img 
                   src={selectedSalesExec.avatar_url || `https://avatar.iran.liara.run/public/boy?username=${encodeURIComponent(selectedSalesExec.full_name)}`} 
                   alt={selectedSalesExec.full_name} 
-                  className="w-6 h-6 rounded-full border border-slate-700 object-cover"
+                  className="w-6 h-6 rounded-full border border-border object-cover"
                 />
-                <span className="text-xs font-extrabold text-white uppercase tracking-wider">{selectedSalesExec.full_name}'s Leads</span>
+                <span className="text-xs font-extrabold text-foreground uppercase tracking-wider">{selectedSalesExec.full_name}'s Leads</span>
               </div>
             </div>
           )}
@@ -991,13 +986,13 @@ export const LeadsCRM: React.FC = () => {
             <div className="space-y-6 animate-fade-in">
               {/* Search bar */}
               <div className="relative max-w-md">
-                <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
+                <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
                 <input 
                   type="text" 
                   placeholder="Search leads by name or project..." 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900/60 border border-white/5 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
+                  className="w-full pl-9 pr-4 py-2 rounded-md bg-muted-2 border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
                 />
               </div>
 
@@ -1010,13 +1005,13 @@ export const LeadsCRM: React.FC = () => {
                     <div key={col.title} className="flex flex-col gap-4">
                       
                       {/* Column Header */}
-                      <div className="flex items-center justify-between border-b border-white/5 pb-2.5">
+                      <div className="flex items-center justify-between border-b border-border pb-2.5">
                         <div className="flex items-center gap-2">
                           <span className={`text-[10px] font-bold py-0.5 px-2 rounded-lg ${col.badgeColor}`}>
                             {col.title}
                           </span>
                         </div>
-                        <span className="text-xs text-slate-500 font-bold">{colLeads.length}</span>
+                        <span className="text-xs text-muted-foreground font-bold">{colLeads.length}</span>
                       </div>
 
                       {/* Column Pipeline Cards list */}
@@ -1028,12 +1023,12 @@ export const LeadsCRM: React.FC = () => {
                             <Card 
                               key={lead.id}
                               variant="glass"
-                              className="p-4 bg-slate-900/20 border-white/5 hover:border-indigo-500/10 flex flex-col gap-3 relative"
+                              className="p-4 bg-muted-2 border-border hover:border-primary/10 flex flex-col gap-3 relative"
                             >
                               <div className="flex justify-between items-start gap-1">
                                 <div>
-                                  <h4 className="font-bold text-white text-xs leading-tight">{lead.lead_name}</h4>
-                                  <p className="text-[10px] text-slate-400 mt-1">Assigned: <span className="text-indigo-400 font-bold">{getStaffName(lead.assigned_to)}</span></p>
+                                  <h4 className="font-bold text-foreground text-xs leading-tight">{lead.lead_name}</h4>
+                                  <p className="text-[10px] text-muted-foreground mt-1">Assigned: <span className="text-primary font-bold">{getStaffName(lead.assigned_to)}</span></p>
                                 </div>
                                 
                                 {/* Direction controls */}
@@ -1041,7 +1036,7 @@ export const LeadsCRM: React.FC = () => {
                                   {col.title !== 'NEW LEAD' && (
                                     <button
                                       onClick={() => handleUpdateStatus(lead.id, col.title === 'PROPOSAL SENT' ? 'CONTACTED' : 'NEW LEAD')}
-                                      className="p-1 rounded bg-slate-800/80 hover:bg-slate-800 text-slate-400 hover:text-white"
+                                      className="p-1 rounded bg-muted hover:bg-muted text-muted-foreground hover:text-white"
                                     >
                                       <ChevronLeft className="w-3 h-3" />
                                     </button>
@@ -1049,7 +1044,7 @@ export const LeadsCRM: React.FC = () => {
                                   {col.title !== 'PROPOSAL SENT' && (
                                     <button
                                       onClick={() => handleUpdateStatus(lead.id, col.title === 'NEW LEAD' ? 'CONTACTED' : 'PROPOSAL SENT')}
-                                      className="p-1 rounded bg-slate-800/80 hover:bg-slate-800 text-slate-400 hover:text-white"
+                                      className="p-1 rounded bg-muted hover:bg-muted text-muted-foreground hover:text-white"
                                     >
                                       <ChevronRight className="w-3 h-3" />
                                     </button>
@@ -1068,35 +1063,35 @@ export const LeadsCRM: React.FC = () => {
                               </div>
 
                               {/* Follow-up Notes inputs */}
-                              <div className="space-y-1 pt-2 border-t border-white/5">
-                                <span className="text-[9px] text-slate-500 uppercase font-bold block">Follow-up Notes</span>
+                              <div className="space-y-1 pt-2 border-t border-border">
+                                <span className="text-[9px] text-muted-foreground uppercase font-bold block">Follow-up Notes</span>
                                 <div className="flex gap-1.5 items-center">
                                   <textarea
                                     rows={1}
                                     value={notesVal}
                                     onChange={(e) => setLocalNotes(prev => ({ ...prev, [lead.id]: e.target.value }))}
                                     placeholder="Type updates..."
-                                    className="flex-1 px-2 py-1 rounded-lg bg-slate-950 border border-slate-900 text-[10px] text-slate-200 placeholder-slate-600 focus:outline-none resize-none"
+                                    className="flex-1 px-2 py-1 rounded-lg bg-card border border-border text-[10px] text-foreground placeholder:text-muted-foreground focus:outline-none resize-none"
                                   />
                                   <button
                                     onClick={() => handleSaveNotes(lead.id)}
                                     disabled={isSavingNotes[lead.id]}
-                                    className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[9px]"
+                                    className="p-1.5 rounded-lg bg-primary hover:bg-primary text-white font-bold text-[9px]"
                                   >
                                     <Save className="w-3 h-3" />
                                   </button>
                                 </div>
                               </div>                              {/* Action footer */}
-                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/5 text-[10px]">
+                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-border text-[10px]">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   {lead.whatsapp_number && (
                                     <a
                                       href={`https://wa.me/${lead.whatsapp_number.replace(/\D/g, '')}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-bold bg-emerald-500/10 hover:bg-emerald-500/15 px-2.5 py-1 rounded-lg border border-emerald-500/20 hover:border-emerald-500/30 transition-all"
+                                      className="flex items-center gap-1 text-success hover:text-success font-bold bg-success-soft hover:bg-success-soft px-2.5 py-1 rounded-lg border border-success/20 hover:border-success/30 transition-all"
                                     >
-                                      <Phone className="w-3 h-3 text-emerald-450" />
+                                      <Phone className="w-3 h-3 text-success" />
                                       <span className="text-[8px] uppercase">WhatsApp</span>
                                     </a>
                                   )}
@@ -1108,7 +1103,7 @@ export const LeadsCRM: React.FC = () => {
                                       setNewCallNotes('');
                                       setIsLogCallOpen(true);
                                     }}
-                                    className="flex items-center gap-1 text-indigo-400 font-bold bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-colors"
+                                    className="flex items-center gap-1 text-primary font-bold bg-primary-soft px-2.5 py-1 rounded-lg border border-primary/20 hover:bg-primary hover:text-white transition-colors"
                                   >
                                     <PhoneCall className="w-3 h-3" />
                                     <span className="text-[8px] uppercase">Log Call</span>
@@ -1116,9 +1111,9 @@ export const LeadsCRM: React.FC = () => {
                                   {isAdminView && (
                                     <button
                                       onClick={() => handleOpenEditLeadModal(lead)}
-                                      className="flex items-center gap-1 text-slate-350 hover:text-white font-bold bg-slate-800 px-2 py-1 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors"
+                                      className="flex items-center gap-1 text-muted-foreground hover:text-white font-bold bg-muted px-2 py-1 rounded-lg border border-border hover:border-border transition-colors"
                                     >
-                                      <Edit2 className="w-3 h-3 text-slate-400" />
+                                      <Edit2 className="w-3 h-3 text-muted-foreground" />
                                       <span className="text-[8px] uppercase">Edit</span>
                                     </button>
                                   )}
@@ -1127,7 +1122,7 @@ export const LeadsCRM: React.FC = () => {
                                 {isAdminView && (
                                   <button
                                     onClick={() => handleDeleteLead(lead.id)}
-                                    className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-rose-400 transition-colors"
+                                    className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-danger transition-colors"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </button>
@@ -1137,7 +1132,7 @@ export const LeadsCRM: React.FC = () => {
                           );
                         })}
                         {colLeads.length === 0 && (
-                          <p className="text-center text-slate-600 py-12 text-xs font-semibold border border-dashed border-white/5 rounded-2xl">
+                          <p className="text-center text-muted-foreground py-12 text-xs font-semibold border border-dashed border-border rounded-lg">
                             No leads in column
                           </p>
                         )}
@@ -1155,40 +1150,40 @@ export const LeadsCRM: React.FC = () => {
 
       {/* LOG CALL LOG MODAL */}
       {isLogCallOpen && selectedLeadForCall && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in">
-          <Card variant="solid" className="w-full max-w-sm p-6 bg-slate-900 border border-slate-800 relative animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 animate-fade-in">
+          <Card variant="solid" className="w-full max-w-sm p-6 bg-card border border-border relative animate-scale-up">
             <button 
               onClick={() => {
                 setIsLogCallOpen(false);
                 setSelectedLeadForCall(null);
               }}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              className="absolute top-4 right-4 text-muted-foreground hover:text-white"
             >
               <X className="w-4 h-4" />
             </button>
-            <h3 className="font-bold text-white text-sm mb-1 uppercase tracking-wider flex items-center gap-2">
-              <PhoneCall className="w-4.5 h-4.5 text-indigo-400" />
+            <h3 className="font-bold text-foreground text-sm mb-1 uppercase tracking-wider flex items-center gap-2">
+              <PhoneCall className="w-4.5 h-4.5 text-primary" />
               Log Call Activity
             </h3>
-            <p className="text-xs text-slate-400 mb-4">Client: {selectedLeadForCall.lead_name}</p>
+            <p className="text-xs text-muted-foreground mb-4">Client: {selectedLeadForCall.lead_name}</p>
             <form onSubmit={handleSaveCallLog} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Call Date</label>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase">Call Date</label>
                 <input 
                   type="date" 
                   required
                   value={newCallDate}
                   onChange={(e) => setNewCallDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                  className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Call Status / Outcome</label>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase">Call Status / Outcome</label>
                 <select
                   value={newCallStatus}
                   onChange={(e) => setNewCallStatus(e.target.value as any)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                  className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                 >
                   <option value="POSITIVE">Positive Conversion</option>
                   <option value="NEGATIVE">Negative Response</option>
@@ -1197,13 +1192,13 @@ export const LeadsCRM: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Conversation Notes</label>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase">Conversation Notes</label>
                 <textarea
                   rows={2}
                   placeholder="e.g. Client requested website proposal by Monday..."
                   value={newCallNotes}
                   onChange={(e) => setNewCallNotes(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none resize-none"
+                  className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none resize-none"
                 />
               </div>
 
@@ -1227,33 +1222,33 @@ export const LeadsCRM: React.FC = () => {
 
       {/* CALENDAR DRILL-DOWN MODAL */}
       {drilledDate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in">
-          <Card variant="solid" className="w-full max-w-md p-6 bg-slate-900 border border-slate-800 relative animate-scale-up max-h-[85vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 animate-fade-in">
+          <Card variant="solid" className="w-full max-w-md p-6 bg-card border border-border relative animate-scale-up max-h-[85vh] overflow-y-auto">
             <button 
               onClick={() => setDrilledDate(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              className="absolute top-4 right-4 text-muted-foreground hover:text-white"
             >
               <X className="w-4 h-4" />
             </button>
-            <h3 className="font-bold text-white text-base mb-1 flex items-center gap-2">
-              <CalendarIcon className="w-5 h-5 text-indigo-400" />
+            <h3 className="font-bold text-foreground text-base mb-1 flex items-center gap-2">
+              <CalendarIcon className="w-5 h-5 text-primary" />
               Calls Logged: {drilledDate}
             </h3>
-            <p className="text-xs text-slate-400 mb-4">{drilledCalls.length} calls logged on this date</p>
+            <p className="text-xs text-muted-foreground mb-4">{drilledCalls.length} calls logged on this date</p>
             
             <div className="space-y-3">
               {drilledCalls.map(call => (
-                <div key={call.id} className="p-3 rounded-xl bg-slate-950/40 border border-white/5 text-xs flex flex-col gap-1.5">
+                <div key={call.id} className="p-3 rounded-md bg-muted-2 border border-border text-xs flex flex-col gap-1.5">
                   <div className="flex justify-between items-center">
-                    <span className="font-bold text-white">{getLeadName(call.lead_id)}</span>
+                    <span className="font-bold text-foreground">{getLeadName(call.lead_id)}</span>
                     <Badge variant={call.status === 'POSITIVE' ? 'success' : call.status === 'NEGATIVE' ? 'error' : 'warning'} className="text-[8px] py-0 px-1">
                       {call.status}
                     </Badge>
                   </div>
                   {call.notes ? (
-                    <p className="text-slate-400 italic text-[11px] font-medium leading-normal bg-slate-950/40 p-2 rounded-lg border border-white/5 mt-1">"{call.notes}"</p>
+                    <p className="text-muted-foreground italic text-[11px] font-medium leading-normal bg-muted-2 p-2 rounded-lg border border-border mt-1">"{call.notes}"</p>
                   ) : (
-                    <span className="text-[10px] text-slate-600 italic">No notes captured</span>
+                    <span className="text-[10px] text-muted-foreground italic">No notes captured</span>
                   )}
                 </div>
               ))}
@@ -1264,82 +1259,82 @@ export const LeadsCRM: React.FC = () => {
 
       {/* NEW LEAD MODAL */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-fade-in">
-          <Card variant="solid" className="w-full max-w-sm p-6 bg-slate-900 border border-slate-800 relative animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 animate-fade-in">
+          <Card variant="solid" className="w-full max-w-sm p-6 bg-card border border-border relative animate-scale-up">
             <button 
               onClick={() => setIsAddModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              className="absolute top-4 right-4 text-muted-foreground hover:text-white"
             >
               <X className="w-4 h-4" />
             </button>
-            <h3 className="font-bold text-white text-base mb-4 flex items-center gap-2">
-              <Star className="w-5 h-5 text-indigo-400" />
+            <h3 className="font-bold text-foreground text-base mb-4 flex items-center gap-2">
+              <Star className="w-5 h-5 text-primary" />
               Register New Lead
             </h3>
             <form onSubmit={handleCreateLead} className="space-y-3.5">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Lead Name</label>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase">Lead Name</label>
                 <input 
                   type="text" 
                   required
                   placeholder="e.g. Ramesh Kumar"
                   value={leadName}
                   onChange={(e) => setLeadName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                  className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">WhatsApp (No)</label>
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">WhatsApp (No)</label>
                   <input 
                     type="text" 
                     placeholder="e.g. 9876543210"
                     value={leadWhatsapp}
                     onChange={(e) => setLeadWhatsapp(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Location</label>
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Location</label>
                   <input 
                     type="text" 
                     placeholder="e.g. Delhi"
                     value={leadLocation}
                     onChange={(e) => setLeadLocation(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Project / Requirements</label>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase">Project / Requirements</label>
                 <input 
                   type="text" 
                   placeholder="e.g. Website Design"
                   value={leadProject}
                   onChange={(e) => setLeadProject(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                  className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Initial Conversation Notes</label>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase">Initial Conversation Notes</label>
                 <textarea
                   rows={2}
                   placeholder="Type updates..."
                   value={leadNotes}
                   onChange={(e) => setLeadNotes(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none resize-none"
+                  className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none resize-none"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Assigned Staff</label>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase">Assigned Staff</label>
                 <select
                   value={assignedTo}
                   onChange={(e) => setAssignedTo(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                  className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                 >
                   <option value="">Unassigned</option>
                   {staffRegistry.map(s => (
@@ -1359,30 +1354,30 @@ export const LeadsCRM: React.FC = () => {
 
       {/* BULK LEADS DISTRIBUTION DIALOG */}
       {isBulkModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md overflow-y-auto animate-fade-in">
-          <Card variant="solid" className="w-full max-w-md p-6 bg-slate-900 border border-slate-800 relative animate-scale-up max-h-[95vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 overflow-y-auto animate-fade-in">
+          <Card variant="solid" className="w-full max-w-md p-6 bg-card border border-border relative animate-scale-up max-h-[95vh] overflow-y-auto">
             <button 
               onClick={() => setIsBulkModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              className="absolute top-4 right-4 text-muted-foreground hover:text-white"
             >
               <X className="w-4 h-4" />
             </button>
-            <h3 className="font-bold text-white text-base mb-4">Bulk Leads Distribution Panel</h3>
+            <h3 className="font-bold text-foreground text-base mb-4">Bulk Leads Distribution Panel</h3>
             <form onSubmit={handleBulkDistribution} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Project Requirements Name</label>
+                <label className="text-xs font-semibold text-secondary-foreground">Project Requirements Name</label>
                 <input 
                   type="text" 
                   required
                   placeholder="e.g. SMM, Website, SEO"
                   value={bulkProjectName}
                   onChange={(e) => setBulkProjectName(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 focus:outline-none"
+                  className="w-full px-3 py-2.5 rounded-md bg-card border border-border text-sm text-foreground focus:outline-none"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-300">Upload Leads CSV File</label>
+                <label className="text-xs font-semibold text-secondary-foreground">Upload Leads CSV File</label>
                 <div className="flex items-center gap-3">
                   <input 
                     type="file" 
@@ -1393,13 +1388,13 @@ export const LeadsCRM: React.FC = () => {
                   />
                   <label 
                     htmlFor="csv-file-upload"
-                    className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-950 hover:bg-slate-900 border border-slate-800 text-xs font-bold text-slate-300 cursor-pointer transition-colors"
+                    className="flex items-center gap-2 px-3.5 py-2.5 rounded-md bg-card hover:bg-card border border-border text-xs font-bold text-secondary-foreground cursor-pointer transition-colors"
                   >
-                    <Upload className="w-4 h-4 text-indigo-400" />
+                    <Upload className="w-4 h-4 text-primary" />
                     <span>Upload CSV File</span>
                   </label>
                   {csvFileName && (
-                    <span className="text-[10px] text-emerald-400 font-bold truncate max-w-[200px]">
+                    <span className="text-[10px] text-success font-bold truncate max-w-[200px]">
                       {csvFileName} ({parsedLeads.length} leads)
                     </span>
                   )}
@@ -1407,16 +1402,16 @@ export const LeadsCRM: React.FC = () => {
               </div>
 
               {parsedLeads.length > 0 && (
-                <div className="space-y-3 pt-3.5 border-t border-white/5">
-                  <div className="bg-indigo-950/40 border border-indigo-500/20 rounded-xl p-3 text-xs text-indigo-300 font-bold mb-3 flex justify-between">
+                <div className="space-y-3 pt-3.5 border-t border-border">
+                  <div className="bg-primary-soft border border-primary/20 rounded-md p-3 text-xs text-primary font-bold mb-3 flex justify-between">
                     <span>Valid Leads Found:</span>
-                    <span className="text-white font-extrabold">{parsedLeads.length}</span>
+                    <span className="text-foreground font-extrabold">{parsedLeads.length}</span>
                   </div>
-                  <label className="text-xs font-bold text-indigo-300 block">Allocate Leads Quotas to Sales Executives</label>
+                  <label className="text-xs font-bold text-primary block">Allocate Leads Quotas to Sales Executives</label>
                   <div className="space-y-2.5 max-h-40 overflow-y-auto pr-1 scrollbar-none">
                     {salesExecutives.map(staff => (
                       <div key={staff.id} className="flex justify-between items-center gap-2 text-xs">
-                        <span className="font-bold text-slate-300 truncate max-w-[200px]">{staff.full_name}</span>
+                        <span className="font-bold text-secondary-foreground truncate max-w-[200px]">{staff.full_name}</span>
                         <input 
                           type="number" 
                           placeholder="0"
@@ -1425,24 +1420,24 @@ export const LeadsCRM: React.FC = () => {
                             const val = Math.max(0, parseInt(e.target.value) || 0);
                             setStaffQuotas(prev => ({ ...prev, [staff.id]: val }));
                           }}
-                          className="w-16 px-2 py-1 rounded bg-slate-950 border border-slate-850 text-right text-xs text-white focus:outline-none"
+                          className="w-16 px-2 py-1 rounded bg-card border border-border text-right text-xs text-foreground focus:outline-none"
                         />
                       </div>
                     ))}
                   </div>
 
                   {totalAllocated < parsedLeads.length && (
-                    <p className="text-[10px] text-amber-400 font-bold leading-normal">
+                    <p className="text-[10px] text-warning font-bold leading-normal">
                       ⚠️ Remaining to allocate: {parsedLeads.length - totalAllocated} leads. Quotas must sum up exactly to the total leads count.
                     </p>
                   )}
                   {totalAllocated > parsedLeads.length && (
-                    <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 leading-normal">
+                    <p className="text-[10px] text-danger font-bold flex items-center gap-1 leading-normal">
                       ⚠️ Error: Allocated count exceeds parsed leads by {totalAllocated - parsedLeads.length}. Adjust quotas.
                     </p>
                   )}
                   {totalAllocated === parsedLeads.length && (
-                    <p className="text-[10px] text-emerald-450 font-bold flex items-center gap-1 leading-normal">
+                    <p className="text-[10px] text-success font-bold flex items-center gap-1 leading-normal">
                       ✅ Perfect allocation! {totalAllocated} of {parsedLeads.length} leads allocated.
                     </p>
                   )}
@@ -1460,75 +1455,75 @@ export const LeadsCRM: React.FC = () => {
 
       {/* EDIT/REASSIGN LEAD DIALOG */}
       {isEditModalOpen && selectedLeadForEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md overflow-y-auto animate-fade-in">
-          <Card variant="solid" className="w-full max-w-md p-6 bg-slate-900 border border-slate-800 relative animate-scale-up">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 overflow-y-auto animate-fade-in">
+          <Card variant="solid" className="w-full max-w-md p-6 bg-card border border-border relative animate-scale-up">
             <button 
               onClick={() => {
                 setIsEditModalOpen(false);
                 setSelectedLeadForEdit(null);
               }}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white"
+              className="absolute top-4 right-4 text-muted-foreground hover:text-white"
             >
               <X className="w-4 h-4" />
             </button>
-            <h3 className="font-bold text-white text-base mb-4 flex items-center gap-2">
-              <Edit2 className="w-5 h-5 text-indigo-400" />
+            <h3 className="font-bold text-foreground text-base mb-4 flex items-center gap-2">
+              <Edit2 className="w-5 h-5 text-primary" />
               Edit / Reassign Lead
             </h3>
             <form onSubmit={handleUpdateLead} className="space-y-3.5">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Lead Name</label>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase">Lead Name</label>
                 <input 
                   type="text" 
                   required
                   placeholder="e.g. Ramesh Kumar"
                   value={editLeadName}
                   onChange={(e) => setEditLeadName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                  className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">WhatsApp (No)</label>
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">WhatsApp (No)</label>
                   <input 
                     type="text" 
                     placeholder="e.g. 9876543210"
                     value={editLeadWhatsapp}
                     onChange={(e) => setEditLeadWhatsapp(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Location</label>
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Location</label>
                   <input 
                     type="text" 
                     placeholder="e.g. Delhi"
                     value={editLeadLocation}
                     onChange={(e) => setEditLeadLocation(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                   />
                 </div>
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase">Project / Requirements</label>
+                <label className="text-[10px] font-bold text-muted-foreground uppercase">Project / Requirements</label>
                 <input 
                   type="text" 
                   placeholder="e.g. Website Design"
                   value={editLeadProject}
                   onChange={(e) => setEditLeadProject(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                  className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Status</label>
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Status</label>
                   <select
                     value={editLeadStatus}
                     onChange={(e) => setEditLeadStatus(e.target.value as Lead['status'])}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                   >
                     <option value="NEW LEAD">NEW LEAD</option>
                     <option value="CONTACTED">CONTACTED</option>
@@ -1540,11 +1535,11 @@ export const LeadsCRM: React.FC = () => {
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-400 uppercase">Assigned Staff</label>
+                  <label className="text-[10px] font-bold text-muted-foreground uppercase">Assigned Staff</label>
                   <select
                     value={editLeadAssignedTo}
                     onChange={(e) => setEditLeadAssignedTo(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                    className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
                   >
                     <option value="">Unassigned</option>
                     {staffRegistry.map(s => (
@@ -1569,11 +1564,11 @@ export const LeadsCRM: React.FC = () => {
       )}
 
       {/* Mobile Sticky Bottom Tab Bar Navigation (Hidden on desktop) */}
-      <nav className="fixed bottom-0 left-0 right-0 glass-panel border-t border-white/5 backdrop-blur-md py-2.5 px-6 z-40 md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 bg-card border border-border border-t border-border py-2.5 px-6 z-40 md:hidden">
         <div className="max-w-md mx-auto flex items-center justify-around">
           <button 
             onClick={() => setActiveTab('sales')}
-            className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+            className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
           >
             <Briefcase className="w-5 h-5" />
             <span className="text-[9px] font-medium">Sales</span>
@@ -1581,7 +1576,7 @@ export const LeadsCRM: React.FC = () => {
 
           <button 
             onClick={() => setActiveTab('history')}
-            className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+            className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
           >
             <Star className="w-5 h-5" />
             <span className="text-[9px] font-medium">History</span>
@@ -1589,13 +1584,13 @@ export const LeadsCRM: React.FC = () => {
           
           <button 
             onClick={() => setActiveTab('attendance')}
-            className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+            className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
           >
             <Star className="w-5 h-5" />
             <span className="text-[9px] font-medium">Attendance</span>
           </button>
 
-          <button className="flex flex-col items-center gap-1 text-indigo-400 select-none">
+          <button className="flex flex-col items-center gap-1 text-primary select-none">
             <Star className="w-5 h-5" />
             <span className="text-[9px] font-bold">Leads</span>
           </button>
