@@ -63,17 +63,17 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ sale, onClose, onS
   if (!sale) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto">
-      <div className="w-full max-w-lg bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden animate-scale-up my-auto">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 animate-fade-in overflow-y-auto">
+      <div className="w-full max-w-lg bg-card border border-border rounded-lg shadow-2xl overflow-hidden animate-scale-up my-auto">
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/10 bg-slate-950/80">
-          <h2 className="text-sm font-extrabold text-white flex items-center gap-2">
-            <Edit3 className="w-4 h-4 text-indigo-400" />
+        <div className="flex items-center justify-between p-4 border-b border-border bg-card/80">
+          <h2 className="text-sm font-extrabold text-foreground flex items-center gap-2">
+            <Edit3 className="w-4 h-4 text-primary" />
             Edit Sale Record
           </h2>
           <button 
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+            className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -83,24 +83,24 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ sale, onClose, onS
         <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
           {/* Client / Company Name */}
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Client / Company Name *</label>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Client / Company Name *</label>
             <input 
               type="text" 
               required
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
               placeholder="e.g. Acme Corp"
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500"
+              className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
             />
           </div>
 
           {/* Service Package */}
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Service Package *</label>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Service Package *</label>
             <select
               value={servicePackage}
               onChange={(e) => setServicePackage(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+              className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
             >
               <option value="">Select Package</option>
               <option value="CEO Pack">CEO Pack</option>
@@ -116,7 +116,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ sale, onClose, onS
 
           {/* Payment Status / Type */}
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Payment Status / Type *</label>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Payment Status / Type *</label>
             <select
               value={paymentType}
               onChange={(e) => {
@@ -128,7 +128,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ sale, onClose, onS
                   setReceivedAmount(packageAmount);
                 }
               }}
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+              className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
             >
               <option value="Advance">Advance Deposit</option>
               <option value="Full">Full Payment</option>
@@ -139,7 +139,7 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ sale, onClose, onS
           {/* Package Price & Received Amount */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Package Price (₹) {paymentType === 'Clearance' ? '(N/A)' : '*'}</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Package Price (₹) {paymentType === 'Clearance' ? '(N/A)' : '*'}</label>
               <input 
                 type="number" 
                 required={paymentType !== 'Clearance'}
@@ -154,11 +154,11 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ sale, onClose, onS
                   }
                 }}
                 placeholder="e.g. 50000"
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary disabled:opacity-50"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Received Amount (₹) *</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Received Amount (₹) *</label>
               <input 
                 type="number" 
                 required
@@ -166,18 +166,18 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ sale, onClose, onS
                 value={receivedAmount}
                 onChange={(e) => setReceivedAmount(e.target.value)}
                 placeholder="0"
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-emerald-400 font-bold focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-success font-bold focus:outline-none focus:border-primary"
               />
             </div>
           </div>
 
           {/* Payment Method */}
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Payment Method *</label>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Payment Method *</label>
             <select
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value as any)}
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-indigo-500"
+              className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
             >
               <option value="UPI">UPI</option>
               <option value="Bank Transfer">Bank Transfer</option>
@@ -187,18 +187,18 @@ export const EditSaleModal: React.FC<EditSaleModalProps> = ({ sale, onClose, onS
 
           {/* Work Description / Notes */}
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Work Description / Notes (Optional)</label>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Work Description / Notes (Optional)</label>
             <textarea
               rows={2}
               value={workDescription}
               onChange={(e) => setWorkDescription(e.target.value)}
               placeholder="Additional project scope or transaction notes..."
-              className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-650 focus:outline-none focus:border-indigo-500"
+              className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
             />
           </div>
 
           {/* Actions */}
-          <div className="pt-3 flex gap-3 border-t border-white/10">
+          <div className="pt-3 flex gap-3 border-t border-border">
             <Button 
               type="button" 
               variant="secondary" 

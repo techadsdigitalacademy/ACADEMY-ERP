@@ -522,11 +522,11 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
     return (
       <div className="space-y-6 pt-2 animate-fade-in max-w-7xl mx-auto">
         {/* Top Header & Back Button */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/60 p-5 rounded-2xl border border-white/5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-muted-2 p-5 rounded-lg border border-border">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setSelectedProfile(null)}
-              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer border border-white/10 shrink-0"
+              className="px-3 py-2 rounded-md bg-muted hover:bg-muted text-secondary-foreground hover:text-white font-bold text-xs flex items-center gap-2 transition-all cursor-pointer border border-border shrink-0"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Staff List
@@ -535,18 +535,18 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
               <img
                 src={selectedProfile.avatar_url || getAvatarUrl(selectedProfile.full_name, selectedProfile.gender)}
                 alt={selectedProfile.full_name}
-                className="w-12 h-12 rounded-2xl object-cover bg-slate-950 border border-white/10 shrink-0"
+                className="w-12 h-12 rounded-lg object-cover bg-card border border-border shrink-0"
               />
               <div>
-                <h2 className="text-base md:text-lg font-black text-white leading-tight">{selectedProfile.full_name}</h2>
+                <h2 className="text-base md:text-lg font-black text-foreground leading-tight">{selectedProfile.full_name}</h2>
                 <div className="flex items-center gap-2 mt-0.5">
                   <Badge variant={isOwnerRole ? 'purple' : isSalesRole ? 'info' : 'success'}>
                     {selectedProfile.designation}
                   </Badge>
-                  <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                  <span className="text-[10px] font-bold text-primary bg-primary-soft px-2 py-0.5 rounded border border-primary/20">
                     Month: {activeMonthStr}
                   </span>
-                  <span className="text-[10px] text-slate-400 font-medium hidden md:inline">
+                  <span className="text-[10px] text-muted-foreground font-medium hidden md:inline">
                     Shift: {selectedProfile.shift_start_time?.substring(0, 5)} - {selectedProfile.shift_end_time?.substring(0, 5)} | Off: {selectedProfile.weekly_off_day}
                   </span>
                 </div>
@@ -556,18 +556,18 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
 
           {/* Month-Specific Target Setter for Sales Team & Company Owners */}
           {(isSalesRole || isOwnerRole) && (
-            <div className="p-3 rounded-xl bg-slate-950/80 border border-white/10 flex items-center gap-3 self-start sm:self-center">
+            <div className="p-3 rounded-md bg-card/80 border border-border flex items-center gap-3 self-start sm:self-center">
               <div>
-                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Target ({activeMonthStr})</span>
-                <span className="text-xs font-black text-emerald-400">{formatCurrency(profileTarget)}</span>
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider block">Target ({activeMonthStr})</span>
+                <span className="text-xs font-black text-success">{formatCurrency(profileTarget)}</span>
               </div>
-              <form onSubmit={handleSetTarget} className="flex items-center gap-1.5 border-l border-white/10 pl-3">
+              <form onSubmit={handleSetTarget} className="flex items-center gap-1.5 border-l border-border pl-3">
                 <input
                   type="number"
                   placeholder="New Target ₹"
                   value={newTargetInput}
                   onChange={(e) => setNewTargetInput(e.target.value)}
-                  className="w-28 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-28 px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                 />
                 <Button
                   type="submit"
@@ -583,36 +583,36 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
         </div>
 
         {/* Role-Based Sub-Nav Tabs */}
-        <div className="flex gap-2 border-b border-white/5 pb-3 overflow-x-auto scrollbar-none whitespace-nowrap">
+        <div className="flex gap-2 border-b border-border pb-3 overflow-x-auto scrollbar-none whitespace-nowrap">
           {isOwnerRole ? (
             <>
               <button
                 onClick={() => setProfileDetailTab('sales')}
-                className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all border ${
-                  profileDetailTab === 'sales'
-                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
-                    : 'bg-slate-950 border-white/5 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+ profileDetailTab === 'sales'
+ ? 'bg-primary border-primary text-foreground '
+ : 'bg-card border-border text-muted-foreground hover:text-foreground'
+ }`}
               >
                 Sales History ({profileSales.length})
               </button>
               <button
                 onClick={() => setProfileDetailTab('attendance')}
-                className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all border ${
-                  profileDetailTab === 'attendance'
-                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
-                    : 'bg-slate-950 border-white/5 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+ profileDetailTab === 'attendance'
+ ? 'bg-primary border-primary text-foreground '
+ : 'bg-card border-border text-muted-foreground hover:text-foreground'
+ }`}
               >
                 Attendance
               </button>
               <button
                 onClick={() => setProfileDetailTab('expense_history')}
-                className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all border ${
-                  profileDetailTab === 'expense_history'
-                    ? 'bg-rose-600 border-rose-500 text-white shadow-lg shadow-rose-600/20'
-                    : 'bg-slate-950 border-white/5 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+ profileDetailTab === 'expense_history'
+ ? 'bg-danger border-danger text-foreground '
+ : 'bg-card border-border text-muted-foreground hover:text-foreground'
+ }`}
               >
                 Expense History ({profileExpenses.length})
               </button>
@@ -621,31 +621,31 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             <>
               <button
                 onClick={() => setProfileDetailTab('sales')}
-                className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all border ${
-                  profileDetailTab === 'sales'
-                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
-                    : 'bg-slate-950 border-white/5 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+ profileDetailTab === 'sales'
+ ? 'bg-primary border-primary text-foreground '
+ : 'bg-card border-border text-muted-foreground hover:text-foreground'
+ }`}
               >
                 Sales Log ({profileSales.length})
               </button>
               <button
                 onClick={() => setProfileDetailTab('attendance')}
-                className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all border ${
-                  profileDetailTab === 'attendance'
-                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
-                    : 'bg-slate-950 border-white/5 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+ profileDetailTab === 'attendance'
+ ? 'bg-primary border-primary text-foreground '
+ : 'bg-card border-border text-muted-foreground hover:text-foreground'
+ }`}
               >
                 Attendance
               </button>
               <button
                 onClick={() => setProfileDetailTab('leads')}
-                className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all border ${
-                  profileDetailTab === 'leads'
-                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
-                    : 'bg-slate-950 border-white/5 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+ profileDetailTab === 'leads'
+ ? 'bg-primary border-primary text-foreground '
+ : 'bg-card border-border text-muted-foreground hover:text-foreground'
+ }`}
               >
                 Leads ({profileLeads.length})
               </button>
@@ -654,21 +654,21 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             <>
               <button
                 onClick={() => setProfileDetailTab('daily_reports')}
-                className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all border ${
-                  profileDetailTab === 'daily_reports'
-                    ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/20'
-                    : 'bg-slate-950 border-white/5 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+ profileDetailTab === 'daily_reports'
+ ? 'bg-success border-success text-foreground '
+ : 'bg-card border-border text-muted-foreground hover:text-foreground'
+ }`}
               >
                 Daily Reports ({profileReports.length})
               </button>
               <button
                 onClick={() => setProfileDetailTab('attendance')}
-                className={`px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all border ${
-                  profileDetailTab === 'attendance'
-                    ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-600/20'
-                    : 'bg-slate-950 border-white/5 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+ profileDetailTab === 'attendance'
+ ? 'bg-success border-success text-foreground '
+ : 'bg-card border-border text-muted-foreground hover:text-foreground'
+ }`}
               >
                 Attendance
               </button>
@@ -736,27 +736,27 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
 
                 {/* Delete Confirmation Modal */}
                 {deletingSale && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in p-4">
-                    <Card variant="glass" className="w-full max-w-md border-rose-500/20 p-6 animate-scale-up relative">
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 animate-fade-in p-4">
+                    <Card variant="glass" className="w-full max-w-md border-danger/20 p-6 animate-scale-up relative">
                       <div className="flex items-center gap-3 mb-4">
-                        <div className="p-3 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                        <div className="p-3 rounded-full bg-danger-soft text-danger border border-danger/20">
                           <AlertTriangle className="w-6 h-6" />
                         </div>
                         <div>
-                          <h3 className="text-lg font-bold text-white">Delete Sale Entry</h3>
-                          <p className="text-xs text-slate-400">This action cannot be undone.</p>
+                          <h3 className="text-lg font-bold text-foreground">Delete Sale Entry</h3>
+                          <p className="text-xs text-muted-foreground">This action cannot be undone.</p>
                         </div>
                       </div>
 
-                      <div className="bg-slate-950/60 p-3.5 rounded-xl border border-white/5 space-y-1.5 mb-6 text-xs text-slate-300">
-                        <div className="flex justify-between"><span className="text-slate-500 font-semibold">Work SL:</span> <span className="font-mono text-indigo-400 font-bold">{deletingSale.work_sl || 'N/A'}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500 font-semibold">Client Name:</span> <span className="font-bold text-white">{deletingSale.client_name}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500 font-semibold">Service Package:</span> <span className="font-semibold text-slate-400">{deletingSale.service_package}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500 font-semibold">Received Amount:</span> <span className="font-extrabold text-emerald-400">{formatCurrency(deletingSale.received_amount)}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500 font-semibold">Payment Type:</span> <span className="font-semibold text-slate-200">{deletingSale.payment_type}</span></div>
+                      <div className="bg-muted-2 p-3.5 rounded-md border border-border space-y-1.5 mb-6 text-xs text-secondary-foreground">
+                        <div className="flex justify-between"><span className="text-muted-foreground font-semibold">Work SL:</span> <span className="font-mono text-primary font-bold">{deletingSale.work_sl || 'N/A'}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground font-semibold">Client Name:</span> <span className="font-bold text-foreground">{deletingSale.client_name}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground font-semibold">Service Package:</span> <span className="font-semibold text-muted-foreground">{deletingSale.service_package}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground font-semibold">Received Amount:</span> <span className="font-extrabold text-success">{formatCurrency(deletingSale.received_amount)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground font-semibold">Payment Type:</span> <span className="font-semibold text-foreground">{deletingSale.payment_type}</span></div>
                       </div>
 
-                      <p className="text-xs font-semibold text-slate-300 mb-6">
+                      <p className="text-xs font-semibold text-secondary-foreground mb-6">
                         Are you sure you want to permanently delete this sale entry from the database?
                       </p>
 
@@ -773,7 +773,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                           type="button"
                           onClick={handleConfirmDelete}
                           isLoading={isDeletingSale}
-                          className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold shadow-lg shadow-rose-600/30"
+                          className="flex-1 bg-danger hover:bg-danger text-white font-bold"
                         >
                           Yes, Delete
                         </Button>
@@ -804,17 +804,17 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
 
             {/* LEADS SUB-TAB - COMPLETE STAFF PORTAL INTEGRATION */}
             {profileDetailTab === 'leads' && (
-              <Card variant="glass" className="p-5 border-white/5 space-y-4">
+              <Card variant="glass" className="p-5 border-border space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Leads Assigned to {selectedProfile.full_name}</h3>
-                  <span className="text-xs font-mono bg-slate-800 text-slate-400 px-2.5 py-1 rounded-lg border border-slate-700 font-bold">
+                  <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Leads Assigned to {selectedProfile.full_name}</h3>
+                  <span className="text-xs font-mono bg-muted text-muted-foreground px-2.5 py-1 rounded-lg border border-border font-bold">
                     {profileLeads.length} Leads ({activeMonthStr})
                   </span>
                 </div>
-                <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/20">
+                <div className="overflow-x-auto rounded-md border border-border bg-muted-2">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                      <tr className="border-b border-border bg-muted-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
                         <th className="py-3 px-4">Lead Name</th>
                         <th className="py-3 px-4">Location</th>
                         <th className="py-3 px-4">Contact</th>
@@ -823,13 +823,13 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                         <th className="py-3 px-4 text-center">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+                    <tbody className="divide-y divide-border text-secondary-foreground font-semibold">
                       {profileLeads?.map((lead: any) => (
-                        <tr key={lead.id} className="hover:bg-slate-900/10">
-                          <td className="py-3 px-4 text-white font-bold">{lead.lead_name}</td>
-                          <td className="py-3 px-4 text-slate-400">{lead.location || '-'}</td>
-                          <td className="py-3 px-4 text-slate-300 font-mono">{lead.whatsapp_number || '-'}</td>
-                          <td className="py-3 px-4 text-indigo-400">{lead.project_name || '-'}</td>
+                        <tr key={lead.id} className="hover:bg-muted-2">
+                          <td className="py-3 px-4 text-foreground font-bold">{lead.lead_name}</td>
+                          <td className="py-3 px-4 text-muted-foreground">{lead.location || '-'}</td>
+                          <td className="py-3 px-4 text-secondary-foreground font-mono">{lead.whatsapp_number || '-'}</td>
+                          <td className="py-3 px-4 text-primary">{lead.project_name || '-'}</td>
                           <td className="py-3 px-4">
                             <select
                               value={lead.status || 'New'}
@@ -847,7 +847,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                                   alert('Failed to update lead status: ' + err.message);
                                 }
                               }}
-                              className="px-2.5 py-1 rounded-xl bg-slate-950 border border-slate-800 text-[10px] text-white focus:outline-none focus:border-indigo-500"
+                              className="px-2.5 py-1 rounded-md bg-card border border-border text-[10px] text-foreground focus:outline-none focus:border-primary"
                             >
                               <option value="New">New</option>
                               <option value="Positive">Positive</option>
@@ -862,20 +862,20 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                                 href={`https://wa.me/${lead.whatsapp_number.replace(/\D/g, '')}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-[10px] font-bold text-white transition-all shadow-md shadow-emerald-950/20"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-success hover:bg-success text-[10px] font-bold text-white transition-all"
                               >
                                 <MessageSquare className="w-3.5 h-3.5" />
                                 WhatsApp
                               </a>
                             ) : (
-                              <span className="text-slate-600 text-[10px]">No contact</span>
+                              <span className="text-muted-foreground text-[10px]">No contact</span>
                             )}
                           </td>
                         </tr>
                       ))}
                       {profileLeads.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="text-center py-8 text-slate-600 font-semibold">No leads assigned to this staff member for {activeMonthStr}.</td>
+                          <td colSpan={6} className="text-center py-8 text-muted-foreground font-semibold">No leads assigned to this staff member for {activeMonthStr}.</td>
                         </tr>
                       )}
                     </tbody>
@@ -886,17 +886,17 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
 
             {/* DAILY REPORTS SUB-TAB - COMPLETE CREATIVE / MARKETING TABLE */}
             {profileDetailTab === 'daily_reports' && (
-              <Card variant="glass" className="p-5 border-white/5 space-y-4">
+              <Card variant="glass" className="p-5 border-border space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Work Log Registers ({selectedProfile.full_name})</h3>
-                  <span className="text-xs font-mono bg-slate-800 text-slate-400 px-2.5 py-1 rounded-lg border border-slate-700 font-bold">
+                  <h3 className="text-sm font-bold text-foreground uppercase tracking-wider">Work Log Registers ({selectedProfile.full_name})</h3>
+                  <span className="text-xs font-mono bg-muted text-muted-foreground px-2.5 py-1 rounded-lg border border-border font-bold">
                     {profileReports.length} Logs ({activeMonthStr})
                   </span>
                 </div>
-                <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/20">
+                <div className="overflow-x-auto rounded-md border border-border bg-muted-2">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                      <tr className="border-b border-border bg-muted-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
                         <th className="py-3 px-4">Date</th>
                         <th className="py-3 px-4">Category</th>
                         <th className="py-3 px-4">Work Details / Badges</th>
@@ -904,42 +904,42 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                         <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+                    <tbody className="divide-y divide-border text-secondary-foreground font-semibold">
                       {profileReports?.map((report: any) => {
                         const hasTallies = (report.posters_count > 0 || report.re_edits_count > 0 || report.logos_count > 0 || report.others_count > 0 || report.ads_placed_count > 0 || report.videos_count > 0);
                         return (
-                          <tr key={report.id} className="hover:bg-slate-900/10">
-                            <td className="py-3 px-4 text-slate-400 font-mono whitespace-nowrap">{report.report_date}</td>
-                            <td className="py-3 px-4 font-bold text-emerald-400 whitespace-nowrap">
+                          <tr key={report.id} className="hover:bg-muted-2">
+                            <td className="py-3 px-4 text-muted-foreground font-mono whitespace-nowrap">{report.report_date}</td>
+                            <td className="py-3 px-4 font-bold text-success whitespace-nowrap">
                               <Badge variant="info">{report.work_type}</Badge>
                             </td>
                             <td className="py-3 px-4">
                               {hasTallies ? (
                                 <div className="flex flex-wrap gap-1.5">
-                                  {report.posters_count > 0 && <span className="text-[10px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-2 py-0.5 rounded-md font-bold">Posters: {report.posters_count}</span>}
-                                  {report.re_edits_count > 0 && <span className="text-[10px] bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded-md font-bold">Re-edits: {report.re_edits_count}</span>}
-                                  {report.logos_count > 0 && <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/20 px-2 py-0.5 rounded-md font-bold">Logos: {report.logos_count}</span>}
-                                  {report.ads_placed_count > 0 && <span className="text-[10px] bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded-md font-bold">Ads: {report.ads_placed_count}</span>}
-                                  {report.videos_count > 0 && <span className="text-[10px] bg-teal-500/10 text-teal-300 border border-teal-500/20 px-2 py-0.5 rounded-md font-bold">Videos: {report.videos_count}</span>}
-                                  {report.travel_expense > 0 && <span className="text-[10px] bg-slate-800 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-md font-bold">Travel: {formatCurrency(report.travel_expense)}</span>}
+                                  {report.posters_count > 0 && <span className="text-[10px] bg-primary-soft text-primary border border-primary/20 px-2 py-0.5 rounded-md font-bold">Posters: {report.posters_count}</span>}
+                                  {report.re_edits_count > 0 && <span className="text-[10px] bg-primary-soft text-primary border border-primary/20 px-2 py-0.5 rounded-md font-bold">Re-edits: {report.re_edits_count}</span>}
+                                  {report.logos_count > 0 && <span className="text-[10px] bg-warning-soft text-warning border border-warning/20 px-2 py-0.5 rounded-md font-bold">Logos: {report.logos_count}</span>}
+                                  {report.ads_placed_count > 0 && <span className="text-[10px] bg-success-soft text-success border border-success/20 px-2 py-0.5 rounded-md font-bold">Ads: {report.ads_placed_count}</span>}
+                                  {report.videos_count > 0 && <span className="text-[10px] bg-success-soft text-success border border-border px-2 py-0.5 rounded-md font-bold">Videos: {report.videos_count}</span>}
+                                  {report.travel_expense > 0 && <span className="text-[10px] bg-muted text-secondary-foreground border border-border px-2 py-0.5 rounded-md font-bold">Travel: {formatCurrency(report.travel_expense)}</span>}
                                 </div>
                               ) : (
-                                <span className="text-slate-500 text-[10px] font-normal">-</span>
+                                <span className="text-muted-foreground text-[10px] font-normal">-</span>
                               )}
                             </td>
-                            <td className="py-3 px-4 text-slate-200">{report.description}</td>
+                            <td className="py-3 px-4 text-foreground">{report.description}</td>
                             <td className="py-3 px-4 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-2">
                                 <button
                                   onClick={() => openEditReportModal(report)}
-                                  className="p-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 transition-colors cursor-pointer"
+                                  className="p-1.5 rounded-lg bg-primary-soft hover:bg-primary-soft text-primary border border-primary/20 transition-colors cursor-pointer"
                                   title="Edit Report"
                                 >
                                   <Edit2 className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                   onClick={() => setDeletingReport(report)}
-                                  className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-colors cursor-pointer"
+                                  className="p-1.5 rounded-lg bg-danger-soft hover:bg-danger-soft text-danger border border-danger/20 transition-colors cursor-pointer"
                                   title="Delete Report"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -951,7 +951,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                       })}
                       {profileReports.length === 0 && (
                         <tr>
-                          <td colSpan={5} className="text-center py-8 text-slate-600 font-semibold">No daily work reports logged for {activeMonthStr}.</td>
+                          <td colSpan={5} className="text-center py-8 text-muted-foreground font-semibold">No daily work reports logged for {activeMonthStr}.</td>
                         </tr>
                       )}
                     </tbody>
@@ -974,36 +974,36 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             })()}
             {/* DELETE REPORT CONFIRMATION MODAL */}
             {deletingReport && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-                <Card className="w-full max-w-md p-6 relative space-y-5 text-center bg-slate-900 border border-rose-500/20 shadow-2xl">
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-card/80 animate-fade-in">
+                <Card className="w-full max-w-md p-6 relative space-y-5 text-center bg-card border border-danger/20 shadow-2xl">
                   <button 
                     onClick={() => setDeletingReport(null)}
-                    className="absolute top-4 right-4 p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    className="absolute top-4 right-4 p-2 rounded-full bg-muted hover:bg-muted text-muted-foreground hover:text-white transition-colors cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
                   <div className="flex flex-col items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                    <div className="w-12 h-12 rounded-full bg-danger-soft border border-danger/20 flex items-center justify-center text-danger">
                       <AlertTriangle className="w-6 h-6" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-white text-base">Delete Work Report?</h3>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Are you sure you want to delete the log for <span className="text-slate-200 font-semibold">{deletingReport.report_date}</span>? This action cannot be undone.
+                      <h3 className="font-bold text-foreground text-base">Delete Work Report?</h3>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Are you sure you want to delete the log for <span className="text-foreground font-semibold">{deletingReport.report_date}</span>? This action cannot be undone.
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 pt-2">
                     <Button 
                       variant="secondary" 
-                      className="w-1/2 border-slate-700 text-slate-300 hover:bg-slate-800"
+                      className="w-1/2 border-border text-secondary-foreground hover:bg-muted"
                       onClick={() => setDeletingReport(null)}
                     >
                       Cancel
                     </Button>
                     <Button 
                       variant="danger" 
-                      className="w-1/2 bg-rose-600 hover:bg-rose-700 text-white font-bold"
+                      className="w-1/2 bg-danger hover:bg-danger text-white font-bold"
                       onClick={handleDeleteReportConfirm}
                       disabled={isDeletingReport}
                     >
@@ -1016,117 +1016,117 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
 
             {/* EDIT REPORT MODAL */}
             {editingReport && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-                <Card className="w-full max-w-lg p-6 relative space-y-5 bg-slate-900 border border-slate-800 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-card/80 animate-fade-in">
+                <Card className="w-full max-w-lg p-6 relative space-y-5 bg-card border border-border shadow-2xl max-h-[90vh] overflow-y-auto">
                   <button 
                     onClick={() => setEditingReport(null)}
-                    className="absolute top-4 right-4 p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                    className="absolute top-4 right-4 p-2 rounded-full bg-muted hover:bg-muted text-muted-foreground hover:text-white transition-colors cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
 
-                  <div className="flex items-center gap-2 border-b border-white/10 pb-3">
-                    <Edit2 className="w-5 h-5 text-indigo-400" />
-                    <h3 className="font-bold text-white text-base">Edit Work Report ({editingReport.report_date})</h3>
+                  <div className="flex items-center gap-2 border-b border-border pb-3">
+                    <Edit2 className="w-5 h-5 text-primary" />
+                    <h3 className="font-bold text-foreground text-base">Edit Work Report ({editingReport.report_date})</h3>
                   </div>
 
                   <div className="space-y-4 text-xs">
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Category / Work Type</label>
+                      <label className="block text-[11px] font-bold text-muted-foreground uppercase mb-1">Category / Work Type</label>
                       <input 
                         type="text" 
                         value={editReportWorkType}
                         onChange={(e) => setEditReportWorkType(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-medium"
+                        className="w-full px-3 py-2 rounded-md bg-card border border-border text-foreground focus:outline-none focus:border-primary font-medium"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Posters</label>
+                        <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Posters</label>
                         <input 
                           type="number" 
                           min="0"
                           value={editReportPosters}
                           onChange={(e) => setEditReportPosters(e.target.value)}
-                          className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                          className="w-full px-3 py-1.5 rounded-md bg-card border border-border text-foreground focus:outline-none focus:border-primary font-mono"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Re-edits</label>
+                        <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Re-edits</label>
                         <input 
                           type="number" 
                           min="0"
                           value={editReportReEdits}
                           onChange={(e) => setEditReportReEdits(e.target.value)}
-                          className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                          className="w-full px-3 py-1.5 rounded-md bg-card border border-border text-foreground focus:outline-none focus:border-primary font-mono"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Logos</label>
+                        <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Logos</label>
                         <input 
                           type="number" 
                           min="0"
                           value={editReportLogos}
                           onChange={(e) => setEditReportLogos(e.target.value)}
-                          className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                          className="w-full px-3 py-1.5 rounded-md bg-card border border-border text-foreground focus:outline-none focus:border-primary font-mono"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Ads Placed</label>
+                        <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Ads Placed</label>
                         <input 
                           type="number" 
                           min="0"
                           value={editReportAdsPlaced}
                           onChange={(e) => setEditReportAdsPlaced(e.target.value)}
-                          className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                          className="w-full px-3 py-1.5 rounded-md bg-card border border-border text-foreground focus:outline-none focus:border-primary font-mono"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Videos</label>
+                        <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Videos</label>
                         <input 
                           type="number" 
                           min="0"
                           value={editReportVideos}
                           onChange={(e) => setEditReportVideos(e.target.value)}
-                          className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                          className="w-full px-3 py-1.5 rounded-md bg-card border border-border text-foreground focus:outline-none focus:border-primary font-mono"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Travel Expense (₹)</label>
+                        <label className="block text-[10px] font-bold text-muted-foreground uppercase mb-1">Travel Expense (₹)</label>
                         <input 
                           type="number" 
                           min="0"
                           value={editReportTravel}
                           onChange={(e) => setEditReportTravel(e.target.value)}
-                          className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-mono"
+                          className="w-full px-3 py-1.5 rounded-md bg-card border border-border text-foreground focus:outline-none focus:border-primary font-mono"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-400 uppercase mb-1">Task Description / Work Notes</label>
+                      <label className="block text-[11px] font-bold text-muted-foreground uppercase mb-1">Task Description / Work Notes</label>
                       <textarea 
                         rows={3}
                         value={editReportDesc}
                         onChange={(e) => setEditReportDesc(e.target.value)}
-                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white focus:outline-none focus:border-indigo-500 font-medium resize-none"
+                        className="w-full px-3 py-2 rounded-md bg-card border border-border text-foreground focus:outline-none focus:border-primary font-medium resize-none"
                         placeholder="Enter detailed description of tasks completed..."
                       />
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
+                  <div className="flex items-center justify-end gap-3 pt-3 border-t border-border">
                     <Button 
                       variant="secondary" 
-                      className="border-slate-700 text-slate-300 hover:bg-slate-800"
+                      className="border-border text-secondary-foreground hover:bg-muted"
                       onClick={() => setEditingReport(null)}
                     >
                       Cancel
                     </Button>
                     <Button 
                       variant="primary" 
-                      className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
+                      className="bg-primary hover:bg-primary text-white font-bold"
                       onClick={handleSaveReportEdit}
                       disabled={isSavingReport}
                     >
@@ -1147,18 +1147,18 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
     <section className="space-y-6 pt-2 animate-fade-in max-w-7xl mx-auto">
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-base md:text-lg font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-            <Star className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+          <h2 className="text-base md:text-lg font-extrabold text-foreground dark:text-white flex items-center gap-2">
+            <Star className="w-5 h-5 text-primary dark:text-primary" />
             Staff Performance Registers
           </h2>
-          <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-400 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-bold">
+          <span className="text-xs bg-muted dark:bg-muted text-foreground dark:text-muted-foreground px-2.5 py-1 rounded-lg border border-border dark:border-border font-bold">
             {validStaffProfiles.length} Accounts ({activeMonthStr})
           </span>
         </div>
 
         {/* SECTION 1: SALES TEAM */}
         <div className="space-y-3">
-          <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2 border-l-2 border-indigo-500/30">
+          <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-2 border-l-2 border-primary/30">
             Sales & Field Operations
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
@@ -1172,7 +1172,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                 <div 
                   key={member.id}
                   onClick={() => setSelectedProfile(member)}
-                  className="group relative p-5 rounded-2xl bg-white dark:bg-slate-900/40 backdrop-blur-md border border-slate-200/90 dark:border-white/10 hover:border-indigo-500/40 dark:hover:border-indigo-500/40 hover:bg-slate-50 dark:hover:bg-slate-900/70 hover:shadow-xl hover:shadow-indigo-500/10 transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-4"
+                  className="group relative p-5 rounded-lg bg-card dark:bg-muted-2 border border-border dark:border-border hover:border-primary/40 dark:hover:border-primary/40 hover:bg-muted dark:hover:bg-card/70 hover:shadow-xl hover:transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-4"
                 >
                   {/* Top Header Row */}
                   <div className="flex items-start justify-between gap-3">
@@ -1181,21 +1181,21 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                         <img 
                           src={avatarSrc} 
                           alt={member.full_name} 
-                          className="w-12 h-12 rounded-2xl object-cover border-2 border-indigo-500/30 group-hover:border-indigo-400 group-hover:scale-105 transition-all duration-300 bg-slate-100 dark:bg-slate-950"
+                          className="w-12 h-12 rounded-lg object-cover border-2 border-primary group-hover:border-primary group-hover:scale-105 transition-all duration-300 bg-muted dark:bg-card"
                         />
-                        <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full" title="Active Staff"></span>
+                        <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-success border-2 border-white dark:border-border rounded-full" title="Active Staff"></span>
                       </div>
                       <div className="min-w-0">
-                        <h4 className="text-sm font-extrabold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors truncate">
+                        <h4 className="text-sm font-extrabold text-foreground dark:text-white group-hover:text-primary dark:group-hover:text-primary transition-colors truncate">
                           {member.full_name}
                         </h4>
-                        <span className="inline-block mt-0.5 text-[9.5px] font-bold text-indigo-600 dark:text-indigo-300 uppercase tracking-wider bg-indigo-50 dark:bg-indigo-500/15 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-500/20">
+                        <span className="inline-block mt-0.5 text-[9.5px] font-bold text-primary dark:text-primary uppercase tracking-wider bg-primary-soft dark:bg-primary-soft px-2 py-0.5 rounded-md border border-primary/25 dark:border-primary/25">
                           {member.designation}
                         </span>
                       </div>
                     </div>
 
-                    <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/50 group-hover:bg-indigo-600 group-hover:text-white text-slate-600 dark:text-slate-400 transition-all border border-slate-200 dark:border-white/5 shrink-0">
+                    <div className="p-2 rounded-md bg-muted dark:bg-muted group-hover:bg-primary group-hover:text-white text-muted-foreground dark:text-muted-foreground transition-all border border-border dark:border-border shrink-0">
                       <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
                     </div>
                   </div>
@@ -1204,18 +1204,18 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                   {cardTarget > 0 && (
                     <div className="space-y-1.5 pt-1">
                       <div className="flex justify-between items-center text-[10px] font-bold">
-                        <span className="text-slate-500 dark:text-slate-400 uppercase tracking-wider">Target Goal</span>
-                        <span className={targetPct >= 100 ? 'text-emerald-600 dark:text-emerald-400 font-extrabold' : 'text-indigo-600 dark:text-indigo-300 font-extrabold'}>
+                        <span className="text-muted-foreground dark:text-muted-foreground uppercase tracking-wider">Target Goal</span>
+                        <span className={targetPct >= 100 ? 'text-success dark:text-success font-extrabold' : 'text-primary dark:text-primary font-extrabold'}>
                           {targetPct}% Achieved
                         </span>
                       </div>
-                      <div className="w-full bg-slate-100 dark:bg-slate-950/80 h-2 rounded-full overflow-hidden border border-slate-200 dark:border-white/5 p-0.5">
+                      <div className="w-full bg-muted dark:bg-card/80 h-2 rounded-full overflow-hidden border border-border dark:border-border p-0.5">
                         <div 
                           className={`h-full rounded-full transition-all duration-500 ${
-                            targetPct >= 100 
-                              ? 'bg-gradient-to-r from-emerald-500 to-teal-400 shadow-sm shadow-emerald-500/50' 
-                              : 'bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400'
-                          }`}
+ targetPct >= 100 
+ ? 'bg-success ' 
+ : ''
+ }`}
                           style={{ width: `${targetPct}%` }}
                         ></div>
                       </div>
@@ -1223,25 +1223,25 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                   )}
 
                   {/* Metric Pillars Grid */}
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/80 dark:border-white/5">
-                    <div className="bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 flex flex-col justify-between">
-                      <span className="text-[9px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Target</span>
-                      <span className="text-xs font-black text-slate-800 dark:text-slate-200 mt-1">{formatCurrency(cardTarget)}</span>
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border dark:border-border">
+                    <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                      <span className="text-[9px] font-bold text-muted-foreground dark:text-muted-foreground uppercase tracking-wider">Target</span>
+                      <span className="text-xs font-black text-foreground dark:text-foreground mt-1">{formatCurrency(cardTarget)}</span>
                     </div>
 
-                    <div className="bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 flex flex-col justify-between">
-                      <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Achieved</span>
-                      <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 mt-1">{formatCurrency(achievedAmt)}</span>
+                    <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                      <span className="text-[9px] font-bold text-success dark:text-success uppercase tracking-wider">Achieved</span>
+                      <span className="text-xs font-black text-success dark:text-success mt-1">{formatCurrency(achievedAmt)}</span>
                     </div>
 
-                    <div className="bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 flex flex-col justify-between">
-                      <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Deals Logged</span>
-                      <span className="text-xs font-black text-indigo-700 dark:text-indigo-300 mt-1">{member.salesWorksCount || 0} Works</span>
+                    <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                      <span className="text-[9px] font-bold text-primary dark:text-primary uppercase tracking-wider">Deals Logged</span>
+                      <span className="text-xs font-black text-primary dark:text-primary mt-1">{member.salesWorksCount || 0} Works</span>
                     </div>
 
-                    <div className="bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 flex flex-col justify-between">
-                      <span className="text-[9px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">Attendance</span>
-                      <span className="text-xs font-black text-teal-700 dark:text-teal-300 mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
+                    <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                      <span className="text-[9px] font-bold text-success dark:text-success uppercase tracking-wider">Attendance</span>
+                      <span className="text-xs font-black text-success dark:text-success mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
                     </div>
                   </div>
                 </div>
@@ -1253,7 +1253,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
         {/* SECTION 2: CREATIVE TEAM */}
         {creativeTeam?.length > 0 && (
           <div className="space-y-3 pt-4">
-            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2 border-l-2 border-emerald-500/30">
+            <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-2 border-l-2 border-success/30">
               Creative & Marketing Team
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
@@ -1264,7 +1264,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                   <div 
                     key={member.id}
                     onClick={() => setSelectedProfile(member)}
-                    className="group relative p-5 rounded-2xl bg-white dark:bg-slate-900/40 backdrop-blur-md border border-slate-200/90 dark:border-white/10 hover:border-emerald-500/40 dark:hover:border-emerald-500/40 hover:bg-slate-50 dark:hover:bg-slate-900/70 hover:shadow-xl hover:shadow-emerald-500/10 transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-4"
+                    className="group relative p-5 rounded-lg bg-card dark:bg-muted-2 border border-border dark:border-border hover:border-success/40 dark:hover:border-success/40 hover:bg-muted dark:hover:bg-card/70 hover:shadow-xl hover:transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-4"
                   >
                     {/* Top Header Row */}
                     <div className="flex items-start justify-between gap-3">
@@ -1273,35 +1273,35 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                           <img 
                             src={avatarSrc} 
                             alt={member.full_name} 
-                            className="w-12 h-12 rounded-2xl object-cover border-2 border-emerald-500/30 group-hover:border-emerald-400 group-hover:scale-105 transition-all duration-300 bg-slate-100 dark:bg-slate-950"
+                            className="w-12 h-12 rounded-lg object-cover border-2 border-success group-hover:border-success group-hover:scale-105 transition-all duration-300 bg-muted dark:bg-card"
                           />
-                          <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full" title="Active Staff"></span>
+                          <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-success border-2 border-white dark:border-border rounded-full" title="Active Staff"></span>
                         </div>
                         <div className="min-w-0">
-                          <h4 className="text-sm font-extrabold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-300 transition-colors truncate">
+                          <h4 className="text-sm font-extrabold text-foreground dark:text-white group-hover:text-success dark:group-hover:text-success transition-colors truncate">
                             {member.full_name}
                           </h4>
-                          <span className="inline-block mt-0.5 text-[9.5px] font-bold text-emerald-600 dark:text-emerald-300 uppercase tracking-wider bg-emerald-50 dark:bg-emerald-500/15 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-500/20">
+                          <span className="inline-block mt-0.5 text-[9.5px] font-bold text-success dark:text-success uppercase tracking-wider bg-success-soft dark:bg-success-soft px-2 py-0.5 rounded-md border border-success/25 dark:border-success/25">
                             {member.designation}
                           </span>
                         </div>
                       </div>
 
-                      <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/50 group-hover:bg-emerald-600 group-hover:text-white text-slate-600 dark:text-slate-400 transition-all border border-slate-200 dark:border-white/5 shrink-0">
+                      <div className="p-2 rounded-md bg-muted dark:bg-muted group-hover:bg-success group-hover:text-white text-muted-foreground dark:text-muted-foreground transition-all border border-border dark:border-border shrink-0">
                         <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
                       </div>
                     </div>
 
                     {/* Metric Pillars Grid */}
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/80 dark:border-white/5">
-                      <div className="bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 flex flex-col justify-between">
-                        <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Completed Works</span>
-                        <span className="text-xs font-black text-emerald-700 dark:text-emerald-300 mt-1">{member.creativeWorksCount || 0} Deliverables</span>
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border dark:border-border">
+                      <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                        <span className="text-[9px] font-bold text-success dark:text-success uppercase tracking-wider">Completed Works</span>
+                        <span className="text-xs font-black text-success dark:text-success mt-1">{member.creativeWorksCount || 0} Deliverables</span>
                       </div>
 
-                      <div className="bg-slate-50 dark:bg-slate-950/60 p-2.5 rounded-xl border border-slate-200/80 dark:border-white/5 flex flex-col justify-between">
-                        <span className="text-[9px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">Attendance Log</span>
-                        <span className="text-xs font-black text-teal-700 dark:text-teal-300 mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
+                      <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                        <span className="text-[9px] font-bold text-success dark:text-success uppercase tracking-wider">Attendance Log</span>
+                        <span className="text-xs font-black text-success dark:text-success mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
                       </div>
                     </div>
                   </div>

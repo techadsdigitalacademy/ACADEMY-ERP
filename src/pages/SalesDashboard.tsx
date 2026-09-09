@@ -1156,21 +1156,21 @@ export const SalesDashboard: React.FC = () => {
         <div className="space-y-4">
           {/* Top Overview Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-            <Card variant="glass" className="p-3.5 border-white/5">
-              <span className="text-[9px] font-bold text-slate-455 uppercase block">Total Agency Videos</span>
-              <p className="text-sm font-extrabold text-white mt-1">{totals.totalAgencyVideos}</p>
+            <Card variant="glass" className="p-3.5 border-border">
+              <span className="text-[9px] font-bold text-muted-foreground uppercase block">Total Agency Videos</span>
+              <p className="text-sm font-extrabold text-foreground mt-1">{totals.totalAgencyVideos}</p>
             </Card>
-            <Card variant="glass" className="p-3.5 border-white/5">
-              <span className="text-[9px] font-bold text-indigo-500 uppercase block">Total Academy Videos</span>
-              <p className="text-sm font-extrabold text-indigo-400 mt-1">{totals.totalAcademyVideos}</p>
+            <Card variant="glass" className="p-3.5 border-border">
+              <span className="text-[9px] font-bold text-primary uppercase block">Total Academy Videos</span>
+              <p className="text-sm font-extrabold text-primary mt-1">{totals.totalAcademyVideos}</p>
             </Card>
-            <Card variant="glass" className="p-3.5 border-white/5">
-              <span className="text-[9px] font-bold text-emerald-500 uppercase block">Total External Videos</span>
-              <p className="text-sm font-extrabold text-emerald-400 mt-1">{totals.totalExternalVideos}</p>
+            <Card variant="glass" className="p-3.5 border-border">
+              <span className="text-[9px] font-bold text-success uppercase block">Total External Videos</span>
+              <p className="text-sm font-extrabold text-success mt-1">{totals.totalExternalVideos}</p>
             </Card>
-            <Card variant="glass" className="p-3.5 border-white/5">
-              <span className="text-[9px] font-bold text-purple-500 uppercase block">Total Travel Expenses</span>
-              <p className="text-sm font-extrabold text-purple-400 mt-1">{formatCurrency(totals.totalTravelExpenses)}</p>
+            <Card variant="glass" className="p-3.5 border-border">
+              <span className="text-[9px] font-bold text-primary uppercase block">Total Travel Expenses</span>
+              <p className="text-sm font-extrabold text-primary mt-1">{formatCurrency(totals.totalTravelExpenses)}</p>
             </Card>
           </div>
 
@@ -1188,11 +1188,11 @@ export const SalesDashboard: React.FC = () => {
                   key={filterVal}
                   onClick={() => setVideoFilter(filterVal)}
                   type="button"
-                  className={`px-3.5 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all duration-300 ${
-                    videoFilter === filterVal 
-                      ? 'bg-indigo-600 text-white border border-indigo-500/20 shadow-md shadow-indigo-650/20' 
-                      : 'bg-slate-900/60 text-slate-400 border border-white/5 hover:text-slate-200 hover:bg-slate-800/40'
-                  }`}
+                  className={`px-3.5 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all duration-300 ${
+ videoFilter === filterVal 
+ ? 'bg-primary text-foreground border border-primary/20 ' 
+ : 'bg-muted-2 text-muted-foreground border border-border hover:text-foreground hover:bg-muted'
+ }`}
                 >
                   {labelMap[filterVal]}
                 </button>
@@ -1201,10 +1201,10 @@ export const SalesDashboard: React.FC = () => {
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto rounded-2xl border border-white/5 bg-slate-950/20">
+          <div className="overflow-x-auto rounded-lg border border-border bg-muted-2">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                <tr className="border-b border-border bg-muted-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
                   <th className="py-3 px-4">Date</th>
                   <th className="py-3 px-4">Category</th>
                   <th className="py-3 px-4">Client Name</th>
@@ -1214,15 +1214,15 @@ export const SalesDashboard: React.FC = () => {
                   {showActions && <th className="py-3 px-4 text-center">Actions</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+              <tbody className="divide-y divide-border text-secondary-foreground font-semibold">
                 {filteredReports?.map(r => (
-                  <tr key={r.id} className="hover:bg-slate-900/10">
-                    <td className="py-3 px-4 text-slate-500">{r.report_date}</td>
-                    <td className="py-3 px-4 font-bold text-indigo-400">{r.work_category || '-'}</td>
-                    <td className="py-3 px-4 text-white font-bold">{r.client_name || '-'}</td>
-                    <td className="py-3 px-4 text-center text-white">{r.videos_count || 0}</td>
-                    <td className="py-3 px-4 text-right text-emerald-400">{formatCurrency(Number(r.travel_expense) || 0)}</td>
-                    <td className="py-3 px-4 text-slate-400 max-w-xs truncate" title={r.description}>{r.description || '-'}</td>
+                  <tr key={r.id} className="hover:bg-muted-2">
+                    <td className="py-3 px-4 text-muted-foreground">{r.report_date}</td>
+                    <td className="py-3 px-4 font-bold text-primary">{r.work_category || '-'}</td>
+                    <td className="py-3 px-4 text-foreground font-bold">{r.client_name || '-'}</td>
+                    <td className="py-3 px-4 text-center text-foreground">{r.videos_count || 0}</td>
+                    <td className="py-3 px-4 text-right text-success">{formatCurrency(Number(r.travel_expense) || 0)}</td>
+                    <td className="py-3 px-4 text-muted-foreground max-w-xs truncate" title={r.description}>{r.description || '-'}</td>
                     {showActions && (
                       <td className="py-3 px-4 text-center">
                         <Button
@@ -1236,7 +1236,7 @@ export const SalesDashboard: React.FC = () => {
                             setEditVideoTravelExpense(String(r.travel_expense || 0));
                             setEditReportDesc(r.description || '');
                           }}
-                          className="!py-1 !px-2 text-[10px] border-white/5 text-indigo-400"
+                          className="!py-1 !px-2 text-[10px] border-border text-primary"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
@@ -1246,18 +1246,18 @@ export const SalesDashboard: React.FC = () => {
                 ))}
                 {filteredReports.length === 0 && (
                   <tr>
-                    <td colSpan={showActions ? 7 : 6} className="text-center py-8 text-slate-655 font-semibold">No video logs recorded.</td>
+                    <td colSpan={showActions ? 7 : 6} className="text-center py-8 text-muted-foreground font-semibold">No video logs recorded.</td>
                   </tr>
                 )}
               </tbody>
               {filteredReports.length > 0 && (
-                <tfoot className="border-t border-white/10 bg-slate-950/40 text-white font-extrabold">
+                <tfoot className="border-t border-border bg-muted-2 text-foreground font-extrabold">
                   <tr>
-                    <td className="py-3.5 px-4 text-slate-400 text-left uppercase text-[9px]">Totals:</td>
+                    <td className="py-3.5 px-4 text-muted-foreground text-left uppercase text-[9px]">Totals:</td>
                     <td></td>
                     <td></td>
                     <td className="py-3.5 px-4 text-center">{totals.totalAgencyVideos + totals.totalAcademyVideos + totals.totalExternalVideos}</td>
-                    <td className="py-3.5 px-4 text-right text-purple-400">{formatCurrency(totals.totalTravelExpenses)}</td>
+                    <td className="py-3.5 px-4 text-right text-primary">{formatCurrency(totals.totalTravelExpenses)}</td>
                     <td></td>
                     {showActions && <td></td>}
                   </tr>
@@ -1268,11 +1268,11 @@ export const SalesDashboard: React.FC = () => {
 
           {/* Edit form overlay inline */}
           {editingReport && editingReport.work_type === 'Video Work' && (
-            <Card variant="glass" className="p-4 border-indigo-500/20 bg-slate-950/40 mt-3 max-w-md space-y-3">
-              <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wide">Override Video Log</h4>
+            <Card variant="glass" className="p-4 border-primary/20 bg-muted-2 mt-3 max-w-md space-y-3">
+              <h4 className="text-xs font-bold text-primary uppercase tracking-wide">Override Video Log</h4>
               <form onSubmit={handleUpdateDailyReport} className="grid grid-cols-2 gap-2.5 text-xs">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Work Category</label>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Work Category</label>
                   <select
                     value={editVideoWorkCategory}
                     onChange={(e) => {
@@ -1281,7 +1281,7 @@ export const SalesDashboard: React.FC = () => {
                         setEditVideoClientName('Tech Ads');
                       }
                     }}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground"
                   >
                     <option value="Tech Ads Agency">Tech Ads Agency</option>
                     <option value="Tech Ads Academy">Tech Ads Academy</option>
@@ -1289,45 +1289,45 @@ export const SalesDashboard: React.FC = () => {
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Client/Company Name</label>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Client/Company Name</label>
                   <input 
                     type="text" 
                     required
                     disabled={editVideoWorkCategory !== 'External Client'}
                     value={editVideoClientName}
                     onChange={(e) => setEditVideoClientName(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white disabled:opacity-50"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground disabled:opacity-50"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Number of Videos</label>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Number of Videos</label>
                   <input 
                     type="number" 
                     required
                     min="0"
                     value={editVideoCount}
                     onChange={(e) => setEditVideoCount(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Travel Expense (₹)</label>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Travel Expense (₹)</label>
                   <input 
                     type="number" 
                     required
                     min="0"
                     value={editVideoTravelExpense}
                     onChange={(e) => setEditVideoTravelExpense(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground"
                   />
                 </div>
                 <div className="space-y-1 col-span-2">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Work Description</label>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Work Description</label>
                   <textarea 
                     rows={2}
                     value={editReportDesc}
                     onChange={(e) => setEditReportDesc(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
+                    className="w-full px-3 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground"
                   />
                 </div>
                 <div className="flex gap-2 items-end pt-2 col-span-2">
@@ -1346,29 +1346,29 @@ export const SalesDashboard: React.FC = () => {
         <div className="space-y-4">
           {/* Top Overview Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-            <Card variant="glass" className="p-3.5 border-white/5">
-              <span className="text-[9px] font-bold text-slate-455 uppercase block">Total Posters</span>
-              <p className="text-sm font-extrabold text-white mt-1">{totals.totalPosters}</p>
+            <Card variant="glass" className="p-3.5 border-border">
+              <span className="text-[9px] font-bold text-muted-foreground uppercase block">Total Posters</span>
+              <p className="text-sm font-extrabold text-foreground mt-1">{totals.totalPosters}</p>
             </Card>
-            <Card variant="glass" className="p-3.5 border-white/5">
-              <span className="text-[9px] font-bold text-indigo-500 uppercase block">Total Re-edits</span>
-              <p className="text-sm font-extrabold text-indigo-400 mt-1">{totals.totalReEdits}</p>
+            <Card variant="glass" className="p-3.5 border-border">
+              <span className="text-[9px] font-bold text-primary uppercase block">Total Re-edits</span>
+              <p className="text-sm font-extrabold text-primary mt-1">{totals.totalReEdits}</p>
             </Card>
-            <Card variant="glass" className="p-3.5 border-white/5">
-              <span className="text-[9px] font-bold text-emerald-500 uppercase block">Total Logos</span>
-              <p className="text-sm font-extrabold text-emerald-400 mt-1">{totals.totalLogos}</p>
+            <Card variant="glass" className="p-3.5 border-border">
+              <span className="text-[9px] font-bold text-success uppercase block">Total Logos</span>
+              <p className="text-sm font-extrabold text-success mt-1">{totals.totalLogos}</p>
             </Card>
-            <Card variant="glass" className="p-3.5 border-white/5">
-              <span className="text-[9px] font-bold text-purple-500 uppercase block">Total Others</span>
-              <p className="text-sm font-extrabold text-purple-400 mt-1">{totals.totalOthers}</p>
+            <Card variant="glass" className="p-3.5 border-border">
+              <span className="text-[9px] font-bold text-primary uppercase block">Total Others</span>
+              <p className="text-sm font-extrabold text-primary mt-1">{totals.totalOthers}</p>
             </Card>
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto rounded-2xl border border-white/5 bg-slate-950/20">
+          <div className="overflow-x-auto rounded-lg border border-border bg-muted-2">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                <tr className="border-b border-border bg-muted-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
                   <th className="py-3 px-4">Date</th>
                   <th className="py-3 px-4 text-center">Posters</th>
                   <th className="py-3 px-4 text-center">Re-edits</th>
@@ -1378,15 +1378,15 @@ export const SalesDashboard: React.FC = () => {
                   {showActions && <th className="py-3 px-4 text-center">Actions</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+              <tbody className="divide-y divide-border text-secondary-foreground font-semibold">
                 {reportsList?.map(r => (
-                  <tr key={r.id} className="hover:bg-slate-900/10">
-                    <td className="py-3 px-4 text-slate-500">{r.report_date}</td>
-                    <td className="py-3 px-4 text-center text-white font-bold">{r.posters_count || 0}</td>
-                    <td className="py-3 px-4 text-center text-indigo-400">{r.re_edits_count || 0}</td>
-                    <td className="py-3 px-4 text-center text-emerald-400">{r.logos_count || 0}</td>
-                    <td className="py-3 px-4 text-center text-purple-400">{r.others_count || 0}</td>
-                    <td className="py-3 px-4 text-slate-400 max-w-xs truncate" title={r.description}>{r.description || '-'}</td>
+                  <tr key={r.id} className="hover:bg-muted-2">
+                    <td className="py-3 px-4 text-muted-foreground">{r.report_date}</td>
+                    <td className="py-3 px-4 text-center text-foreground font-bold">{r.posters_count || 0}</td>
+                    <td className="py-3 px-4 text-center text-primary">{r.re_edits_count || 0}</td>
+                    <td className="py-3 px-4 text-center text-success">{r.logos_count || 0}</td>
+                    <td className="py-3 px-4 text-center text-primary">{r.others_count || 0}</td>
+                    <td className="py-3 px-4 text-muted-foreground max-w-xs truncate" title={r.description}>{r.description || '-'}</td>
                     {showActions && (
                       <td className="py-3 px-4 text-center">
                         <Button
@@ -1400,7 +1400,7 @@ export const SalesDashboard: React.FC = () => {
                             setEditReportOthers(String(r.others_count || 0));
                             setEditReportDesc(r.description || '');
                           }}
-                          className="!py-1 !px-2 text-[10px] border-white/5 text-indigo-400"
+                          className="!py-1 !px-2 text-[10px] border-border text-primary"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
@@ -1410,18 +1410,18 @@ export const SalesDashboard: React.FC = () => {
                 ))}
                 {reportsList.length === 0 && (
                   <tr>
-                    <td colSpan={showActions ? 7 : 6} className="text-center py-8 text-slate-655 font-semibold">No design logs recorded.</td>
+                    <td colSpan={showActions ? 7 : 6} className="text-center py-8 text-muted-foreground font-semibold">No design logs recorded.</td>
                   </tr>
                 )}
               </tbody>
               {reportsList.length > 0 && (
-                <tfoot className="border-t border-white/10 bg-slate-950/40 text-white font-extrabold">
+                <tfoot className="border-t border-border bg-muted-2 text-foreground font-extrabold">
                   <tr>
-                    <td className="py-3.5 px-4 text-slate-400 text-left uppercase text-[9px]">Totals:</td>
+                    <td className="py-3.5 px-4 text-muted-foreground text-left uppercase text-[9px]">Totals:</td>
                     <td className="py-3.5 px-4 text-center">{totals.totalPosters}</td>
-                    <td className="py-3.5 px-4 text-center text-indigo-400">{totals.totalReEdits}</td>
-                    <td className="py-3.5 px-4 text-center text-emerald-400">{totals.totalLogos}</td>
-                    <td className="py-3.5 px-4 text-center text-purple-400">{totals.totalOthers}</td>
+                    <td className="py-3.5 px-4 text-center text-primary">{totals.totalReEdits}</td>
+                    <td className="py-3.5 px-4 text-center text-success">{totals.totalLogos}</td>
+                    <td className="py-3.5 px-4 text-center text-primary">{totals.totalOthers}</td>
                     <td></td>
                     {showActions && <td></td>}
                   </tr>
@@ -1432,56 +1432,56 @@ export const SalesDashboard: React.FC = () => {
 
           {/* Edit form overlay inline */}
           {editingReport && editingReport.work_type === 'Graphic Design' && (
-            <Card variant="glass" className="p-4 border-indigo-500/20 bg-slate-950/40 mt-3 max-w-md space-y-3">
-              <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wide">Override Design Log</h4>
+            <Card variant="glass" className="p-4 border-primary/20 bg-muted-2 mt-3 max-w-md space-y-3">
+              <h4 className="text-xs font-bold text-primary uppercase tracking-wide">Override Design Log</h4>
               <form onSubmit={handleUpdateDailyReport} className="grid grid-cols-4 gap-2 text-xs">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Posters</label>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Posters</label>
                   <input 
                     type="number" 
                     required
                     value={editReportPosters}
                     onChange={(e) => setEditReportPosters(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Re-edits</label>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Re-edits</label>
                   <input 
                     type="number" 
                     required
                     value={editReportReEdits}
                     onChange={(e) => setEditReportReEdits(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Logos</label>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Logos</label>
                   <input 
                     type="number" 
                     required
                     value={editReportLogos}
                     onChange={(e) => setEditReportLogos(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Others</label>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Others</label>
                   <input 
                     type="number" 
                     required
                     value={editReportOthers}
                     onChange={(e) => setEditReportOthers(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground"
                   />
                 </div>
                 <div className="space-y-1 col-span-4">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Description / Notes</label>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Description / Notes</label>
                   <textarea 
                     rows={2}
                     value={editReportDesc}
                     onChange={(e) => setEditReportDesc(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
+                    className="w-full px-3 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground"
                   />
                 </div>
                 <div className="flex gap-2 items-end pt-2 col-span-4">
@@ -1500,29 +1500,29 @@ export const SalesDashboard: React.FC = () => {
         <div className="space-y-4">
           {/* Top Overview Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3.5">
-            <Card variant="glass" className="p-3.5 border-white/5">
-              <span className="text-[9px] font-bold text-emerald-500 uppercase block">Total Ads Placed</span>
-              <p className="text-sm font-extrabold text-emerald-400 mt-1">{totals.totalAdsPlaced}</p>
+            <Card variant="glass" className="p-3.5 border-border">
+              <span className="text-[9px] font-bold text-success uppercase block">Total Ads Placed</span>
+              <p className="text-sm font-extrabold text-success mt-1">{totals.totalAdsPlaced}</p>
             </Card>
           </div>
 
           {/* Table */}
-          <div className="overflow-x-auto rounded-2xl border border-white/5 bg-slate-950/20">
+          <div className="overflow-x-auto rounded-lg border border-border bg-muted-2">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                <tr className="border-b border-border bg-muted-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
                   <th className="py-3 px-4">Date</th>
                   <th className="py-3 px-4 text-center">Ads Placed</th>
                   <th className="py-3 px-4 text-left">Notes</th>
                   {showActions && <th className="py-3 px-4 text-center">Actions</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+              <tbody className="divide-y divide-border text-secondary-foreground font-semibold">
                 {reportsList?.map(r => (
-                  <tr key={r.id} className="hover:bg-slate-900/10">
-                    <td className="py-3 px-4 text-slate-500">{r.report_date}</td>
-                    <td className="py-3 px-4 text-center text-emerald-400 font-bold">{r.ads_placed_count || 0}</td>
-                    <td className="py-3 px-4 text-slate-400 max-w-xs truncate" title={r.description}>{r.description || '-'}</td>
+                  <tr key={r.id} className="hover:bg-muted-2">
+                    <td className="py-3 px-4 text-muted-foreground">{r.report_date}</td>
+                    <td className="py-3 px-4 text-center text-success font-bold">{r.ads_placed_count || 0}</td>
+                    <td className="py-3 px-4 text-muted-foreground max-w-xs truncate" title={r.description}>{r.description || '-'}</td>
                     {showActions && (
                       <td className="py-3 px-4 text-center">
                         <Button
@@ -1533,7 +1533,7 @@ export const SalesDashboard: React.FC = () => {
                             setEditReportAdsPlaced(String(r.ads_placed_count || 0));
                             setEditReportDesc(r.description || '');
                           }}
-                          className="!py-1 !px-2 text-[10px] border-white/5 text-indigo-400"
+                          className="!py-1 !px-2 text-[10px] border-border text-primary"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
@@ -1543,15 +1543,15 @@ export const SalesDashboard: React.FC = () => {
                 ))}
                 {reportsList.length === 0 && (
                   <tr>
-                    <td colSpan={showActions ? 4 : 3} className="text-center py-8 text-slate-655 font-semibold">No ad placement logs recorded.</td>
+                    <td colSpan={showActions ? 4 : 3} className="text-center py-8 text-muted-foreground font-semibold">No ad placement logs recorded.</td>
                   </tr>
                 )}
               </tbody>
               {reportsList.length > 0 && (
-                <tfoot className="border-t border-white/10 bg-slate-950/40 text-white font-extrabold">
+                <tfoot className="border-t border-border bg-muted-2 text-foreground font-extrabold">
                   <tr>
-                    <td className="py-3.5 px-4 text-slate-400 text-left uppercase text-[9px]">Totals:</td>
-                    <td className="py-3.5 px-4 text-center text-emerald-400">{totals.totalAdsPlaced}</td>
+                    <td className="py-3.5 px-4 text-muted-foreground text-left uppercase text-[9px]">Totals:</td>
+                    <td className="py-3.5 px-4 text-center text-success">{totals.totalAdsPlaced}</td>
                     <td></td>
                     {showActions && <td></td>}
                   </tr>
@@ -1562,26 +1562,26 @@ export const SalesDashboard: React.FC = () => {
 
           {/* Edit form overlay inline */}
           {editingReport && editingReport.work_type === 'Digital Marketing' && (
-            <Card variant="glass" className="p-4 border-indigo-500/20 bg-slate-950/40 mt-3 max-w-xs space-y-3">
-              <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wide">Override Marketing Log</h4>
+            <Card variant="glass" className="p-4 border-primary/20 bg-muted-2 mt-3 max-w-xs space-y-3">
+              <h4 className="text-xs font-bold text-primary uppercase tracking-wide">Override Marketing Log</h4>
               <form onSubmit={handleUpdateDailyReport} className="space-y-3.5 text-xs">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Ads Placed</label>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Ads Placed</label>
                   <input 
                     type="number" 
                     required
                     value={editReportAdsPlaced}
                     onChange={(e) => setEditReportAdsPlaced(e.target.value)}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-bold text-slate-400 uppercase">Description / Notes</label>
+                  <label className="text-[9px] font-bold text-muted-foreground uppercase">Description / Notes</label>
                   <textarea 
                     rows={2}
                     value={editReportDesc}
                     onChange={(e) => setEditReportDesc(e.target.value)}
-                    className="w-full px-3 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-white"
+                    className="w-full px-3 py-1.5 rounded-lg bg-card border border-border text-xs text-foreground"
                   />
                 </div>
                 <div className="flex gap-2 items-end pt-2">
@@ -1597,26 +1597,26 @@ export const SalesDashboard: React.FC = () => {
 
     // Fallback for general logs
     return (
-      <div className="overflow-x-auto rounded-2xl border border-white/5 bg-slate-950/20">
+      <div className="overflow-x-auto rounded-lg border border-border bg-muted-2">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+            <tr className="border-b border-border bg-muted-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
               <th className="py-3 px-4">Date</th>
               <th className="py-3 px-4">Category</th>
               <th className="py-3 px-4">Task Description</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+          <tbody className="divide-y divide-border text-secondary-foreground font-semibold">
             {reportsList?.map((report: any) => (
-              <tr key={report.id} className="hover:bg-slate-900/10">
-                <td className="py-3 px-4 text-slate-500">{report.report_date}</td>
-                <td className="py-3 px-4 font-bold text-indigo-400">{report.work_type}</td>
-                <td className="py-3 px-4 text-slate-400 max-w-sm truncate" title={report.description}>{report.description}</td>
+              <tr key={report.id} className="hover:bg-muted-2">
+                <td className="py-3 px-4 text-muted-foreground">{report.report_date}</td>
+                <td className="py-3 px-4 font-bold text-primary">{report.work_type}</td>
+                <td className="py-3 px-4 text-muted-foreground max-w-sm truncate" title={report.description}>{report.description}</td>
               </tr>
             ))}
             {reportsList.length === 0 && (
               <tr>
-                <td colSpan={3} className="text-center py-8 text-slate-600 font-semibold">No daily logs recorded for this month.</td>
+                <td colSpan={3} className="text-center py-8 text-muted-foreground font-semibold">No daily logs recorded for this month.</td>
               </tr>
             )}
           </tbody>
@@ -1628,13 +1628,8 @@ export const SalesDashboard: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
+    <div className="min-h-screen bg-muted dark:bg-card text-foreground dark:text-foreground font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
       
-      {/* Dynamic background lighting */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-500/10 dark:bg-indigo-900/15 blur-[130px]"></div>
-        <div className="absolute bottom-[-10%] right-[-20%] w-[80vw] h-[80vw] rounded-full bg-purple-500/5 dark:bg-purple-900/10 blur-[130px]"></div>
-      </div>
 
       {/* Sidebar Navigation */}
       <Sidebar />
@@ -1643,18 +1638,18 @@ export const SalesDashboard: React.FC = () => {
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12">
         
         {/* Header */}
-        <header className="glass-panel sticky top-14 lg:top-0 z-30 px-3 sm:px-6 md:px-8 py-2.5 sm:py-3.5 border-b border-slate-200 dark:border-white/5 backdrop-blur-md">
+        <header className="bg-card sticky top-14 lg:top-0 z-30 px-3 sm:px-6 md:px-8 py-2.5 sm:py-3.5 border-b border-border">
           <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-4">
             <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4 w-full sm:w-auto">
               <div className="flex items-center gap-2 min-w-0">
                 <button 
                   onClick={() => window.dispatchEvent(new CustomEvent('toggle_mobile_sidebar'))}
-                  className="lg:hidden p-1.5 rounded-xl bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center shrink-0"
+                  className="lg:hidden p-1.5 rounded-md bg-primary-soft text-primary hover:bg-primary-soft border border-primary/30 flex items-center justify-center shrink-0"
                   title="Open Navigation Menu"
                 >
                   <Menu className="w-5 h-5" />
                 </button>
-                <h1 className="text-xs sm:text-sm md:text-lg font-bold text-slate-900 dark:text-white tracking-wide truncate">
+                <h1 className="text-xs sm:text-sm md:text-lg font-bold text-foreground dark:text-white tracking-wide truncate">
                   {isAdminView ? 'Admin Control Dashboard' :  'Consultant Sales Terminal'}
                 </h1>
               </div>
@@ -1663,7 +1658,7 @@ export const SalesDashboard: React.FC = () => {
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="px-2 py-1 rounded-xl bg-slate-900 border border-white/10 text-[11px] sm:text-xs font-bold text-slate-350 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+                  className="px-2 py-1 rounded-md bg-card border border-border text-[11px] sm:text-xs font-bold text-muted-foreground focus:outline-none focus:border-primary transition-all cursor-pointer"
                 >
                   {getMonthOptions()?.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -1672,9 +1667,9 @@ export const SalesDashboard: React.FC = () => {
                 <button
                   onClick={toggleTheme}
                   title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
-                  className="p-1.5 sm:p-2 rounded-xl bg-slate-900 border border-white/10 text-amber-400 hover:text-amber-300 hover:bg-slate-800 transition-all cursor-pointer shrink-0"
+                  className="p-1.5 sm:p-2 rounded-md bg-card border border-border text-warning hover:text-warning hover:bg-muted transition-all cursor-pointer shrink-0"
                 >
-                  {theme === 'dark' ? <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-400" />}
+                  {theme === 'dark' ? <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />}
                 </button>
               </div>
             </div>
@@ -1684,7 +1679,7 @@ export const SalesDashboard: React.FC = () => {
                 <Button 
                   variant="glass" 
                   size="sm" 
-                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 border border-indigo-500/20 hover:bg-slate-800 text-[11px] sm:text-xs font-bold text-indigo-400 flex items-center gap-1 shrink-0" 
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 border border-primary/20 hover:bg-muted text-[11px] sm:text-xs font-bold text-primary flex items-center gap-1 shrink-0" 
                   onClick={() => setIsClosingReportOpen(true)}
                 >
                   <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
@@ -1695,7 +1690,7 @@ export const SalesDashboard: React.FC = () => {
               {(!isAdminView || isOwner) && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && activeStaff?.designation !== 'Videographer' && (
                 <button
                   onClick={() => setIsRefundModalOpen(true)}
-                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-extrabold text-[11px] sm:text-xs shadow-md shadow-rose-500/20 rounded-xl flex items-center gap-1 shrink-0 transition-all border border-rose-400/20 cursor-pointer"
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 bg-danger hover:text-white font-extrabold text-[11px] sm:text-xs rounded-md flex items-center gap-1 shrink-0 transition-all border border-danger/20 cursor-pointer"
                 >
                   <RotateCcw className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   <span>Refund</span>
@@ -1706,7 +1701,7 @@ export const SalesDashboard: React.FC = () => {
                 <Button 
                   variant="primary" 
                   size="sm" 
-                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-xl text-[11px] sm:text-xs font-bold shrink-0 animate-pulse" 
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-md text-[11px] sm:text-xs font-bold shrink-0 animate-pulse" 
                   onClick={() => setIsModalOpen(true)}
                   icon={<Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
                 >
@@ -1718,7 +1713,7 @@ export const SalesDashboard: React.FC = () => {
                 <Button 
                   variant="primary" 
                   size="sm" 
-                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-xl text-[11px] sm:text-xs font-bold shrink-0 animate-pulse" 
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-md text-[11px] sm:text-xs font-bold shrink-0 animate-pulse" 
                   onClick={() => setIsModalOpen(true)}
                   icon={<Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
                 >
@@ -1759,7 +1754,7 @@ export const SalesDashboard: React.FC = () => {
               />
 
               {/* Agency Notice Board Widget placed ONLY at the bottom of Sales Hub main tab */}
-              <div className="pt-4 border-t border-white/5">
+              <div className="pt-4 border-t border-border">
                 <AgencyNoticeBoardWidget 
                   isAdmin={isAdminView || isAdminMode}
                   onOpenAdminNoticeModal={() => setIsNoticeBoardModalOpen(true)}
@@ -1905,11 +1900,11 @@ export const SalesDashboard: React.FC = () => {
 
       {/* IN-SCREEN SLIP VIEWER MODAL */}
       {selectedSlipUrl && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm" onClick={() => setSelectedSlipUrl(null)}>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90" onClick={() => setSelectedSlipUrl(null)}>
           <div className="relative max-w-4xl max-h-[90vh] w-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
             <button
               onClick={() => setSelectedSlipUrl(null)}
-              className="absolute -top-10 right-0 text-white hover:text-slate-300 transition-colors bg-white/10 hover:bg-white/20 p-2 rounded-full"
+              className="absolute -top-10 right-0 text-foreground hover:text-secondary-foreground transition-colors bg-card hover:bg-card p-2 rounded-full"
               title="Close"
             >
               <X className="w-6 h-6" />

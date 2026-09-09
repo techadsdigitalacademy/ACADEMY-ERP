@@ -305,11 +305,11 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
     <div className="space-y-4 w-full">
       {!isAdmin && (
         <div className="flex items-center justify-between">
-          <h2 className="text-base md:text-lg font-extrabold text-white flex items-center gap-2">
-            <Briefcase className="w-5 h-5 text-indigo-400" />
+          <h2 className="text-base md:text-lg font-extrabold text-foreground flex items-center gap-2">
+            <Briefcase className="w-5 h-5 text-primary" />
             My Sales History Log (Read-Only)
           </h2>
-          <span className="text-xs bg-slate-800 text-slate-400 px-2.5 py-1 rounded-lg border border-slate-700 font-bold">
+          <span className="text-xs bg-muted text-muted-foreground px-2.5 py-1 rounded-lg border border-border font-bold">
             {filteredSales.length} Records
           </span>
         </div>
@@ -318,23 +318,23 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
       {/* Top Overview Metric Cards */}
       {!hideTargetProgress && (
         <div className="space-y-4">
-          <Card variant="glass" glowColor="purple" className="p-4 flex flex-col justify-between border-indigo-500/20">
+          <Card variant="glass" glowColor="purple" className="p-4 flex flex-col justify-between border-primary/20">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Target Goal Summary</p>
-                <p className="text-xs font-semibold text-slate-300 mt-1">
-                  Target: <span className="text-white font-extrabold">{targetAmount > 0 ? formatCurrency(targetAmount) : 'Not Set'}</span> &bull; 
-                  Collected: <span className="text-emerald-400 font-extrabold">{formatCurrency(combinedReceived)}</span> &bull; 
-                  Remaining: <span className="text-amber-400 font-extrabold">{targetAmount <= 0 ? '-' : combinedReceived >= targetAmount ? 'Target Achieved!' : formatCurrency(targetAmount - combinedReceived)}</span>
+                <p className="text-[10px] font-bold text-primary uppercase tracking-wider">Target Goal Summary</p>
+                <p className="text-xs font-semibold text-secondary-foreground mt-1">
+                  Target: <span className="text-foreground font-extrabold">{targetAmount > 0 ? formatCurrency(targetAmount) : 'Not Set'}</span> &bull; 
+                  Collected: <span className="text-success font-extrabold">{formatCurrency(combinedReceived)}</span> &bull; 
+                  Remaining: <span className="text-warning font-extrabold">{targetAmount <= 0 ? '-' : combinedReceived >= targetAmount ? 'Target Achieved!' : formatCurrency(targetAmount - combinedReceived)}</span>
                 </p>
               </div>
-              <span className="text-xs font-black text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-lg border border-indigo-500/20 self-start sm:self-center shrink-0">
+              <span className="text-xs font-black text-primary bg-primary-soft px-2.5 py-1 rounded-lg border border-primary/20 self-start sm:self-center shrink-0">
                 {targetPercent}% Achieved
               </span>
             </div>
-            <div className="w-full bg-slate-950/80 rounded-full h-2.5 mt-3 overflow-hidden border border-white/5 p-0.5">
+            <div className="w-full bg-card/80 rounded-full h-2.5 mt-3 overflow-hidden border border-border p-0.5">
               <div 
-                className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-500" 
+                className="bg-primary h-full rounded-full transition-all duration-500" 
                 style={{ width: `${targetPercent}%` }}
               ></div>
             </div>
@@ -343,36 +343,36 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card variant="glass" glowColor="indigo" className="p-4 flex flex-col justify-between">
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Package Cost</p>
-                <h3 className="text-xl font-black text-white mt-1">{formatCurrency(totals.totalPackageAmt)}</h3>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total Package Cost</p>
+                <h3 className="text-xl font-black text-foreground mt-1">{formatCurrency(totals.totalPackageAmt)}</h3>
               </div>
-              <span className="text-[10px] font-bold text-indigo-400 mt-2 block">{totals.validWorksCount} Works Logged</span>
+              <span className="text-[10px] font-bold text-primary mt-2 block">{totals.validWorksCount} Works Logged</span>
             </Card>
 
             <Card variant="glass" glowColor="emerald" className="p-4 flex flex-col justify-between">
               <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Net Received Total</p>
-                <h3 className="text-xl font-black text-emerald-400 mt-1">{formatCurrency(combinedReceived)}</h3>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Net Received Total</p>
+                <h3 className="text-xl font-black text-success mt-1">{formatCurrency(combinedReceived)}</h3>
               </div>
-              <span className="text-[10px] text-slate-400 font-medium mt-2 block">
+              <span className="text-[10px] text-muted-foreground font-medium mt-2 block">
                 Rec: {formatCurrency(totals.totalRec)} | Clear: {formatCurrency(totals.totalClearing)}
               </span>
             </Card>
 
-            <Card variant="glass" className="p-4 flex flex-col justify-between border-rose-500/20 bg-rose-950/10">
+            <Card variant="glass" className="p-4 flex flex-col justify-between border-danger/20 bg-danger-soft">
               <div>
-                <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wider">Total Refunded</p>
-                <h3 className="text-xl font-black text-rose-400 mt-1">{formatCurrency(totals.totalRefund)}</h3>
+                <p className="text-[10px] font-bold text-danger uppercase tracking-wider">Total Refunded</p>
+                <h3 className="text-xl font-black text-danger mt-1">{formatCurrency(totals.totalRefund)}</h3>
               </div>
-              <span className="text-[10px] text-slate-400 font-medium mt-2 block">Deducted from Received Total</span>
+              <span className="text-[10px] text-muted-foreground font-medium mt-2 block">Deducted from Received Total</span>
             </Card>
 
-            <Card variant="glass" className="p-4 flex flex-col justify-between border-amber-500/20 bg-amber-950/10">
+            <Card variant="glass" className="p-4 flex flex-col justify-between border-warning/20 bg-warning-soft">
               <div>
-                <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">Total Balance Due</p>
-                <h3 className="text-xl font-black text-amber-500 mt-1">{formatCurrency(totals.totalBal)}</h3>
+                <p className="text-[10px] font-bold text-warning uppercase tracking-wider">Total Balance Due</p>
+                <h3 className="text-xl font-black text-warning mt-1">{formatCurrency(totals.totalBal)}</h3>
               </div>
-              <span className="text-[10px] text-slate-400 font-medium mt-2 block">Outstanding Balances</span>
+              <span className="text-[10px] text-muted-foreground font-medium mt-2 block">Outstanding Balances</span>
             </Card>
           </div>
         </div>
@@ -381,24 +381,24 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
       {/* Main Table Card */}
       <Card variant="glass" className="p-0 overflow-hidden">
         {/* Controls */}
-        <div className="p-4 border-b border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="p-4 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search client or package..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-950/60 border border-white/5 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-all"
+              className="w-full pl-10 pr-4 py-2 bg-muted-2 border border-border rounded-md text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-all"
             />
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1 md:pb-0">
             {isAdmin && (
-              <div className="flex items-center gap-1.5 border-r border-white/10 pr-2 mr-1">
+              <div className="flex items-center gap-1.5 border-r border-border pr-2 mr-1">
                 <button
                   onClick={handleExportExcel}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-extrabold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-extrabold transition-all cursor-pointer shadow-sm whitespace-nowrap"
                   title="Export Sales Log to Excel / CSV"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -406,7 +406,7 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
                 </button>
                 <button
                   onClick={handleExportPDF}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-extrabold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft hover:bg-danger-soft text-danger border border-danger/30 text-xs font-extrabold transition-all cursor-pointer shadow-sm whitespace-nowrap"
                   title="Export Sales Log to PDF"
                 >
                   <FileText className="w-3.5 h-3.5" />
@@ -420,12 +420,12 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
                 key={filter}
                 onClick={() => setActiveFilter(filter)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
-                  activeFilter === filter
-                    ? filter === 'Refund' 
-                      ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
-                      : 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                    : 'bg-slate-950/40 text-slate-400 hover:text-white border border-white/5'
-                }`}
+ activeFilter === filter
+ ? filter === 'Refund' 
+ ? 'bg-danger text-foreground '
+ : 'bg-primary text-foreground '
+ : 'bg-muted-2 text-muted-foreground hover:text-white border border-border'
+ }`}
               >
                 {filter === 'All' ? 'ALL' : filter.toUpperCase()}
               </button>
@@ -435,7 +435,7 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-950/60 text-slate-400 font-bold uppercase text-[9.5px] tracking-wider border-b border-white/5">
+            <thead className="bg-muted-2 text-muted-foreground font-bold uppercase text-[9.5px] tracking-wider border-b border-border">
               <tr>
                 <th className="py-3 px-4">WORK SL</th>
                 <th className="py-3 px-4">DATE</th>
@@ -450,7 +450,7 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
                 <th className="py-3 px-4 text-center">ACTIONS</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+            <tbody className="divide-y divide-border text-secondary-foreground font-semibold">
               {filteredSales?.map((sale, index) => {
                 const isRefund = sale.payment_type === 'Refund';
                 const isClearance = sale.payment_type === 'Clearance' || (sale.package_amount === 0 && sale.received_amount > 0 && !isRefund);
@@ -467,18 +467,18 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
                 }
 
                 return (
-                  <tr key={sale.id} className={isRefund ? "bg-rose-950/10 hover:bg-rose-900/20" : "hover:bg-slate-900/10"}>
-                    <td className="py-3 px-4 font-extrabold text-indigo-400">{displaySl}</td>
-                    <td className="py-3 px-4 text-slate-500">{dateStr}</td>
-                    <td className="py-3 px-4 text-white font-bold">{sale.client_name}</td>
-                    <td className="py-3 px-4 text-slate-400">{sale.service_package || sale.package_name || '-'}</td>
-                    <td className="py-3 px-4 text-slate-400">{sale.payment_method || 'Bank Transfer'}</td>
+                  <tr key={sale.id} className={isRefund ? "bg-danger-soft hover:bg-danger-soft" : "hover:bg-muted-2"}>
+                    <td className="py-3 px-4 font-extrabold text-primary">{displaySl}</td>
+                    <td className="py-3 px-4 text-muted-foreground">{dateStr}</td>
+                    <td className="py-3 px-4 text-foreground font-bold">{sale.client_name}</td>
+                    <td className="py-3 px-4 text-muted-foreground">{sale.service_package || sale.package_name || '-'}</td>
+                    <td className="py-3 px-4 text-muted-foreground">{sale.payment_method || 'Bank Transfer'}</td>
                     <td className="py-3 px-4 text-right">
                       {(isClearance || isRefund) ? '-' : formatCurrency(sale.package_amount)}
                     </td>
                     <td className="py-3 px-4 text-center">
                       {isRefund ? (
-                        <span className="px-2.5 py-0.5 rounded-lg bg-rose-500/10 text-rose-400 border border-rose-500/20 font-extrabold text-[10px]">
+                        <span className="px-2.5 py-0.5 rounded-lg bg-danger-soft text-danger border border-danger/20 font-extrabold text-[10px]">
                           Refund
                         </span>
                       ) : (
@@ -487,13 +487,13 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
                         </Badge>
                       )}
                     </td>
-                    <td className={`py-3 px-4 text-right font-extrabold ${isRefund ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    <td className={`py-3 px-4 text-right font-extrabold ${isRefund ? 'text-danger' : 'text-success'}`}>
                       {isRefund ? `- ${formatCurrency(sale.received_amount)}` : isClearance ? '-' : formatCurrency(sale.received_amount)}
                     </td>
-                    <td className="py-3 px-4 text-right text-amber-500">
+                    <td className="py-3 px-4 text-right text-warning">
                       {(isClearance || isRefund) ? '-' : formatCurrency(balance)}
                     </td>
-                    <td className="py-3 px-4 text-right text-purple-400">
+                    <td className="py-3 px-4 text-right text-primary">
                       {isClearance ? formatCurrency(sale.received_amount) : '-'}
                     </td>
                     <td className="py-3 px-4 text-center">
@@ -502,7 +502,7 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
                           <Button 
                             variant="glass" 
                             size="sm" 
-                            className="!py-1 !px-2 text-[10px] border-white/5"
+                            className="!py-1 !px-2 text-[10px] border-border"
                             onClick={() => onViewSlip(sale)}
                           >
                             View Slip
@@ -512,7 +512,7 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
                           <Button
                             variant="glass"
                             size="sm"
-                            className="!py-1 !px-2 text-[10px] border-white/5 hover:text-indigo-400"
+                            className="!py-1 !px-2 text-[10px] border-border hover:text-primary"
                             onClick={() => onEdit(sale)}
                             title="Edit Sale Entry"
                           >
@@ -523,7 +523,7 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
                           <Button
                             variant="glass"
                             size="sm"
-                            className="!py-1 !px-2 text-[10px] border-white/5 hover:text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/20"
+                            className="!py-1 !px-2 text-[10px] border-border hover:text-danger hover:bg-danger-soft hover:border-danger/20"
                             onClick={() => onDelete(sale)}
                             title="Delete Transaction"
                           >
@@ -537,22 +537,22 @@ export const SalesHistoryLog: React.FC<SalesHistoryLogProps> = ({
               })}
               {filteredSales.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="text-center py-8 text-slate-600 font-semibold">No sales recorded.</td>
+                  <td colSpan={11} className="text-center py-8 text-muted-foreground font-semibold">No sales recorded.</td>
                 </tr>
               )}
             </tbody>
             {filteredSales.length > 0 && (
-              <tfoot className="border-t border-white/10 bg-slate-950/40 text-white font-extrabold">
+              <tfoot className="border-t border-border bg-muted-2 text-foreground font-extrabold">
                 <tr>
-                  <td className="py-3.5 px-4 text-left text-indigo-400 font-bold text-[9px] uppercase tracking-wider">
+                  <td className="py-3.5 px-4 text-left text-primary font-bold text-[9px] uppercase tracking-wider">
                     Total Works: {totals.validWorksCount}
                   </td>
-                  <td colSpan={4} className="py-3.5 px-4 text-right uppercase tracking-wider text-[9px] text-slate-400">Totals:</td>
+                  <td colSpan={4} className="py-3.5 px-4 text-right uppercase tracking-wider text-[9px] text-muted-foreground">Totals:</td>
                   <td className="py-3.5 px-4 text-right">{formatCurrency(totals.totalPackageAmt)}</td>
                   <td></td>
-                  <td className="py-3.5 px-4 text-right text-emerald-400">{formatCurrency(totals.totalRec)}</td>
-                  <td className="py-3.5 px-4 text-right text-amber-500">{formatCurrency(totals.totalBal)}</td>
-                  <td className="py-3.5 px-4 text-right text-purple-400">{formatCurrency(totals.totalClearing)}</td>
+                  <td className="py-3.5 px-4 text-right text-success">{formatCurrency(totals.totalRec)}</td>
+                  <td className="py-3.5 px-4 text-right text-warning">{formatCurrency(totals.totalBal)}</td>
+                  <td className="py-3.5 px-4 text-right text-primary">{formatCurrency(totals.totalClearing)}</td>
                   <td></td>
                 </tr>
               </tfoot>

@@ -354,23 +354,23 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
-      <Card variant="solid" className="w-full max-w-md p-6 bg-slate-900 border border-slate-800 relative animate-scale-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 overflow-y-auto animate-fade-in">
+      <Card variant="solid" className="w-full max-w-md p-6 bg-card border border-border relative animate-scale-up">
         <button 
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-450 hover:text-white"
+          className="absolute top-4 right-4 text-muted-foreground hover:text-white"
         >
           <X className="w-4 h-4" />
         </button>
-        <h3 className="font-bold text-white text-base mb-2 flex items-center gap-2">
-          <Download className="w-5 h-5 text-indigo-400" />
+        <h3 className="font-bold text-foreground text-base mb-2 flex items-center gap-2">
+          <Download className="w-5 h-5 text-primary" />
           Daily Closing Reports
         </h3>
-        <p className="text-xs text-slate-400 mb-6">Review today's financial summary before downloading report logs.</p>
+        <p className="text-xs text-muted-foreground mb-6">Review today's financial summary before downloading report logs.</p>
         
         {todaySummary.loading ? (
-          <div className="flex flex-col items-center justify-center py-8 text-slate-450 gap-2 text-xs">
-            <svg className="animate-spin h-5 w-5 text-indigo-400" fill="none" viewBox="0 0 24 24">
+          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground gap-2 text-xs">
+            <svg className="animate-spin h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
@@ -379,26 +379,26 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
         ) : (
           <div className="space-y-6">
             {/* Section 1: Tech Ads Agency */}
-            <div className="bg-slate-950/40 p-4 rounded-xl border border-white/5 space-y-3.5">
-              <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                <span className="text-xs font-bold text-white uppercase tracking-wider">Tech Ads Agency</span>
-                <span className="text-[10px] bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded font-extrabold uppercase">Today</span>
+            <div className="bg-muted-2 p-4 rounded-md border border-border space-y-3.5">
+              <div className="flex justify-between items-center border-b border-border pb-2">
+                <span className="text-xs font-bold text-foreground uppercase tracking-wider">Tech Ads Agency</span>
+                <span className="text-[10px] bg-primary-soft text-primary px-2 py-0.5 rounded font-extrabold uppercase">Today</span>
               </div>
               <div className="grid grid-cols-2 gap-4 text-left">
                 <div>
-                  <span className="text-[9px] text-slate-550 font-bold uppercase block">Total Sales Amount</span>
-                  <span className="text-sm font-extrabold text-emerald-400">{formatCurrency(todaySummary.agencySalesAmount)}</span>
+                  <span className="text-[9px] text-muted-foreground font-bold uppercase block">Total Sales Amount</span>
+                  <span className="text-sm font-extrabold text-success">{formatCurrency(todaySummary.agencySalesAmount)}</span>
                 </div>
                 <div>
-                  <span className="text-[9px] text-slate-550 font-bold uppercase block">Sales Logs Tally</span>
-                  <span className="text-sm font-extrabold text-slate-200">{todaySummary.agencySalesCount} logs</span>
+                  <span className="text-[9px] text-muted-foreground font-bold uppercase block">Sales Logs Tally</span>
+                  <span className="text-sm font-extrabold text-foreground">{todaySummary.agencySalesCount} logs</span>
                 </div>
               </div>
               <div className="pt-2 flex flex-col gap-2">
                 <Button 
                   variant="secondary" 
                   onClick={() => setShowTodayTransactions(true)}
-                  className="w-full py-2.5 flex items-center justify-center gap-1.5 font-bold text-[10px] uppercase tracking-wider text-indigo-300 border-indigo-500/20 hover:border-indigo-500/40"
+                  className="w-full py-2.5 flex items-center justify-center gap-1.5 font-bold text-[10px] uppercase tracking-wider text-primary border-primary/20 hover:border-primary/40"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   <span>View Today's Logs</span>
@@ -415,7 +415,7 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
                   <Button 
                     variant="danger" 
                     onClick={handleDownloadAgencyReportPDF}
-                    className="flex-1 py-2.5 flex items-center justify-center gap-1.5 font-bold text-[10px] uppercase tracking-wider bg-rose-600 hover:bg-rose-500 text-white"
+                    className="flex-1 py-2.5 flex items-center justify-center gap-1.5 font-bold text-[10px] uppercase tracking-wider bg-danger hover:bg-danger text-white"
                   >
                     <FileText className="w-3.5 h-3.5" />
                     <span>Export PDF</span>
@@ -425,19 +425,19 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
             </div>
 
             {/* Section 2: Techads Academy */}
-            <div className="bg-slate-950/40 p-4 rounded-xl border border-white/5 space-y-3.5">
-              <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Techads Academy</span>
-                <span className="text-[10px] bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded font-extrabold uppercase">Today</span>
+            <div className="bg-muted-2 p-4 rounded-md border border-border space-y-3.5">
+              <div className="flex justify-between items-center border-b border-border pb-2">
+                <span className="text-xs font-bold text-primary uppercase tracking-wider">Techads Academy</span>
+                <span className="text-[10px] bg-primary-soft text-primary px-2 py-0.5 rounded font-extrabold uppercase">Today</span>
               </div>
               <div className="grid grid-cols-2 gap-4 text-left">
                 <div>
-                  <span className="text-[9px] text-slate-550 font-bold uppercase block">Tuition Collected</span>
-                  <span className="text-sm font-extrabold text-indigo-400">{formatCurrency(todaySummary.academyFeesAmount)}</span>
+                  <span className="text-[9px] text-muted-foreground font-bold uppercase block">Tuition Collected</span>
+                  <span className="text-sm font-extrabold text-primary">{formatCurrency(todaySummary.academyFeesAmount)}</span>
                 </div>
                 <div>
-                  <span className="text-[9px] text-slate-550 font-bold uppercase block">Fee Logs Tally</span>
-                  <span className="text-sm font-extrabold text-slate-200">{todaySummary.academyFeesCount} logs</span>
+                  <span className="text-[9px] text-muted-foreground font-bold uppercase block">Fee Logs Tally</span>
+                  <span className="text-sm font-extrabold text-foreground">{todaySummary.academyFeesCount} logs</span>
                 </div>
               </div>
               <div className="pt-2">
@@ -455,48 +455,48 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
           </div>
         )}
         
-        <div className="mt-6 pt-2 border-t border-slate-800">
+        <div className="mt-6 pt-2 border-t border-border">
           <Button variant="secondary" fullWidth onClick={onClose}>Close Modal</Button>
         </div>
       </Card>
 
       {/* Today's Transactions Breakdown Popup Modal */}
       {showTodayTransactions && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <Card variant="glass" className="w-full max-w-2xl p-6 bg-slate-900 border border-indigo-500/30 relative animate-scale-up max-h-[85vh] flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-fade-in">
+          <Card variant="glass" className="w-full max-w-2xl p-6 bg-card border border-primary/30 relative animate-scale-up max-h-[85vh] flex flex-col">
             <button 
               onClick={() => setShowTodayTransactions(false)}
-              className="absolute top-4 right-4 text-slate-450 hover:text-white"
+              className="absolute top-4 right-4 text-muted-foreground hover:text-white"
             >
               <X className="w-4 h-4" />
             </button>
 
-            <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4 shrink-0">
+            <div className="flex items-center justify-between border-b border-border pb-4 mb-4 shrink-0">
               <div>
-                <h3 className="font-extrabold text-white text-base flex items-center gap-2">
-                  <Eye className="w-5 h-5 text-indigo-400" />
+                <h3 className="font-extrabold text-foreground text-base flex items-center gap-2">
+                  <Eye className="w-5 h-5 text-primary" />
                   Today's Sales Transactions
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Breakdown of sales logged on <span className="text-indigo-300 font-semibold">{new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'full' })}</span>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Breakdown of sales logged on <span className="text-primary font-semibold">{new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'full' })}</span>
                 </p>
               </div>
               <div className="text-right">
-                <span className="text-[10px] font-bold text-slate-400 uppercase block">Total Today</span>
-                <span className="text-base font-extrabold text-emerald-400">{formatCurrency(todaySummary.agencySalesAmount)}</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase block">Total Today</span>
+                <span className="text-base font-extrabold text-success">{formatCurrency(todaySummary.agencySalesAmount)}</span>
               </div>
             </div>
 
             <div className="overflow-y-auto flex-1 pr-1 space-y-3">
               {todaySalesLogs.length === 0 ? (
-                <div className="text-center py-10 text-slate-500 text-xs font-semibold">
+                <div className="text-center py-10 text-muted-foreground text-xs font-semibold">
                   No sales transactions logged today yet.
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/40">
+                <div className="overflow-x-auto rounded-md border border-border bg-muted-2">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-white/5 bg-slate-950/80 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                      <tr className="border-b border-border bg-card/80 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
                         <th className="py-2.5 px-3">Staff Executive</th>
                         <th className="py-2.5 px-3">Client & Package</th>
                         <th className="py-2.5 px-3 text-center">Type</th>
@@ -505,7 +505,7 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
                         <th className="py-2.5 px-3 text-right">Time (IST)</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+                    <tbody className="divide-y divide-border text-secondary-foreground font-semibold">
                       {todaySalesLogs.map(sale => {
                         const staffName = sale.staff?.full_name || sale.staff_name || 'Safwana';
                         let utrNum = sale.utr_number || sale.utr || sale.transaction_id || sale.payment_ref;
@@ -517,22 +517,22 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
                         const timeFormatted = sale.created_at ? new Date(sale.created_at).toLocaleTimeString('en-US', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true }) : '-';
 
                         return (
-                          <tr key={sale.id} className="hover:bg-slate-900/30">
-                            <td className="py-2.5 px-3 font-bold text-indigo-300">{staffName}</td>
+                          <tr key={sale.id} className="hover:bg-muted-2">
+                            <td className="py-2.5 px-3 font-bold text-primary">{staffName}</td>
                             <td className="py-2.5 px-3">
-                              <div className="font-bold text-white">{sale.client_name}</div>
-                              <div className="text-[10px] text-slate-450">{sale.service_package}</div>
+                              <div className="font-bold text-foreground">{sale.client_name}</div>
+                              <div className="text-[10px] text-muted-foreground">{sale.service_package}</div>
                             </td>
                             <td className="py-2.5 px-3 text-center">
                               <Badge variant={sale.payment_type === 'Full' ? 'success' : sale.payment_type === 'Advance' ? 'info' : 'purple'}>
                                 {sale.payment_type}
                               </Badge>
                             </td>
-                            <td className="py-2.5 px-3 text-right font-extrabold text-emerald-400">
+                            <td className="py-2.5 px-3 text-right font-extrabold text-success">
                               {formatCurrency(sale.received_amount)}
                             </td>
-                            <td className="py-2.5 px-3 font-mono text-[10px] text-slate-400">{utrNum}</td>
-                            <td className="py-2.5 px-3 text-right text-[10px] text-slate-450">{timeFormatted}</td>
+                            <td className="py-2.5 px-3 font-mono text-[10px] text-muted-foreground">{utrNum}</td>
+                            <td className="py-2.5 px-3 text-right text-[10px] text-muted-foreground">{timeFormatted}</td>
                           </tr>
                         );
                       })}
@@ -542,8 +542,8 @@ export const ClosingReportModal: React.FC<ClosingReportModalProps> = ({ isOpen, 
               )}
             </div>
 
-            <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center shrink-0">
-              <span className="text-xs text-slate-400 font-semibold">{todaySalesLogs.length} Records Found</span>
+            <div className="mt-4 pt-3 border-t border-border flex justify-between items-center shrink-0">
+              <span className="text-xs text-muted-foreground font-semibold">{todaySalesLogs.length} Records Found</span>
               <Button variant="secondary" onClick={() => setShowTodayTransactions(false)} className="py-1.5 px-4 text-xs font-bold">
                 Back to Reports
               </Button>

@@ -13,25 +13,25 @@ export const Badge: React.FC<BadgeProps> = ({
   size = 'sm',
   className = ''
 }) => {
-  const baseStyles = 'inline-flex items-center font-medium rounded-full transition-all duration-200';
-  
   const sizeStyles = {
-    sm: 'px-2.5 py-0.5 text-xs border',
-    md: 'px-3 py-1 text-sm border'
+    sm: 'h-5 px-1.5 text-[10.5px] gap-1',
+    md: 'h-6 px-2 text-[11.5px] gap-1.5'
   };
 
   const variantStyles = {
-    success: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-[0_0_12px_-3px_rgba(16,185,129,0.2)]',
-    warning: 'bg-amber-500/10 text-amber-400 border-amber-500/20 shadow-[0_0_12px_-3px_rgba(245,158,11,0.2)]',
-    info: 'bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-[0_0_12px_-3px_rgba(59,130,246,0.2)]',
-    error: 'bg-rose-500/10 text-rose-400 border-rose-500/20 shadow-[0_0_12px_-3px_rgba(244,63,94,0.2)]',
-    indigo: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 shadow-[0_0_12px_-3px_rgba(99,102,241,0.2)]',
-    purple: 'bg-purple-500/10 text-purple-400 border-purple-500/20 shadow-[0_0_12px_-3px_rgba(168,85,247,0.2)]'
+    success: 'bg-success-soft text-success',
+    warning: 'bg-warning-soft text-warning',
+    error: 'bg-danger-soft text-danger',
+    info: 'bg-muted text-secondary-foreground',
+    indigo: 'bg-primary-soft text-primary',
+    purple: 'bg-primary-soft text-primary'
   };
 
   return (
-    <span className={`${baseStyles} ${sizeStyles[size]} ${variantStyles[variant]} ${className}`}>
-      <span className="w-1.5 h-1.5 rounded-full bg-current mr-1.5 animate-pulse"></span>
+    <span
+      className={`inline-flex items-center font-semibold rounded-[5px] whitespace-nowrap ${sizeStyles[size]} ${variantStyles[variant]} ${className}`}
+    >
+      <span className="w-[5px] h-[5px] rounded-full bg-current shrink-0"></span>
       {children}
     </span>
   );

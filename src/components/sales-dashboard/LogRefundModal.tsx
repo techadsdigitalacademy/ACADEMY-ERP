@@ -195,23 +195,23 @@ export const LogRefundModal: React.FC<LogRefundModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
-      <div className="bg-slate-900 border border-rose-500/20 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl shadow-rose-950/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-card/80 animate-fade-in">
+      <div className="bg-card border border-danger/20 rounded-lg w-full max-w-md overflow-hidden">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-white/5 bg-gradient-to-r from-rose-950/40 to-slate-900">
+        <div className="flex items-center justify-between p-5 border-b border-border bg-muted-2">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            <div className="p-2 rounded-md bg-danger-soft text-danger border border-danger/20">
               <RotateCcw className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-white">Log Refund Transaction</h3>
-              <p className="text-[10px] font-bold text-rose-400 uppercase tracking-wider">Direct Monetary Return</p>
+              <h3 className="text-base font-extrabold text-foreground">Log Refund Transaction</h3>
+              <p className="text-[10px] font-bold text-danger uppercase tracking-wider">Direct Monetary Return</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-white hover:bg-muted transition-all"
           >
             <X className="w-4 h-4" />
           </button>
@@ -221,24 +221,24 @@ export const LogRefundModal: React.FC<LogRefundModalProps> = ({
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Company / Client Name</label>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Company / Client Name</label>
             <input
               type="text"
               required
               placeholder="e.g. Acme Corp"
               value={clientName}
               onChange={(e) => setClientName(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-all"
+              className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-danger transition-all"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Payment Method</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Payment Method</label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white focus:outline-none focus:border-rose-500 transition-all"
+                className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-danger transition-all"
               >
                 <option value="UPI">UPI</option>
                 <option value="Bank Transfer">Bank Transfer</option>
@@ -248,24 +248,24 @@ export const LogRefundModal: React.FC<LogRefundModalProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Refund Amount (₹)</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Refund Amount (₹)</label>
               <input
                 type="number"
                 required
                 placeholder="e.g. 5000"
                 value={refundAmount}
                 onChange={(e) => setRefundAmount(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-rose-400 font-extrabold placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-all"
+                className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-danger font-extrabold placeholder:text-muted-foreground focus:outline-none focus:border-danger transition-all"
               />
             </div>
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Payment Slip (Optional)</label>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Payment Slip (Optional)</label>
             <div className="flex items-center gap-2">
-              <label className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400 hover:text-slate-200 cursor-pointer flex items-center justify-between transition-all">
+              <label className="flex-1 px-3 py-2 rounded-md bg-card border border-border text-xs text-muted-foreground hover:text-foreground cursor-pointer flex items-center justify-between transition-all">
                 <span className="truncate">{slipFile ? slipFile.name : 'Choose slip file...'}</span>
-                <Upload className="w-3.5 h-3.5 text-rose-400 shrink-0 ml-2" />
+                <Upload className="w-3.5 h-3.5 text-danger shrink-0 ml-2" />
                 <input
                   type="file"
                   accept="image/*,.pdf"
@@ -277,17 +277,17 @@ export const LogRefundModal: React.FC<LogRefundModalProps> = ({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reason / Description</label>
+            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Reason / Description</label>
             <textarea
               rows={2}
               placeholder="Reason for processing this refund..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-rose-500 transition-all resize-none"
+              className="w-full px-3.5 py-2 rounded-md bg-card border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-danger transition-all resize-none"
             />
           </div>
 
-          <div className="pt-2 flex justify-end gap-3 border-t border-white/5">
+          <div className="pt-2 flex justify-end gap-3 border-t border-border">
             <Button
               type="button"
               variant="secondary"
@@ -300,7 +300,7 @@ export const LogRefundModal: React.FC<LogRefundModalProps> = ({
             <Button
               type="submit"
               disabled={isSubmitting}
-              className="!py-2 !px-5 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-extrabold text-xs shadow-lg shadow-rose-500/20 rounded-xl"
+              className="!py-2 !px-5 bg-danger hover:text-white font-extrabold text-xs rounded-md"
             >
               {isSubmitting ? 'Processing...' : 'Process Refund'}
             </Button>

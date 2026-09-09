@@ -221,7 +221,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 overflow-y-auto animate-fade-in">
       <style>{`
         @keyframes modalShake {
           0%, 100% { transform: translateX(0); }
@@ -231,33 +231,33 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
       `}</style>
       <Card 
         variant="solid" 
-        className="w-full max-w-sm p-6 bg-slate-900 border border-slate-800 relative animate-scale-up max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-sm p-6 bg-card border border-border relative animate-scale-up max-h-[90vh] overflow-y-auto"
         style={shakeForm ? { animation: 'modalShake 0.4s ease-in-out' } : {}}
       >
         <button 
           onClick={() => { setErrors({}); onClose(); }}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white font-bold"
+          className="absolute top-4 right-4 text-muted-foreground hover:text-white font-bold"
         >
           <X className="w-4.5 h-4.5" />
         </button>
         
         <div className="flex items-center gap-2 mb-4">
-          <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+          <div className="p-2 rounded-md bg-primary-soft text-primary border border-primary/20">
             <Briefcase className="w-5 h-5" />
           </div>
-          <h3 className="font-extrabold text-white text-sm uppercase">Log New Client Sale</h3>
+          <h3 className="font-extrabold text-foreground text-sm uppercase">Log New Client Sale</h3>
         </div>
 
         {isOwner && (
-          <div className="flex p-1 bg-slate-950/50 rounded-xl border border-white/5 w-full mb-4">
+          <div className="flex p-1 bg-muted-2 rounded-md border border-border w-full mb-4">
             <button
               type="button"
               onClick={() => { setErrors({}); setOwnerTransactionType('Expense'); }}
               className={`flex-1 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${
-                ownerTransactionType === 'Expense' 
-                  ? 'bg-rose-500 text-white shadow-lg' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
+ ownerTransactionType === 'Expense' 
+ ? 'bg-danger text-foreground shadow-lg' 
+ : 'text-muted-foreground hover:text-white hover:bg-card'
+ }`}
             >
               Log Expense
             </button>
@@ -265,10 +265,10 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
               type="button"
               onClick={() => { setErrors({}); setOwnerTransactionType('Income'); }}
               className={`flex-1 px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 ${
-                ownerTransactionType === 'Income' 
-                  ? 'bg-indigo-500 text-white shadow-lg' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
-              }`}
+ ownerTransactionType === 'Income' 
+ ? 'bg-primary text-foreground shadow-lg' 
+ : 'text-muted-foreground hover:text-white hover:bg-card'
+ }`}
             >
               Log Sale
             </button>
@@ -278,15 +278,15 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
         {(!isOwner || ownerTransactionType === 'Income') ? (
           <form onSubmit={handleLogSale} noValidate className="space-y-3.5">
             {Object.keys(errors).length > 0 && (
-              <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[11px] text-rose-400 font-bold flex items-center gap-1.5 animate-pulse">
+              <div className="p-2.5 bg-danger-soft border border-danger/30 rounded-md text-[11px] text-danger font-bold flex items-center gap-1.5 animate-pulse">
                 ⚠️ Please fill in all required fields highlighted in red below.
               </div>
             )}
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase flex items-center justify-between">
                 <span>Client / Company Name</span>
-                <span className="text-rose-400 font-extrabold">*</span>
+                <span className="text-danger font-extrabold">*</span>
               </label>
               <input 
                 type="text" 
@@ -296,23 +296,23 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                   setClientName(e.target.value);
                   if (errors.clientName) setErrors(prev => ({ ...prev, clientName: false }));
                 }}
-                className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-xs text-slate-200 focus:outline-none transition-all ${
-                  errors.clientName 
-                    ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/20' 
-                    : 'border-slate-800 focus:border-indigo-500'
-                }`}
+                className={`w-full px-3 py-2 rounded-md bg-card border text-xs text-foreground focus:outline-none transition-all ${
+ errors.clientName 
+ ? 'border-danger ring-2 ring-[var(--ring)] bg-danger-soft' 
+ : 'border-border focus:border-primary'
+ }`}
               />
               {errors.clientName && (
-                <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
+                <p className="text-[10px] text-danger font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
                   ⚠️ Client / Company Name is required
                 </p>
               )}
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase flex items-center justify-between">
                 <span>Service Package</span>
-                <span className="text-rose-400 font-extrabold">*</span>
+                <span className="text-danger font-extrabold">*</span>
               </label>
               <select
                 value={servicePackage}
@@ -320,11 +320,11 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                   setServicePackage(e.target.value);
                   if (errors.servicePackage) setErrors(prev => ({ ...prev, servicePackage: false }));
                 }}
-                className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-xs text-slate-200 focus:outline-none transition-all ${
-                  errors.servicePackage 
-                    ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/20' 
-                    : 'border-slate-800 focus:border-indigo-500'
-                }`}
+                className={`w-full px-3 py-2 rounded-md bg-card border text-xs text-foreground focus:outline-none transition-all ${
+ errors.servicePackage 
+ ? 'border-danger ring-2 ring-[var(--ring)] bg-danger-soft' 
+ : 'border-border focus:border-primary'
+ }`}
               >
                 <option value="">Select Package</option>
                 <option value="CEO Pack">CEO Pack</option>
@@ -337,14 +337,14 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                 <option value="E-Commerce">E-Commerce</option>
               </select>
               {errors.servicePackage && (
-                <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
+                <p className="text-[10px] text-danger font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
                   ⚠️ Service Package selection is required
                 </p>
               )}
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Payment Status</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Payment Status</label>
               <select
                 value={paymentType}
                 onChange={(e) => {
@@ -358,7 +358,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                     if (errors.receivedAmount) setErrors(prev => ({ ...prev, receivedAmount: false }));
                   }
                 }}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
               >
                 <option value="Full">Full Payment</option>
                 <option value="Advance">Advance Deposit</option>
@@ -368,9 +368,9 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
 
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+                <label className="text-[10px] font-bold text-muted-foreground uppercase flex items-center justify-between">
                   <span>Package Price (₹)</span>
-                  {paymentType !== 'Clearance' && <span className="text-rose-400 font-extrabold">*</span>}
+                  {paymentType !== 'Clearance' && <span className="text-danger font-extrabold">*</span>}
                 </label>
                 <input 
                   type="number" 
@@ -386,22 +386,22 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                     }
                     if (errors.packageAmount) setErrors(prev => ({ ...prev, packageAmount: false }));
                   }}
-                  className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-xs text-slate-200 focus:outline-none disabled:opacity-50 transition-all ${
-                    errors.packageAmount 
-                      ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/20' 
-                      : 'border-slate-800 focus:border-indigo-500'
-                  }`}
+                  className={`w-full px-3 py-2 rounded-md bg-card border text-xs text-foreground focus:outline-none disabled:opacity-50 transition-all ${
+ errors.packageAmount 
+ ? 'border-danger ring-2 ring-[var(--ring)] bg-danger-soft' 
+ : 'border-border focus:border-primary'
+ }`}
                 />
                 {errors.packageAmount && (
-                  <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
+                  <p className="text-[10px] text-danger font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
                     ⚠️ Price required
                   </p>
                 )}
               </div>
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+                <label className="text-[10px] font-bold text-muted-foreground uppercase flex items-center justify-between">
                   <span>Received Amount (₹)</span>
-                  <span className="text-rose-400 font-extrabold">*</span>
+                  <span className="text-danger font-extrabold">*</span>
                 </label>
                 <input 
                   type="number" 
@@ -411,14 +411,14 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                     setReceivedAmount(e.target.value);
                     if (errors.receivedAmount) setErrors(prev => ({ ...prev, receivedAmount: false }));
                   }}
-                  className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-xs text-slate-200 focus:outline-none transition-all ${
-                    errors.receivedAmount 
-                      ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/20' 
-                      : 'border-slate-800 focus:border-indigo-500'
-                  }`}
+                  className={`w-full px-3 py-2 rounded-md bg-card border text-xs text-foreground focus:outline-none transition-all ${
+ errors.receivedAmount 
+ ? 'border-danger ring-2 ring-[var(--ring)] bg-danger-soft' 
+ : 'border-border focus:border-primary'
+ }`}
                 />
                 {errors.receivedAmount && (
-                  <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
+                  <p className="text-[10px] text-danger font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
                     ⚠️ Received required
                   </p>
                 )}
@@ -426,11 +426,11 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Payment Method</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Payment Method</label>
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value as any)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
               >
                 <option value="UPI">UPI</option>
                 <option value="Bank Transfer">Bank Transfer</option>
@@ -439,7 +439,7 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase block">Payment Proof Slip</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase block">Payment Proof Slip</label>
               <div className="flex items-center gap-2">
                 <input 
                   type="file" 
@@ -450,12 +450,12 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                 />
                 <label 
                   htmlFor="slip-upload"
-                  className="px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400 cursor-pointer font-bold hover:bg-slate-900 hover:text-white transition-colors"
+                  className="px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-muted-foreground cursor-pointer font-bold hover:bg-card hover:text-white transition-colors"
                 >
                   Select File
                 </label>
                 {paymentProofUrl && uploadedFileName && (
-                  <span className="text-[10px] text-emerald-400 font-bold truncate max-w-[200px]">
+                  <span className="text-[10px] text-success font-bold truncate max-w-[200px]">
                     ✔ Payment Slip Attached: {uploadedFileName}
                   </span>
                 )}
@@ -463,13 +463,13 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Work Description</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Work Description</label>
               <textarea
                 rows={2}
                 placeholder="Notes on delivery specs..."
                 value={workDescription}
                 onChange={(e) => setWorkDescription(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none resize-none"
+                className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none resize-none"
               />
             </div>
 
@@ -483,17 +483,17 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
         ) : (
           <form onSubmit={handleOwnerSubmitExpense} noValidate className="space-y-4 mt-2">
             {Object.keys(errors).length > 0 && (
-              <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[11px] text-rose-400 font-bold flex items-center gap-1.5 animate-pulse">
+              <div className="p-2.5 bg-danger-soft border border-danger/30 rounded-md text-[11px] text-danger font-bold flex items-center gap-1.5 animate-pulse">
                 ⚠️ Please fill in all required fields highlighted in red below.
               </div>
             )}
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Expense Category</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Expense Category</label>
               <select
                 value={ownerExpCategory}
                 onChange={(e) => setOwnerExpCategory(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none"
+                className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none"
               >
                 {['Salary', 'Rent', 'Internet & Recharge', 'Food & Drinks', 'EMI', 'Repair & Maintenance', 'Stationery', 'Electricity', 'Transport', 'Fixed Asset', 'Outwork', 'Return Sales', 'Facebook Ads', 'Marketing & Ads', 'Office & Operations', 'Software & Cloud', 'Client Hospitality', 'Equipment & Hardware', 'Other Expense'].map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
@@ -502,9 +502,9 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
             </div>
             
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase flex items-center justify-between">
                 <span>Amount (₹)</span>
-                <span className="text-rose-400 font-extrabold">*</span>
+                <span className="text-danger font-extrabold">*</span>
               </label>
               <input 
                 type="number" 
@@ -514,23 +514,23 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                   setOwnerExpAmount(e.target.value);
                   if (errors.ownerExpAmount) setErrors(prev => ({ ...prev, ownerExpAmount: false }));
                 }}
-                className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-xs text-slate-200 focus:outline-none transition-all ${
-                  errors.ownerExpAmount 
-                    ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/20' 
-                    : 'border-slate-800 focus:border-rose-500'
-                }`}
+                className={`w-full px-3 py-2 rounded-md bg-card border text-xs text-foreground focus:outline-none transition-all ${
+ errors.ownerExpAmount 
+ ? 'border-danger ring-2 ring-[var(--ring)] bg-danger-soft' 
+ : 'border-border focus:border-danger'
+ }`}
               />
               {errors.ownerExpAmount && (
-                <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
+                <p className="text-[10px] text-danger font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
                   ⚠️ Expense Amount is required
                 </p>
               )}
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase flex items-center justify-between">
                 <span>Description</span>
-                <span className="text-rose-400 font-extrabold">*</span>
+                <span className="text-danger font-extrabold">*</span>
               </label>
               <input 
                 type="text" 
@@ -540,32 +540,32 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
                   setOwnerExpDescription(e.target.value);
                   if (errors.ownerExpDescription) setErrors(prev => ({ ...prev, ownerExpDescription: false }));
                 }}
-                className={`w-full px-3 py-2 rounded-xl bg-slate-950 border text-xs text-slate-200 focus:outline-none transition-all ${
-                  errors.ownerExpDescription 
-                    ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-950/20' 
-                    : 'border-slate-800 focus:border-rose-500'
-                }`}
+                className={`w-full px-3 py-2 rounded-md bg-card border text-xs text-foreground focus:outline-none transition-all ${
+ errors.ownerExpDescription 
+ ? 'border-danger ring-2 ring-[var(--ring)] bg-danger-soft' 
+ : 'border-border focus:border-danger'
+ }`}
               />
               {errors.ownerExpDescription && (
-                <p className="text-[10px] text-rose-400 font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
+                <p className="text-[10px] text-danger font-bold flex items-center gap-1 mt-0.5 animate-fade-in">
                   ⚠️ Description is required
                 </p>
               )}
             </div>
 
             <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase">Date</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase">Date</label>
               <input 
                 type="date" 
                 value={ownerExpDate}
                 onChange={(e) => setOwnerExpDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 focus:outline-none focus:border-rose-500"
+                className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-danger"
               />
             </div>
 
             <div className="flex gap-2.5 pt-2">
               <Button variant="secondary" fullWidth onClick={() => { setErrors({}); onClose(); }}>Cancel</Button>
-              <Button type="submit" variant="primary" className="!bg-rose-500 hover:!bg-rose-600 border-rose-500" fullWidth disabled={isSubmittingOwnerExp}>
+              <Button type="submit" variant="primary" className="!bg-danger hover:!bg-danger border-danger" fullWidth disabled={isSubmittingOwnerExp}>
                 {isSubmittingOwnerExp ? 'Logging...' : 'Log Expense'}
               </Button>
             </div>

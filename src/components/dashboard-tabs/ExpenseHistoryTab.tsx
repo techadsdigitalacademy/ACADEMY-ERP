@@ -435,20 +435,20 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
           <section className="space-y-6 pt-2">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-2">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                <div className="p-2.5 rounded-md bg-danger-soft text-danger border border-danger/20">
                   <Star className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-black text-white tracking-tight uppercase">Expense History</h2>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Company Owner Log ({selectedMonth || 'All'})</p>
+                  <h2 className="text-xl font-black text-foreground tracking-tight uppercase">Expense History</h2>
+                  <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Company Owner Log ({selectedMonth || 'All'})</p>
                 </div>
               </div>
 
               <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 border-r border-white/10 pr-3">
+                <div className="flex items-center gap-1.5 border-r border-border pr-3">
                   <button
                     onClick={() => handleExportExcel(displayList, totalExpensesSum, selectedMonth)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-bold transition-all cursor-pointer shadow-sm whitespace-nowrap"
                     title="Export Expense History to Excel / CSV"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -456,7 +456,7 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
                   </button>
                   <button
                     onClick={() => handleExportPDF(displayList, totalExpensesSum, selectedMonth)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm whitespace-nowrap"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft hover:bg-danger-soft text-danger border border-danger/30 text-xs font-bold transition-all cursor-pointer shadow-sm whitespace-nowrap"
                     title="Export Expense History to PDF"
                   >
                     <FileText className="w-3.5 h-3.5" />
@@ -465,22 +465,22 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
                 </div>
 
                 {/* Total Expenses Summary Card */}
-                <Card variant="glass" className="p-3.5 border-rose-500/20 min-w-[200px] flex items-center justify-between bg-slate-900/60">
+                <Card variant="glass" className="p-3.5 border-danger/20 min-w-[200px] flex items-center justify-between bg-muted-2">
                   <div>
-                    <span className="text-[9px] font-bold text-rose-400 uppercase tracking-wider block">Total Expenses</span>
-                    <p className="text-base font-black text-rose-400 mt-0.5">{formatCurrency(totalExpensesSum)}</p>
+                    <span className="text-[9px] font-bold text-danger uppercase tracking-wider block">Total Expenses</span>
+                    <p className="text-base font-black text-danger mt-0.5">{formatCurrency(totalExpensesSum)}</p>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-bold bg-slate-950 px-2 py-0.5 rounded-lg border border-white/5">
+                  <span className="text-[10px] text-muted-foreground font-bold bg-card px-2 py-0.5 rounded-lg border border-border">
                     {displayList.length} Items
                   </span>
                 </Card>
               </div>
             </div>
 
-            <div className="overflow-x-auto rounded-2xl border border-white/5 bg-slate-950/20 mt-4">
+            <div className="overflow-x-auto rounded-lg border border-border bg-muted-2 mt-4">
               <table className="w-full text-left border-collapse text-xs whitespace-nowrap">
                 <thead>
-                  <tr className="border-b border-white/5 bg-slate-950/50 text-[9px] font-bold text-slate-500 uppercase tracking-wider">
+                  <tr className="border-b border-border bg-muted-2 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
                     <th className="py-3 px-4">Date</th>
                     <th className="py-3 px-4">Category</th>
                     <th className="py-3 px-4">Description</th>
@@ -488,26 +488,26 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
                     <th className="py-3 px-4 text-center">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5 text-slate-300 font-semibold">
+                <tbody className="divide-y divide-border text-secondary-foreground font-semibold">
                   {displayList.length > 0 ? (
                     displayList.map((exp: any, idx: number) => (
-                      <tr key={exp.id || idx} className="hover:bg-slate-900/10">
-                        <td className="py-3 px-4 text-slate-400 font-medium">{formatDateSafe(exp.expense_date || exp.created_at)}</td>
-                        <td className="py-3 px-4 font-bold text-rose-400"><Badge variant="error">{exp.category || 'General'}</Badge></td>
-                        <td className="py-3 px-4 text-slate-300 max-w-sm truncate">{exp.description || '-'}</td>
-                        <td className="py-3 px-4 text-right text-rose-400 font-extrabold">{formatCurrency(exp.amount || 0)}</td>
+                      <tr key={exp.id || idx} className="hover:bg-muted-2">
+                        <td className="py-3 px-4 text-muted-foreground font-medium">{formatDateSafe(exp.expense_date || exp.created_at)}</td>
+                        <td className="py-3 px-4 font-bold text-danger"><Badge variant="error">{exp.category || 'General'}</Badge></td>
+                        <td className="py-3 px-4 text-secondary-foreground max-w-sm truncate">{exp.description || '-'}</td>
+                        <td className="py-3 px-4 text-right text-danger font-extrabold">{formatCurrency(exp.amount || 0)}</td>
                         <td className="py-3 px-4 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <button
                               onClick={() => setEditingExpense(exp)}
-                              className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 hover:text-white transition-all cursor-pointer"
+                              className="p-1.5 rounded-lg bg-primary-soft text-primary hover:bg-primary-soft hover:text-white transition-all cursor-pointer"
                               title="Edit Expense"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleDeleteExpense(exp)}
-                              className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-white transition-all cursor-pointer"
+                              className="p-1.5 rounded-lg bg-danger-soft text-danger hover:bg-danger-soft hover:text-white transition-all cursor-pointer"
                               title="Delete Expense"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -518,17 +518,17 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} className="text-center py-8 text-slate-500 font-bold">No expenses logged for this month.</td>
+                      <td colSpan={5} className="text-center py-8 text-muted-foreground font-bold">No expenses logged for this month.</td>
                     </tr>
                   )}
                 </tbody>
                 {displayList.length > 0 && (
-                  <tfoot className="border-t-2 border-white/10 bg-slate-950/80 font-black text-xs">
+                  <tfoot className="border-t-2 border-border bg-card/80 font-black text-xs">
                     <tr>
-                      <td colSpan={3} className="py-3.5 px-4 text-right text-slate-400 uppercase tracking-wider">
+                      <td colSpan={3} className="py-3.5 px-4 text-right text-muted-foreground uppercase tracking-wider">
                         Total Expenses:
                       </td>
-                      <td className="py-3.5 px-4 text-right text-rose-400 font-black text-sm">
+                      <td className="py-3.5 px-4 text-right text-danger font-black text-sm">
                         {formatCurrency(totalExpensesSum)}
                       </td>
                       <td className="py-3.5 px-4"></td>
@@ -545,9 +545,9 @@ export const ExpenseHistoryTab: React.FC<ExpenseHistoryTabProps> = ({
   } catch (err: any) {
     console.error('ExpenseHistoryTab Render Error:', err);
     return (
-      <div className="p-6 bg-slate-900/80 rounded-2xl border border-rose-500/20 text-center space-y-2">
-        <h3 className="text-sm font-bold text-rose-400">Expense History Render Notice</h3>
-        <p className="text-xs text-slate-400">Unable to display expense entries cleanly: {err?.message || 'Unknown error'}</p>
+      <div className="p-6 bg-card/80 rounded-lg border border-danger/20 text-center space-y-2">
+        <h3 className="text-sm font-bold text-danger">Expense History Render Notice</h3>
+        <p className="text-xs text-muted-foreground">Unable to display expense entries cleanly: {err?.message || 'Unknown error'}</p>
       </div>
     );
   }

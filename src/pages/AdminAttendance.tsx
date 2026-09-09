@@ -30,15 +30,19 @@ interface StaffWithAttendance extends Staff {
 }
 
 export const AdminAttendance: React.FC = () => {
-  const { activeStaff, setActiveTab, isAdminMode,  } = useApp();
+  const { activeStaff, setActiveTab, isAdminMode, isLoading } = useApp();
 
   if (!activeStaff) return null;
 
+  // Wait for the session to resolve before enforcing the permission
+  // redirect - isAdminMode is false while loading, which would otherwise
+  // bounce a deep link away from this page on first paint.
   useEffect(() => {
+    if (isLoading) return;
     if (!isAdminMode) {
       setActiveTab('sales');
     }
-  }, [isAdminMode]);
+  }, [isAdminMode, isLoading]);
 
   // Component local states
   const [loading, setLoading] = useState(true);
@@ -755,13 +759,8 @@ export const AdminAttendance: React.FC = () => {
   });
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
+    <div className="min-h-screen bg-card text-foreground font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
       
-      {/* Background Decorative Glows */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-10%] left-[-20%] w-[80vw] h-[80vw] rounded-full bg-indigo-900/10 blur-[120px]"></div>
-        <div className="absolute top-[40%] right-[-30%] w-[90vw] h-[90vw] rounded-full bg-purple-900/10 blur-[150px]"></div>
-      </div>
 
       {/* Left Sidebar Navigation (Desktop only) */}
       <Sidebar />
@@ -770,7 +769,7 @@ export const AdminAttendance: React.FC = () => {
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12">
         
         {/* Header Profile Section */}
-        <header className="glass-panel sticky top-14 lg:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-white/5 backdrop-blur-md">
+        <header className="bg-card border border-border sticky top-14 lg:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-border">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
               {/* Avatar (Mobile only) */}
@@ -778,19 +777,19 @@ export const AdminAttendance: React.FC = () => {
                 <img 
                   src={activeStaff.avatar_url} 
                   alt={activeStaff.full_name} 
-                  className="relative w-10 h-10 rounded-full border-2 border-indigo-400 object-cover"
+                  className="relative w-10 h-10 rounded-full border-2 border-primary object-cover"
                 />
               </div>
               
               <div>
-                <h1 className="text-base md:text-xl font-bold text-white tracking-wide flex items-center gap-2">
+                <h1 className="text-base md:text-xl font-bold text-foreground tracking-wide flex items-center gap-2">
                   <span className="md:hidden">Attendance Logs</span>
                   <span className="hidden md:inline-flex items-center gap-2">
                     Admin Attendance Dashboard
                     <Badge variant="success" className="text-[10px] py-0.5">Real-time DB</Badge>
                   </span>
                 </h1>
-                <p className="text-xs text-slate-400 font-medium hidden md:block">Monitor staff punch-in times, geographic location stamps, and daily status logs.</p>
+                <p className="text-xs text-muted-foreground font-medium hidden md:block">Monitor staff punch-in times, geographic location stamps, and daily status logs.</p>
               </div>
             </div>
 
@@ -817,10 +816,10 @@ export const AdminAttendance: React.FC = () => {
               <TableSkeleton rows={8} columns={6} />
             </div>
           ) : error && staffList.length === 0 ? (
-            <div className="py-16 text-center glass-card rounded-3xl p-8 border border-rose-500/20 max-w-md mx-auto">
-              <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-4 animate-bounce" />
-              <h3 className="text-lg font-bold text-white mb-2">Failed to Sync Records</h3>
-              <p className="text-sm text-slate-400 mb-6">{error}</p>
+            <div className="py-16 text-center bg-card border border-border rounded-lg p-8 border border-danger/20 max-w-md mx-auto">
+              <AlertCircle className="w-12 h-12 text-danger mx-auto mb-4 animate-bounce" />
+              <h3 className="text-lg font-bold text-foreground mb-2">Failed to Sync Records</h3>
+              <p className="text-sm text-muted-foreground mb-6">{error}</p>
               <Button variant="primary" onClick={() => loadAttendanceData(true)}>Retry Reload</Button>
             </div>
           ) : (
@@ -828,57 +827,57 @@ export const AdminAttendance: React.FC = () => {
               {/* Summary Stats Grid (Total Staff, Present, Late, Half Day, On Leave / Absent, Missed Out, In Office) */}
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
                 {/* Total Staff */}
-                <Card variant="glass" className="p-3 flex flex-col justify-between border-slate-500/10 min-h-[80px]">
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Total Staff</span>
-                  <p className="text-xl font-extrabold text-white mt-1">{totalStaffCount}</p>
+                <Card variant="glass" className="p-3 flex flex-col justify-between border-border min-h-[80px]">
+                  <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Total Staff</span>
+                  <p className="text-xl font-extrabold text-foreground mt-1">{totalStaffCount}</p>
                 </Card>
 
                 {/* Present */}
-                <Card variant="glass" glowColor="emerald" className="p-3 flex flex-col justify-between border-emerald-500/10 min-h-[80px]">
-                  <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">Present</span>
-                  <p className="text-xl font-extrabold text-emerald-400 mt-1">{presentCount}</p>
+                <Card variant="glass" glowColor="emerald" className="p-3 flex flex-col justify-between border-success/10 min-h-[80px]">
+                  <span className="text-[9px] font-bold text-success uppercase tracking-wider">Present</span>
+                  <p className="text-xl font-extrabold text-success mt-1">{presentCount}</p>
                 </Card>
 
                 {/* Late */}
-                <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-amber-500/10 min-h-[80px]">
-                  <span className="text-[9px] font-bold text-amber-400 uppercase tracking-wider">Late</span>
-                  <p className="text-xl font-extrabold text-amber-400 mt-1">{lateCount}</p>
+                <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-warning/10 min-h-[80px]">
+                  <span className="text-[9px] font-bold text-warning uppercase tracking-wider">Late</span>
+                  <p className="text-xl font-extrabold text-warning mt-1">{lateCount}</p>
                 </Card>
 
                 {/* Half Day */}
-                <Card variant="glass" className="p-3 flex flex-col justify-between border-indigo-500/10 min-h-[80px]">
-                  <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-wider">Half Day</span>
-                  <p className="text-xl font-extrabold text-indigo-400 mt-1">{halfDayCount}</p>
+                <Card variant="glass" className="p-3 flex flex-col justify-between border-primary/10 min-h-[80px]">
+                  <span className="text-[9px] font-bold text-primary uppercase tracking-wider">Half Day</span>
+                  <p className="text-xl font-extrabold text-primary mt-1">{halfDayCount}</p>
                 </Card>
 
                 {/* On Leave / Absent */}
-                <Card variant="glass" className="p-3 flex flex-col justify-between border-blue-500/10 min-h-[80px]">
-                  <span className="text-[9px] font-bold text-blue-400 uppercase tracking-wider">On Leave / Absent</span>
-                  <p className="text-xl font-extrabold text-blue-400 mt-1">{leaveCount}</p>
+                <Card variant="glass" className="p-3 flex flex-col justify-between border-border min-h-[80px]">
+                  <span className="text-[9px] font-bold text-primary uppercase tracking-wider">On Leave / Absent</span>
+                  <p className="text-xl font-extrabold text-primary mt-1">{leaveCount}</p>
                 </Card>
 
                 {/* Missed Out */}
-                <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-rose-500/10 min-h-[80px]">
-                  <span className="text-[9px] font-bold text-rose-450 uppercase tracking-wider">Missed Out</span>
-                  <p className="text-xl font-extrabold text-rose-450 mt-1">{missedOutCount}</p>
+                <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-danger/10 min-h-[80px]">
+                  <span className="text-[9px] font-bold text-danger uppercase tracking-wider">Missed Out</span>
+                  <p className="text-xl font-extrabold text-danger mt-1">{missedOutCount}</p>
                 </Card>
 
                 {/* In Office */}
-                <Card variant="glass" glowColor="indigo" className="p-3 flex flex-col justify-between border-indigo-500/10 min-h-[80px]">
-                  <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-wider">In Office</span>
-                  <p className="text-xl font-extrabold text-indigo-400 mt-1">{inOfficeCount}</p>
+                <Card variant="glass" glowColor="indigo" className="p-3 flex flex-col justify-between border-primary/10 min-h-[80px]">
+                  <span className="text-[9px] font-bold text-primary uppercase tracking-wider">In Office</span>
+                  <p className="text-xl font-extrabold text-primary mt-1">{inOfficeCount}</p>
                 </Card>
               </div>
 
               {/* Tab navigation */}
-              <div className="flex gap-4 border-b border-white/5 pb-1 mt-4">
+              <div className="flex gap-4 border-b border-border pb-1 mt-4">
                 <button
                   onClick={() => setAdminTab('registry')}
                   className={`pb-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all duration-200 ${
-                    adminTab === 'registry'
-                      ? 'border-indigo-500 text-white font-extrabold'
-                      : 'border-transparent text-slate-450 hover:text-slate-200'
-                  }`}
+ adminTab === 'registry'
+ ? 'border-primary text-foreground font-extrabold'
+ : 'border-transparent text-muted-foreground hover:text-foreground'
+ }`}
                 >
                   Daily Registry
                 </button>
@@ -888,10 +887,10 @@ export const AdminAttendance: React.FC = () => {
                     generateReport();
                   }}
                   className={`pb-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all duration-200 ${
-                    adminTab === 'reports'
-                      ? 'border-indigo-500 text-white font-extrabold'
-                      : 'border-transparent text-slate-450 hover:text-slate-200'
-                  }`}
+ adminTab === 'reports'
+ ? 'border-primary text-foreground font-extrabold'
+ : 'border-transparent text-muted-foreground hover:text-foreground'
+ }`}
                 >
                   Custom Reports
                 </button>
@@ -901,14 +900,14 @@ export const AdminAttendance: React.FC = () => {
               {adminTab === 'registry' && (
                 <section className="space-y-4 pt-2 animate-fade-in">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <h2 className="text-base md:text-lg font-extrabold text-white tracking-wide flex items-center gap-2">
-                      <UserCheck className="w-5 h-5 text-indigo-400" />
+                    <h2 className="text-base md:text-lg font-extrabold text-foreground tracking-wide flex items-center gap-2">
+                      <UserCheck className="w-5 h-5 text-primary" />
                       Daily Staff Registry
                     </h2>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={handleExportDailyRegistryExcel}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
                         title="Export Today's Registry to Excel / CSV"
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -916,14 +915,14 @@ export const AdminAttendance: React.FC = () => {
                       </button>
                       <button
                         onClick={handleExportDailyRegistryPDF}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft hover:bg-danger-soft text-danger border border-danger/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
                         title="Export Today's Registry to PDF"
                       >
                         <FileText className="w-3.5 h-3.5" />
                         <span>Export PDF</span>
                       </button>
-                      <div className="flex items-center gap-1 text-[11px] text-slate-400 font-semibold bg-slate-900 border border-white/5 py-1 px-2.5 rounded-lg">
-                        <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                      <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-semibold bg-card border border-border py-1 px-2.5 rounded-lg">
+                        <Calendar className="w-3.5 h-3.5 text-primary" />
                         <span>Today: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                       </div>
                     </div>
@@ -932,18 +931,18 @@ export const AdminAttendance: React.FC = () => {
                   {/* Search & Filter pills */}
                   <div className="flex flex-col md:flex-row gap-3">
                     <div className="relative flex-1">
-                      <Search className="absolute left-3 top-3.5 w-4 h-4 text-slate-400" />
+                      <Search className="absolute left-3 top-3.5 w-4 h-4 text-muted-foreground" />
                       <input 
                         type="text" 
                         placeholder="Search employee name, staff code, or department..." 
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-4 py-3 rounded-xl bg-slate-900/60 border border-white/5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/30 transition-all duration-300"
+                        className="w-full pl-9 pr-4 py-3 rounded-md bg-muted-2 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-[var(--ring)] transition-all duration-300"
                       />
                       {searchQuery && (
                         <button 
                           onClick={() => setSearchQuery('')}
-                          className="absolute right-3 top-3.5 text-slate-400 hover:text-white"
+                          className="absolute right-3 top-3.5 text-muted-foreground hover:text-white"
                         >
                           <X className="w-4 h-4" />
                         </button>
@@ -951,7 +950,7 @@ export const AdminAttendance: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
-                      <div className="text-slate-500 mr-1 p-2 bg-slate-900/50 rounded-xl border border-slate-800 shrink-0">
+                      <div className="text-muted-foreground mr-1 p-2 bg-muted-2 rounded-md border border-border shrink-0">
                         <Filter className="w-3.5 h-3.5" />
                       </div>
                       {(['All', 'Present', 'Late', 'Half Day', 'Leave', 'Absent'] as const).map(filter => (
@@ -959,11 +958,11 @@ export const AdminAttendance: React.FC = () => {
                           key={filter}
                           onClick={() => setStatusFilter(filter)}
                           className={`
-                            text-xs px-3.5 py-2.5 rounded-xl font-bold border transition-all duration-300 shrink-0
-                            ${statusFilter === filter 
-                              ? 'bg-gradient-to-r from-indigo-500 to-purple-600 border-indigo-400 text-white shadow-md' 
-                              : 'bg-slate-900/60 border-white/5 text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}
-                          `}
+ text-xs px-3.5 py-2.5 rounded-md font-bold border transition-all duration-300 shrink-0
+ ${statusFilter === filter 
+ ? 'bg-primary border-primary text-foreground shadow-md' 
+ : 'bg-muted-2 border-border text-muted-foreground hover:text-foreground hover:bg-muted'}
+ `}
                         >
                           {filter}
                         </button>
@@ -976,10 +975,10 @@ export const AdminAttendance: React.FC = () => {
                     {filteredStaff.length > 0 ? (
                       <>
                         {/* Desktop Table View */}
-                        <div className="hidden md:block overflow-hidden rounded-2xl border border-white/5 glass-panel">
+                        <div className="hidden md:block overflow-hidden rounded-lg border border-border bg-card">
                           <table className="w-full text-left border-collapse">
                             <thead>
-                              <tr className="border-b border-white/5 bg-slate-900/40 text-xs font-bold text-indigo-400 tracking-wider">
+                              <tr className="border-b border-border bg-muted-2 text-xs font-bold text-primary tracking-wider">
                                 <th className="py-4 px-6">Staff Member</th>
                                 <th className="py-4 px-6">Designation</th>
                                 <th className="py-4 px-6">Punch In</th>
@@ -987,7 +986,7 @@ export const AdminAttendance: React.FC = () => {
                                 <th className="py-4 px-6 text-right">Actions / Status</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/5 text-sm">
+                            <tbody className="divide-y divide-border text-sm">
                               {filteredStaff.map((staff) => {
                                 // Determine display fields
                                 const isPunchIn = staff.todayRecord?.punch_in;
@@ -1019,37 +1018,37 @@ export const AdminAttendance: React.FC = () => {
                                 }
 
                                 return (
-                                  <tr key={staff.id} className="hover:bg-slate-900/20 transition-colors duration-200">
+                                  <tr key={staff.id} className="hover:bg-muted-2 transition-colors duration-200">
                                     <td className="py-4 px-6 flex items-center gap-3.5">
                                       <img 
                                         src={staff.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=128&auto=format&fit=crop'} 
                                         alt="" 
-                                        className="w-10 h-10 rounded-full border border-slate-800 object-cover"
+                                        className="w-10 h-10 rounded-full border border-border object-cover"
                                       />
                                       <div>
-                                        <h4 className="font-bold text-slate-200 leading-tight">{staff.full_name}</h4>
-                                        <span className="text-xs text-slate-500 font-semibold">{staff.staff_code} &bull; {staff.role_name}</span>
+                                        <h4 className="font-bold text-foreground leading-tight">{staff.full_name}</h4>
+                                        <span className="text-xs text-muted-foreground font-semibold">{staff.staff_code} &bull; {staff.role_name}</span>
                                       </div>
                                     </td>
-                                    <td className="py-4 px-6 text-slate-400 font-medium">{staff.designation || staff.role_name || 'Senior Sales Consultant'}</td>
-                                    <td className="py-4 px-6 font-semibold text-slate-200">
+                                    <td className="py-4 px-6 text-muted-foreground font-medium">{staff.designation || staff.role_name || 'Senior Sales Consultant'}</td>
+                                    <td className="py-4 px-6 font-semibold text-foreground">
                                       {isPunchIn ? (
                                         <span className="flex items-center gap-1.5">
-                                          <Star className="w-3.5 h-3.5 text-emerald-400" />
+                                          <Star className="w-3.5 h-3.5 text-success" />
                                           {isPunchIn}
                                         </span>
                                       ) : (
-                                        <span className="text-slate-600">—</span>
+                                        <span className="text-muted-foreground">—</span>
                                       )}
                                     </td>
-                                    <td className="py-4 px-6 font-semibold text-slate-200">
+                                    <td className="py-4 px-6 font-semibold text-foreground">
                                       {isPunchOut ? (
                                         <span className="flex items-center gap-1.5">
-                                          <Star className="w-3.5 h-3.5 text-indigo-400" />
+                                          <Star className="w-3.5 h-3.5 text-primary" />
                                           {isPunchOut}
                                         </span>
                                       ) : (
-                                        <span className="text-slate-600">—</span>
+                                        <span className="text-muted-foreground">—</span>
                                       )}
                                     </td>
                                     <td className="py-4 px-6 text-right">
@@ -1106,18 +1105,18 @@ export const AdminAttendance: React.FC = () => {
                             }
 
                             return (
-                              <Card key={staff.id} variant="glass" className="p-4 border border-white/5">
+                              <Card key={staff.id} variant="glass" className="p-4 border border-border">
                                 <div className="flex justify-between items-start gap-2">
                                   <div className="flex items-center gap-3">
                                     <img 
                                       src={staff.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=128&auto=format&fit=crop'} 
                                       alt="" 
-                                      className="w-11 h-11 rounded-full border border-slate-800 object-cover"
+                                      className="w-11 h-11 rounded-full border border-border object-cover"
                                     />
                                     <div>
-                                      <h4 className="text-sm font-bold text-slate-200">{staff.full_name}</h4>
-                                      <span className="text-[10px] text-slate-400 font-semibold">{staff.staff_code} &bull; {staff.role_name}</span>
-                                      <p className="text-[10px] text-indigo-400/80 font-bold mt-0.5">{staff.designation || staff.role_name || 'Senior Sales Consultant'}</p>
+                                      <h4 className="text-sm font-bold text-foreground">{staff.full_name}</h4>
+                                      <span className="text-[10px] text-muted-foreground font-semibold">{staff.staff_code} &bull; {staff.role_name}</span>
+                                      <p className="text-[10px] text-primary font-bold mt-0.5">{staff.designation || staff.role_name || 'Senior Sales Consultant'}</p>
                                     </div>
                                   </div>
                                   <Badge variant={badgeVariant} className="px-2 py-0 text-[10px]">
@@ -1125,43 +1124,43 @@ export const AdminAttendance: React.FC = () => {
                                   </Badge>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-white/5 text-xs">
+                                <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-border text-xs">
                                   <div>
-                                    <span className="text-slate-500 font-medium block">Punch In:</span>
+                                    <span className="text-muted-foreground font-medium block">Punch In:</span>
                                     {isPunchIn ? (
-                                      <span className="text-slate-200 font-bold flex items-center gap-1 mt-0.5">
-                                        <Star className="w-3.5 h-3.5 text-emerald-400" />
+                                      <span className="text-foreground font-bold flex items-center gap-1 mt-0.5">
+                                        <Star className="w-3.5 h-3.5 text-success" />
                                         {isPunchIn}
                                       </span>
                                     ) : (
-                                      <span className="text-slate-600 block mt-0.5">—</span>
+                                      <span className="text-muted-foreground block mt-0.5">—</span>
                                     )}
                                   </div>
 
                                   <div>
-                                    <span className="text-slate-500 font-medium block">Punch Out:</span>
+                                    <span className="text-muted-foreground font-medium block">Punch Out:</span>
                                     {isPunchOut ? (
-                                      <span className="text-slate-200 font-bold flex items-center gap-1 mt-0.5">
-                                        <Star className="w-3.5 h-3.5 text-indigo-400" />
+                                      <span className="text-foreground font-bold flex items-center gap-1 mt-0.5">
+                                        <Star className="w-3.5 h-3.5 text-primary" />
                                         {isPunchOut}
                                       </span>
                                     ) : (
-                                      <span className="text-slate-600 block mt-0.5">—</span>
+                                      <span className="text-muted-foreground block mt-0.5">—</span>
                                     )}
                                   </div>
                                 </div>
 
                                 {staff.todayRecord?.lat && staff.todayRecord?.lng && (
-                                  <div className="mt-3 pt-2.5 border-t border-white/5 flex items-center justify-between">
-                                    <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                                      <MapPin className="w-3.5 h-3.5 text-indigo-400" />
+                                  <div className="mt-3 pt-2.5 border-t border-border flex items-center justify-between">
+                                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                      <MapPin className="w-3.5 h-3.5 text-primary" />
                                       <span>Verified GPS: {staff.todayRecord.lat.toFixed(4)}, {staff.todayRecord.lng.toFixed(4)}</span>
                                     </div>
                                     <a 
                                       href={`https://www.google.com/maps/search/?api=1&query=${staff.todayRecord.lat},${staff.todayRecord.lng}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="text-[10px] text-indigo-400 font-bold flex items-center gap-0.5 hover:underline"
+                                      className="text-[10px] text-primary font-bold flex items-center gap-0.5 hover:underline"
                                     >
                                       <span>View Map</span>
                                       <ExternalLink className="w-2.5 h-2.5" />
@@ -1169,7 +1168,7 @@ export const AdminAttendance: React.FC = () => {
                                   </div>
                                 )}
 
-                                <div className="mt-3 pt-2.5 border-t border-white/5">
+                                <div className="mt-3 pt-2.5 border-t border-border">
                                   <Button 
                                     variant="glass" 
                                     size="sm" 
@@ -1185,9 +1184,9 @@ export const AdminAttendance: React.FC = () => {
                         </div>
                       </>
                     ) : (
-                      <div className="text-center py-12 glass-card rounded-2xl border border-dashed border-white/5">
-                        <AlertCircle className="w-8 h-8 text-slate-500 mx-auto mb-2.5" />
-                        <p className="text-sm text-slate-400 font-medium">No employees found matching criteria.</p>
+                      <div className="text-center py-12 bg-card border border-border rounded-lg border border-dashed border-border">
+                        <AlertCircle className="w-8 h-8 text-muted-foreground mx-auto mb-2.5" />
+                        <p className="text-sm text-muted-foreground font-medium">No employees found matching criteria.</p>
                       </div>
                     )}
                   </div>
@@ -1196,35 +1195,35 @@ export const AdminAttendance: React.FC = () => {
 
               {/* TAB 2: CUSTOM REPORTS */}
               {adminTab === 'reports' && (
-                <Card variant="glass" className="p-6 border-white/5 space-y-6 animate-fade-in mt-2">
-                  <div className="border-b border-white/5 pb-3 flex justify-between items-center">
+                <Card variant="glass" className="p-6 border-border space-y-6 animate-fade-in mt-2">
+                  <div className="border-b border-border pb-3 flex justify-between items-center">
                     <div>
-                      <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-indigo-400" />
+                      <h3 className="text-sm font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
+                        <Calendar className="w-4 h-4 text-primary" />
                         Custom Date Range Reports
                       </h3>
-                      <p className="text-[10px] text-slate-500 font-medium mt-1">Generate and export aggregated staff attendance stats for a custom period.</p>
+                      <p className="text-[10px] text-muted-foreground font-medium mt-1">Generate and export aggregated staff attendance stats for a custom period.</p>
                     </div>
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-4 items-end">
                     <div className="space-y-1.5 flex-1">
-                      <label className="text-[10px] font-bold uppercase text-slate-400">From Date</label>
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground">From Date</label>
                       <input 
                         type="date" 
                         value={reportFromDate}
                         onChange={(e) => setReportFromDate(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/5 text-xs font-bold text-slate-200 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs font-bold text-foreground focus:outline-none focus:border-primary"
                       />
                     </div>
 
                     <div className="space-y-1.5 flex-1">
-                      <label className="text-[10px] font-bold uppercase text-slate-400">To Date</label>
+                      <label className="text-[10px] font-bold uppercase text-muted-foreground">To Date</label>
                       <input 
                         type="date" 
                         value={reportToDate}
                         onChange={(e) => setReportToDate(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-white/5 text-xs font-bold text-slate-200 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs font-bold text-foreground focus:outline-none focus:border-primary"
                       />
                     </div>
 
@@ -1240,7 +1239,7 @@ export const AdminAttendance: React.FC = () => {
                       <button
                         onClick={handleExportCustomReportExcel}
                         disabled={reportData.length === 0}
-                        className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-md bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-bold transition-all cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Export Custom Report to Excel"
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -1249,7 +1248,7 @@ export const AdminAttendance: React.FC = () => {
                       <button
                         onClick={handleExportCustomReportPDF}
                         disabled={reportData.length === 0}
-                        className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-md bg-danger-soft hover:bg-danger-soft text-danger border border-danger/30 text-xs font-bold transition-all cursor-pointer shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Export Custom Report to PDF"
                       >
                         <FileText className="w-3.5 h-3.5" />
@@ -1259,10 +1258,10 @@ export const AdminAttendance: React.FC = () => {
                   </div>
 
                   {reportData.length > 0 ? (
-                    <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/20">
+                    <div className="overflow-x-auto rounded-md border border-border bg-muted-2">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
-                          <tr className="border-b border-white/5 bg-slate-950/50 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          <tr className="border-b border-border bg-muted-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                             <th className="py-3 px-4">Staff Member</th>
                             <th className="py-3 px-4">Designation</th>
                             <th className="py-3 px-4 text-center">Present</th>
@@ -1271,24 +1270,24 @@ export const AdminAttendance: React.FC = () => {
                             <th className="py-3 px-4 text-center">Leave</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-white/5 text-slate-355 font-semibold">
+                        <tbody className="divide-y divide-border text-muted-foreground font-semibold">
                           {reportData.map((row) => (
-                            <tr key={row.id} className="hover:bg-slate-900/10">
-                              <td className="py-3 px-4 text-white font-bold">{row.full_name}</td>
-                              <td className="py-3 px-4 text-slate-400">{row.designation}</td>
-                              <td className="py-3 px-4 text-center text-emerald-400">{row.present}</td>
-                              <td className="py-3 px-4 text-center text-amber-400">{row.late}</td>
-                              <td className="py-3 px-4 text-center text-indigo-400">{row.halfDay}</td>
-                              <td className="py-3 px-4 text-center text-blue-400">{row.leave}</td>
+                            <tr key={row.id} className="hover:bg-muted-2">
+                              <td className="py-3 px-4 text-foreground font-bold">{row.full_name}</td>
+                              <td className="py-3 px-4 text-muted-foreground">{row.designation}</td>
+                              <td className="py-3 px-4 text-center text-success">{row.present}</td>
+                              <td className="py-3 px-4 text-center text-warning">{row.late}</td>
+                              <td className="py-3 px-4 text-center text-primary">{row.halfDay}</td>
+                              <td className="py-3 px-4 text-center text-primary">{row.leave}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
                     </div>
                   ) : (
-                    <div className="text-center py-12 border border-dashed border-white/5 rounded-2xl">
-                      <AlertCircle className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-                      <p className="text-xs text-slate-550 font-bold">Select date range and click Generate Report.</p>
+                    <div className="text-center py-12 border border-dashed border-border rounded-lg">
+                      <AlertCircle className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-xs text-muted-foreground font-bold">Select date range and click Generate Report.</p>
                     </div>
                   )}
                 </Card>
@@ -1296,31 +1295,31 @@ export const AdminAttendance: React.FC = () => {
 
               {/* DRILLDOWN STAFF PORTAL MODAL VIEW */}
               {selectedStaffForDrill && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-                  <Card variant="glass" className="w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-white/10 p-6 flex flex-col gap-6 relative">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-card/80 animate-fade-in">
+                  <Card variant="glass" className="w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-border p-6 flex flex-col gap-6 relative">
                     <button 
                       onClick={() => setSelectedStaffForDrill(null)}
-                      className="absolute top-4 right-4 p-2 rounded-lg bg-slate-900/85 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+                      className="absolute top-4 right-4 p-2 rounded-lg bg-card/85 hover:bg-muted text-muted-foreground hover:text-white transition-colors"
                     >
                       <X className="w-5 h-5" />
                     </button>
 
-                    <div className="border-b border-white/5 pb-4 flex items-center gap-4">
+                    <div className="border-b border-border pb-4 flex items-center gap-4">
                       <img 
                         src={selectedStaffForDrill.avatar_url} 
                         alt="" 
-                        className="w-12 h-12 rounded-full border border-slate-700 object-cover"
+                        className="w-12 h-12 rounded-full border border-border object-cover"
                       />
                       <div>
-                        <h3 className="text-base font-extrabold text-white">{selectedStaffForDrill.full_name} Attendance Registry</h3>
-                        <p className="text-xs text-slate-400 font-bold">{selectedStaffForDrill.staff_code} &bull; {selectedStaffForDrill.role_name} ({selectedStaffForDrill.gender})</p>
+                        <h3 className="text-base font-extrabold text-foreground">{selectedStaffForDrill.full_name} Attendance Registry</h3>
+                        <p className="text-xs text-muted-foreground font-bold">{selectedStaffForDrill.staff_code} &bull; {selectedStaffForDrill.role_name} ({selectedStaffForDrill.gender})</p>
                       </div>
                     </div>
 
                     {loadingDrill ? (
                       <div className="py-16 text-center">
-                        <div className="w-10 h-10 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin mx-auto mb-3"></div>
-                        <p className="text-xs font-semibold text-slate-400">Syncing member logs...</p>
+                        <div className="w-10 h-10 rounded-full border-4 border-primary/20 border-t-indigo-500 animate-spin mx-auto mb-3"></div>
+                        <p className="text-xs font-semibold text-muted-foreground">Syncing member logs...</p>
                       </div>
                     ) : (
                       (() => {
@@ -1412,18 +1411,18 @@ export const AdminAttendance: React.FC = () => {
 
                         return (
                           <div className="space-y-6">
-                              <div className="flex justify-between items-center bg-slate-900/60 p-4 rounded-xl border border-white/5">
-                                <span className="text-xs font-bold text-slate-350 uppercase">Filter Registry Month</span>
+                              <div className="flex justify-between items-center bg-muted-2 p-4 rounded-md border border-border">
+                                <span className="text-xs font-bold text-muted-foreground uppercase">Filter Registry Month</span>
                                 <div className="flex items-center gap-2">
                                   <input 
                                     type="month" 
                                     value={drillMonth}
                                     onChange={(e) => setDrillMonth(e.target.value)}
-                                    className="px-3 py-1.5 rounded-xl bg-slate-950 border border-white/10 text-xs font-bold text-slate-200 focus:outline-none"
+                                    className="px-3 py-1.5 rounded-md bg-card border border-border text-xs font-bold text-foreground focus:outline-none"
                                   />
                                   <button 
                                     onClick={() => handleExportStaffAttendanceExcel(selectedStaffForDrill, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
                                     title="Export Attendance Report to Excel / CSV"
                                   >
                                     <Download className="w-3.5 h-3.5" />
@@ -1431,7 +1430,7 @@ export const AdminAttendance: React.FC = () => {
                                   </button>
                                   <button 
                                     onClick={() => handleExportStaffAttendancePDF(selectedStaffForDrill, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft hover:bg-danger-soft text-danger border border-danger/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
                                     title="Export Attendance Report to PDF"
                                   >
                                     <FileText className="w-3.5 h-3.5" />
@@ -1442,37 +1441,37 @@ export const AdminAttendance: React.FC = () => {
 
                             {/* Summary Metrics */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-                              <Card variant="glass" glowColor="emerald" className="p-3 flex flex-col justify-between border-emerald-500/10">
-                                <span className="text-[9px] font-bold text-emerald-400 uppercase">Present</span>
-                                <p className="text-lg font-extrabold text-emerald-400 mt-1">{presentCount}</p>
+                              <Card variant="glass" glowColor="emerald" className="p-3 flex flex-col justify-between border-success/10">
+                                <span className="text-[9px] font-bold text-success uppercase">Present</span>
+                                <p className="text-lg font-extrabold text-success mt-1">{presentCount}</p>
                               </Card>
-                              <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-purple-500/10">
-                                <span className="text-[9px] font-bold text-amber-400 uppercase">Late</span>
-                                <p className="text-lg font-extrabold text-amber-400 mt-1">{lateCount}</p>
+                              <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-primary/10">
+                                <span className="text-[9px] font-bold text-warning uppercase">Late</span>
+                                <p className="text-lg font-extrabold text-warning mt-1">{lateCount}</p>
                               </Card>
-                              <Card variant="glass" className="p-3 flex flex-col justify-between border-indigo-500/10">
-                                <span className="text-[9px] font-bold text-indigo-400 uppercase">Half Day</span>
-                                <p className="text-lg font-extrabold text-indigo-400 mt-1">{halfDayCount}</p>
+                              <Card variant="glass" className="p-3 flex flex-col justify-between border-primary/10">
+                                <span className="text-[9px] font-bold text-primary uppercase">Half Day</span>
+                                <p className="text-lg font-extrabold text-primary mt-1">{halfDayCount}</p>
                               </Card>
-                              <Card variant="glass" className="p-3 flex flex-col justify-between border-blue-500/10">
-                                <span className="text-[9px] font-bold text-blue-400 uppercase">Leave</span>
-                                <p className="text-lg font-extrabold text-blue-400 mt-1">{leaveCount}</p>
+                              <Card variant="glass" className="p-3 flex flex-col justify-between border-border">
+                                <span className="text-[9px] font-bold text-primary uppercase">Leave</span>
+                                <p className="text-lg font-extrabold text-primary mt-1">{leaveCount}</p>
                               </Card>
-                              <Card variant="glass" className="p-3 flex flex-col justify-between border-white/5">
-                                <span className="text-[9px] font-bold text-slate-400 uppercase">Working Days</span>
-                                <p className="text-lg font-extrabold text-white mt-1">{totalWorkingDays}</p>
+                              <Card variant="glass" className="p-3 flex flex-col justify-between border-border">
+                                <span className="text-[9px] font-bold text-muted-foreground uppercase">Working Days</span>
+                                <p className="text-lg font-extrabold text-foreground mt-1">{totalWorkingDays}</p>
                               </Card>
-                              <Card variant="glass" glowColor={attendancePercentage >= 90 ? 'emerald' : 'none'} className="p-3 flex flex-col justify-between border-white/5">
-                                <span className="text-[9px] font-bold text-indigo-400 uppercase">Att. %</span>
-                                <p className="text-lg font-extrabold text-white mt-1">{attendancePercentage}%</p>
+                              <Card variant="glass" glowColor={attendancePercentage >= 90 ? 'emerald' : 'none'} className="p-3 flex flex-col justify-between border-border">
+                                <span className="text-[9px] font-bold text-primary uppercase">Att. %</span>
+                                <p className="text-lg font-extrabold text-foreground mt-1">{attendancePercentage}%</p>
                               </Card>
                             </div>
 
                             {/* Logs table */}
-                            <div className="overflow-x-auto rounded-xl border border-white/5 bg-slate-950/20 max-h-[40vh] overflow-y-auto">
+                            <div className="overflow-x-auto rounded-md border border-border bg-muted-2 max-h-[40vh] overflow-y-auto">
                               <table className="w-full text-left border-collapse text-xs">
                                 <thead>
-                                  <tr className="border-b border-white/5 bg-slate-950/50 text-[10px] font-bold text-slate-400 uppercase tracking-wider sticky top-0">
+                                  <tr className="border-b border-border bg-muted-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky top-0">
                                     <th className="py-2.5 px-3">Selfie</th>
                                     <th className="py-2.5 px-3">Date</th>
                                     <th className="py-2.5 px-3"> In</th>
@@ -1481,26 +1480,26 @@ export const AdminAttendance: React.FC = () => {
                                     <th className="py-2.5 px-3 text-center">Status</th>
                                   </tr>
                                 </thead>
-                                <tbody className="divide-y divide-white/5 text-slate-350 font-semibold">
+                                <tbody className="divide-y divide-border text-muted-foreground font-semibold">
                                   {monthlyLogs.slice().reverse().map((log: any) => (
-                                    <tr key={log.date} className="hover:bg-slate-900/10">
+                                    <tr key={log.date} className="hover:bg-muted-2">
                                       <td className="py-2.5 px-3">
                                         {log.selfie_url ? (
                                           <a href={log.selfie_url} target="_blank" rel="noopener noreferrer">
                                             <img 
                                               src={log.selfie_url} 
                                               alt="" 
-                                              className="w-8 h-8 rounded-full border border-slate-700 object-cover cursor-pointer hover:border-indigo-400"
+                                              className="w-8 h-8 rounded-full border border-border object-cover cursor-pointer hover:border-primary"
                                             />
                                           </a>
                                         ) : (
-                                          <span className="text-slate-700 block text-center">—</span>
+                                          <span className="text-foreground block text-center">—</span>
                                         )}
                                       </td>
-                                      <td className="py-2.5 px-3 text-slate-400">{log.date}</td>
-                                      <td className="py-2.5 px-3 text-white font-bold">{log.punch_in || '-'}</td>
-                                      <td className="py-2.5 px-3 text-slate-400">{log.punch_out || '-'}</td>
-                                      <td className="py-2.5 px-3 text-slate-400">{log.working_hours}</td>
+                                      <td className="py-2.5 px-3 text-muted-foreground">{log.date}</td>
+                                      <td className="py-2.5 px-3 text-foreground font-bold">{log.punch_in || '-'}</td>
+                                      <td className="py-2.5 px-3 text-muted-foreground">{log.punch_out || '-'}</td>
+                                      <td className="py-2.5 px-3 text-muted-foreground">{log.working_hours}</td>
                                       <td className="py-2.5 px-3 text-center">
                                         <Badge 
                                           variant={
@@ -1533,11 +1532,11 @@ export const AdminAttendance: React.FC = () => {
       </div>
 
       {/* Mobile Sticky Bottom Tab Bar Navigation (Hidden on desktop) */}
-      <nav className="fixed bottom-0 left-0 right-0 glass-panel border-t border-white/5 backdrop-blur-md py-2.5 px-6 z-40 md:hidden">
+      <nav className="fixed bottom-0 left-0 right-0 bg-card border border-border border-t border-border py-2.5 px-6 z-40 md:hidden">
         <div className="max-w-md mx-auto flex items-center justify-around">
           <button 
             onClick={() => setActiveTab('sales')}
-            className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+            className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
           >
             <Briefcase className="w-5 h-5" />
             <span className="text-[9px] font-medium">Sales Hub</span>
@@ -1545,20 +1544,20 @@ export const AdminAttendance: React.FC = () => {
 
           <button 
             onClick={() => setActiveTab('history')}
-            className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+            className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
           >
             <Star className="w-5 h-5" />
             <span className="text-[9px] font-medium">History</span>
           </button>
           
-          <button className="flex flex-col items-center gap-1 text-indigo-400 select-none">
+          <button className="flex flex-col items-center gap-1 text-primary select-none">
             <Star className="w-5 h-5" />
             <span className="text-[9px] font-bold">Attendance</span>
           </button>
 
           <button 
             onClick={() => setActiveTab('leads')}
-            className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+            className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
           >
             <TrendingUp className="w-5 h-5" />
             <span className="text-[9px] font-medium">Leads</span>
@@ -1568,7 +1567,7 @@ export const AdminAttendance: React.FC = () => {
             <>
               <button 
                 onClick={() => setActiveTab('academy_batches')}
-                className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+                className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
               >
                 <Award className="w-5 h-5" />
                 <span className="text-[9px] font-medium">Academy</span>
@@ -1576,7 +1575,7 @@ export const AdminAttendance: React.FC = () => {
 
               <button 
                 onClick={() => setActiveTab('staff')}
-                className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+                className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
               >
                 <Star className="w-5 h-5" />
                 <span className="text-[9px] font-medium">Staff</span>
@@ -1584,7 +1583,7 @@ export const AdminAttendance: React.FC = () => {
 
               <button 
                 onClick={() => setActiveTab('finance')}
-                className="flex flex-col items-center gap-1 text-slate-500 hover:text-slate-300 transition-colors duration-200 cursor-pointer"
+                className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
               >
                 <Briefcase className="w-5 h-5" />
                 <span className="text-[9px] font-medium">Finance</span>

@@ -20,8 +20,15 @@ export const PunchModal: React.FC<PunchModalProps> = ({
   punchIn,
   punchOut
 }) => {
-  const OFFICE_COORDS = { lat: 10.9345771, lng: 76.0016118 };
-  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  // Office geofence. A punch is only accepted from inside this radius.
+  // Overridable per-deployment so moving office does not need a code change.
+  const OFFICE_COORDS = {
+    lat: Number(import.meta.env.VITE_OFFICE_LAT ?? 10.934485),
+    lng: Number(import.meta.env.VITE_OFFICE_LNG ?? 76.001633)
+  };
+  const GEOFENCE_RADIUS_M = Number(import.meta.env.VITE_GEOFENCE_RADIUS_M ?? 50);
+
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -52,7 +59,7 @@ export const PunchModal: React.FC<PunchModalProps> = ({
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setUserCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
+          setUserCoords({ lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy });
         },
         (error) => {
           console.error("Location tracking error:", error);
@@ -62,7 +69,7 @@ export const PunchModal: React.FC<PunchModalProps> = ({
 
       watchId = navigator.geolocation.watchPosition(
         (position) => {
-          setUserCoords({ lat: position.coords.latitude, lng: position.coords.longitude });
+          setUserCoords({ lat: position.coords.latitude, lng: position.coords.longitude, accuracy: position.coords.accuracy });
         },
         (error) => {
           console.error("Location tracking error:", error);
@@ -181,7 +188,8 @@ export const PunchModal: React.FC<PunchModalProps> = ({
           status = 'LATE'; // +5 mins grace period
         }
 
-        await punchIn(publicUrl, userCoords?.lat || OFFICE_COORDS.lat, userCoords?.lng || OFFICE_COORDS.lng, status);
+        if (!userCoords) throw new Error('Location unavailable — cannot record punch.');
+        await punchIn(publicUrl, userCoords.lat, userCoords.lng, status);
         alert(`Successfully punched in! Status: ${status}`);
       } else {
         // Punch Out
@@ -200,50 +208,59 @@ export const PunchModal: React.FC<PunchModalProps> = ({
 
   if (!isOpen) return null;
 
-  const distance = userCoords 
-    ? getHaversineDistance(userCoords.lat, userCoords.lng, OFFICE_COORDS.lat, OFFICE_COORDS.lng) 
+  const distance = userCoords
+    ? getHaversineDistance(userCoords.lat, userCoords.lng, OFFICE_COORDS.lat, OFFICE_COORDS.lng)
     : null;
-  const isOutOfRange = distance === null || distance > 20000; // 20km for testing? Should normally be smaller
+
+  // A reading less precise than the radius itself cannot prove the user is
+  // inside it, so treat it as unusable rather than letting it pass or fail
+  // at random.
+  const isFixUnreliable = userCoords !== null && userCoords.accuracy > GEOFENCE_RADIUS_M;
+  const isOutOfRange = distance === null || isFixUnreliable || distance > GEOFENCE_RADIUS_M;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <Card className="w-full max-w-[400px] p-6 relative space-y-6 text-center max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-fade-in">
+      <Card className="w-full max-w-[400px] p-6 relative space-y-6 text-center max-h-[90vh] overflow-y-auto bg-card dark:bg-card border border-border dark:border-border shadow-2xl">
         {/* Close Button */}
         <button 
           onClick={handleClose}
-          className="absolute top-4 right-4 p-2 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
+          className="absolute top-4 right-4 p-2 rounded-full bg-muted dark:bg-muted hover:bg-muted dark:hover:bg-muted text-muted-foreground dark:text-muted-foreground hover:text-foreground dark:hover:text-white transition-colors cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
 
         {/* Title / Header */}
         <div>
-          <h3 className="font-bold text-slate-800 dark:text-white text-base tracking-wide flex items-center justify-center gap-2">
-            <Camera className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+          <h3 className="font-bold text-foreground dark:text-white text-base tracking-wide flex items-center justify-center gap-2">
+            <Camera className="w-5 h-5 text-primary dark:text-primary" />
             <span>Punch {punchType} Selfie</span>
           </h3>
         </div>
 
         {/* Warning/Status Banner */}
         {distance === null ? (
-          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold uppercase tracking-wider animate-pulse flex items-center justify-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-amber-500 animate-ping"></span>
+          <div className="p-3.5 rounded-md bg-warning-soft border border-warning/20 text-warning text-xs font-bold uppercase tracking-wider animate-pulse flex items-center justify-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-warning animate-ping"></span>
             Acquiring GPS location...
           </div>
-        ) : distance > 20000 ? (
-          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-black uppercase tracking-widest animate-bounce">
-            🛑 TOO FAR! ({distance.toFixed(0)}m)
+        ) : isFixUnreliable ? (
+          <div className="p-3.5 rounded-md bg-warning-soft border border-warning/20 text-warning text-xs font-bold uppercase tracking-wider">
+            GPS too imprecise (±{userCoords?.accuracy.toFixed(0)}m) — move near a window and wait
+          </div>
+        ) : distance > GEOFENCE_RADIUS_M ? (
+          <div className="p-3.5 rounded-md bg-danger-soft border border-danger/20 text-danger text-xs font-black uppercase tracking-widest">
+            Too far from office ({distance.toFixed(0)}m of {GEOFENCE_RADIUS_M}m)
           </div>
         ) : (
-          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-black uppercase tracking-widest">
-            ✅ WITHIN RANGE ({distance.toFixed(0)}m)
+          <div className="p-3.5 rounded-md bg-success-soft border border-success/20 text-success text-xs font-black uppercase tracking-widest">
+            At office ({distance.toFixed(0)}m)
           </div>
         )}
 
         {/* Webcam Live Feed */}
-        <div className="relative w-full aspect-square rounded-2xl overflow-hidden bg-slate-950 shadow-inner">
+        <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-card shadow-inner">
           {cameraError ? (
-            <div className="absolute inset-0 flex items-center justify-center text-center p-4 text-rose-400 text-xs font-semibold">
+            <div className="absolute inset-0 flex items-center justify-center text-center p-4 text-danger text-xs font-semibold">
               {cameraError}
             </div>
           ) : (
@@ -264,11 +281,11 @@ export const PunchModal: React.FC<PunchModalProps> = ({
           <button 
             disabled={isOutOfRange || isPunching}
             onClick={handlePunch}
-            className={`w-full font-extrabold py-4 text-xs tracking-wider uppercase rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-lg border cursor-pointer ${
-              isOutOfRange 
-                ? 'bg-slate-800 text-slate-500 border-slate-700 opacity-50 cursor-not-allowed' 
-                : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-emerald-500/20 hover:shadow-emerald-500/40 hover:-translate-y-0.5 border-emerald-400/25 active:scale-95'
-            }`}
+            className={`w-full font-extrabold py-4 text-xs tracking-wider uppercase rounded-md transition-all duration-300 flex items-center justify-center gap-2 shadow-lg border cursor-pointer ${
+ isOutOfRange 
+ ? 'bg-muted text-muted-foreground border-border opacity-50 cursor-not-allowed' 
+ : 'bg-success text-white hover:brightness-110 border-success active:scale-95'
+ }`}
           >
             {isPunching ? (
               <>

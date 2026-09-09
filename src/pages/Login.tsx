@@ -33,37 +33,30 @@ export const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4 py-8 relative w-full max-w-full overflow-x-hidden font-sans">
-      
-      {/* Decorative Blur Background Circles */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-[-20%] left-[-20%] w-[70vw] h-[70vw] rounded-full bg-indigo-900/20 blur-[150px]"></div>
-        <div className="absolute bottom-[-20%] right-[-20%] w-[70vw] h-[70vw] rounded-full bg-purple-900/20 blur-[150px]"></div>
-      </div>
-
-      <div className="w-full max-w-md z-10 animate-scale-up">
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 py-8 relative w-full max-w-full overflow-x-hidden font-sans">
+      <div className="w-full max-w-md z-10">
         
         {/* Brand Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex p-3 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-500 text-white shadow-xl shadow-indigo-500/20 mb-3">
+          <div className="inline-flex p-3 rounded-lg bg-primary text-white mb-3">
             <Star className="w-6 h-6" />
           </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-wider">Tech Ads ERP</h1>
-          <p className="text-xs text-slate-400 mt-1 uppercase font-bold tracking-widest leading-none">agency & academy hub</p>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-wider">Tech Ads ERP</h1>
+          <p className="text-xs text-muted-foreground mt-1 uppercase font-bold tracking-widest leading-none">agency & academy hub</p>
         </div>
 
         {/* Login Container */}
-        <Card variant="glass" glowColor="indigo" className="p-6 md:p-8 border-white/5 shadow-2xl relative">
+        <Card variant="glass" glowColor="indigo" className="p-6 md:p-8 border-border shadow-2xl relative">
           
           {/* Tab Selector */}
-          <div className="flex bg-slate-950/60 p-1 rounded-xl border border-white/5 mb-6">
+          <div className="flex bg-muted-2 p-1 rounded-md border border-border mb-6">
             <button
               type="button"
               onClick={() => {
                 setRoleMode('staff');
                 setErrorMsg(null);
               }}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 ${roleMode === 'staff' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 ${roleMode === 'staff' ? 'bg-primary text-foreground shadow-md' : 'text-muted-foreground hover:text-foreground'}`}
             >
               Staff portal
             </button>
@@ -73,17 +66,17 @@ export const Login: React.FC = () => {
                 setRoleMode('admin');
                 setErrorMsg(null);
               }}
-              className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 ${roleMode === 'admin' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all duration-300 ${roleMode === 'admin' ? 'bg-primary text-foreground shadow-md' : 'text-muted-foreground hover:text-foreground'}`}
             >
               Admin portal
             </button>
           </div>
 
           <div className="mb-6">
-            <h2 className="text-lg font-bold text-white leading-tight">
+            <h2 className="text-lg font-bold text-foreground leading-tight">
               {roleMode === 'admin' ? 'Administrative Access' : 'Consultant Dashboard Login'}
             </h2>
-            <p className="text-xs text-slate-400 mt-1">Enter your credentials to access ERP databases.</p>
+            <p className="text-xs text-muted-foreground mt-1">Enter your credentials to access ERP databases.</p>
           </div>
 
           {/* Form */}
@@ -91,37 +84,37 @@ export const Login: React.FC = () => {
             
             {/* Username Input */}
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Username</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Username</label>
               <div className="relative">
-                <User className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                <User className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
                 <input
                   type="text"
                   required
                   placeholder="e.g. rahulsharma"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 placeholder-slate-650 focus:outline-none focus:border-indigo-500 transition-colors duration-200"
+                  className="w-full pl-9 pr-4 py-2.5 rounded-md bg-card border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors duration-200"
                 />
               </div>
             </div>
 
             {/* Password Input */}
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Password</label>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">Password</label>
               <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                <Lock className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-9 pr-10 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-200 placeholder-slate-650 focus:outline-none focus:border-indigo-500 transition-colors duration-200"
+                  className="w-full pl-9 pr-10 py-2.5 rounded-md bg-card border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors duration-200"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3 text-slate-500 hover:text-slate-300"
+                  className="absolute right-3 top-3 text-muted-foreground hover:text-secondary-foreground"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -130,7 +123,7 @@ export const Login: React.FC = () => {
 
             {/* Error Message */}
             {errorMsg && (
-              <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold leading-normal">
+              <div className="p-3.5 rounded-md bg-danger-soft border border-danger text-danger text-xs font-semibold leading-normal">
                 {errorMsg}
               </div>
             )}
