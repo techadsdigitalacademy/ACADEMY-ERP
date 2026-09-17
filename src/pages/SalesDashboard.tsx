@@ -6,7 +6,7 @@ import { DailyWorkLoggingTab } from '../components/dashboard-tabs/DailyWorkLoggi
 import { ExpenseHistoryTab } from '../components/dashboard-tabs/ExpenseHistoryTab';
 import { LeadsTab } from '../components/dashboard-tabs/LeadsTab';
 import { SalesHistoryLog } from '../components/SalesHistoryLog';
-import { useApp } from '../context/AppContext';
+import { useApp, invalidateTables } from '../context/AppContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
 import { AttendanceDashboard } from '../components/AttendanceDashboard';
@@ -14,7 +14,7 @@ import { SalesDashboardModals } from '../components/sales-dashboard/SalesDashboa
 import { SalesDashboardMetrics } from '../components/sales-dashboard/SalesDashboardMetrics';
 import { AgencyNoticeBoardWidget } from '../components/AgencyNoticeBoardWidget';
 import { NoticeBoardAdminModal } from '../components/NoticeBoardAdminModal';
-import { supabase, supabaseAdmin, SALES_COLUMNS } from '../services/supabase';
+import { supabase, supabaseAdmin, SALES_COLUMNS, STAFF_PROFILE_COLUMNS, monthWindowStart } from '../services/supabase';
 import { formatCurrency } from '../services/mockData';
 import { dataCache } from '../services/dataCache';
 import { resetStaffAuthPassword } from '../services/staffAuth';
@@ -158,6 +158,9 @@ export const SalesDashboard: React.FC = () => {
       const loadAdminDashboardData = async (forceRefresh = false) => {
         try {
           const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+          // The window covers every selectable month, so the cache key stays
+          // month-independent and switching months still filters client-side.
+          const windowStartStr = monthWindowStart();
           const cacheKey = `admin_dashboard_summaries_${todayStr}`;
 
           const {
@@ -184,11 +187,11 @@ export const SalesDashboard: React.FC = () => {
               ] = await Promise.all([
                 supabase.from('attendance').select('staff_id, status, punch_in').eq('attendance_date', todayStr),
                 supabase.from('academy_student_payments').select('amount'),
-                supabase.from('staff_profiles').select('*').order('created_at', { ascending: false }),
+                supabase.from('staff_profiles').select(STAFF_PROFILE_COLUMNS).order('created_at', { ascending: false }),
                 supabase.from('staff').select('id, monthly_target_amount, monthly_targets, full_name, avatar_url'),
-                supabase.from('sales').select(SALES_COLUMNS),
-                supabase.from('daily_reports').select('*'),
-                supabase.from('attendance').select('staff_id, status, attendance_date'),
+                supabase.from('sales').select(SALES_COLUMNS).or(`created_at.gte.${windowStartStr},created_at.is.null`),
+                supabase.from('daily_reports').select('*').gte('report_date', windowStartStr),
+                supabase.from('attendance').select('staff_id, status, attendance_date').gte('attendance_date', windowStartStr),
                 supabase.from('staff').select('*, departments(name), roles(role_name)')
               ]);
 
@@ -402,12 +405,11 @@ export const SalesDashboard: React.FC = () => {
         if (action === 'delete' && id) {
           setStaffProfiles(prev => prev.filter(p => p.id !== id && (!name || p.full_name?.toLowerCase() !== name.toLowerCase())));
         }
-        loadAdminDashboardData(true);
+        loadAdminDashboardData();
       };
 
       const handleSalesChanged = () => {
-        loadAdminDashboardData(true);
-        if (activeStaff?.id) fetchDashboardData(activeStaff.id);
+        loadAdminDashboardData();
       };
 
       window.addEventListener('staff_target_updated', handleTargetUpdated);
@@ -430,9 +432,14 @@ export const SalesDashboard: React.FC = () => {
     try {
       const clientToUse = supabaseAdmin || supabase;
 
+      // Only today's rows are ever shown, so filter server-side at the IST day
+      // boundary rather than pulling the last 300 sales and discarding most of
+      // them. `payment_proof_url` is not read anywhere in this view.
+      const todayISTStart = `${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })}T00:00:00+05:30`;
+
       // 1. Parallel fetch sales, staff, and profiles for instant calculation
       const [salesRes, staffRes, profilesRes] = await Promise.all([
-        clientToUse.from('sales').select(`${SALES_COLUMNS}, payment_proof_url`).order('created_at', { ascending: false }).limit(300),
+        clientToUse.from('sales').select(SALES_COLUMNS).gte('created_at', todayISTStart).order('created_at', { ascending: false }),
         clientToUse.from('staff').select('id, full_name, avatar_url, designation'),
         clientToUse.from('staff_profiles').select('id, full_name')
       ]);
@@ -554,15 +561,13 @@ export const SalesDashboard: React.FC = () => {
   useEffect(() => {
     fetchDailyLeaderboard();
 
-    const salesChannel = supabase
-      .channel('public:sales:leaderboard')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => {
-        fetchDailyLeaderboard();
-      })
-      .subscribe();
+    // Driven by the single app-wide realtime channel in AppContext instead of a
+    // second subscription to the same table.
+    const handleSalesChanged = () => fetchDailyLeaderboard();
+    window.addEventListener('sales_data_changed', handleSalesChanged);
 
     return () => {
-      supabase.removeChannel(salesChannel);
+      window.removeEventListener('sales_data_changed', handleSalesChanged);
     };
   }, [selectedMonth]);
 
@@ -703,10 +708,13 @@ export const SalesDashboard: React.FC = () => {
     if (isOwner) {
       const fetchOwnerExpenses = async () => {
         try {
-          // Fetch from both tables and combine
+          // Fetch from both tables and combine. The expense history view filters
+          // strictly by the selected month, so bound both to the selectable window.
+          const windowStartStr = monthWindowStart();
+
           const [expensesRes, ownerExpensesRes] = await Promise.all([
-            supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
-            supabase.from('owner_expenses').select('*').order('expense_date', { ascending: false })
+            supabase.from('expenses').select('*').gte('expense_date', windowStartStr).order('expense_date', { ascending: false }),
+            supabase.from('owner_expenses').select('*').gte('expense_date', windowStartStr).order('expense_date', { ascending: false })
           ]);
 
           let combinedData = [
@@ -720,7 +728,8 @@ export const SalesDashboard: React.FC = () => {
             const { data: rData } = await supabase
               .from('sales')
               .select(SALES_COLUMNS)
-              .eq('payment_type', 'Refund');
+              .eq('payment_type', 'Refund')
+              .or(`created_at.gte.${windowStartStr},created_at.is.null`);
             if (rData) refundSalesData = rData;
           } catch (e) {}
 
@@ -771,20 +780,16 @@ export const SalesDashboard: React.FC = () => {
 
       fetchOwnerExpenses();
 
-      const channel = supabase.channel('company-expenses-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses' }, () => {
-          fetchOwnerExpenses();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'owner_expenses' }, () => {
-          fetchOwnerExpenses();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => {
-          fetchOwnerExpenses();
-        })
-        .subscribe();
+      // Driven by the single app-wide realtime channel in AppContext, which now
+      // covers expenses and owner_expenses too, instead of a third subscription.
+      const handleExpensesChanged = () => fetchOwnerExpenses();
+
+      window.addEventListener('company_expenses_changed', handleExpensesChanged);
+      window.addEventListener('sales_data_changed', handleExpensesChanged);
 
       return () => {
-        supabase.removeChannel(channel);
+        window.removeEventListener('company_expenses_changed', handleExpensesChanged);
+        window.removeEventListener('sales_data_changed', handleExpensesChanged);
       };
     }
   }, [isOwner, selectedMonth]);
@@ -793,13 +798,39 @@ export const SalesDashboard: React.FC = () => {
 
 
 
-  const handleViewSlip = (sale: any) => {
-    const targetUrl = sale.payment_proof_url || sale.slip_url || sale.payment_proof || sale.proof_url;
-    if (targetUrl) {
-      setSelectedSlipUrl(targetUrl);
-    } else {
-      alert('No payment proof slip was uploaded for this transaction.');
+  const handleViewSlip = async (sale: any) => {
+    const inlineUrl = sale.payment_proof_url || sale.slip_url || sale.payment_proof || sale.proof_url;
+    if (inlineUrl) {
+      setSelectedSlipUrl(inlineUrl);
+      return;
     }
+
+    // List queries deliberately omit `payment_proof_url` (see SALES_COLUMNS), so
+    // resolve it for the single row being opened rather than carrying the column
+    // through every sales list just for the rows nobody clicks.
+    if (!sale.id) {
+      alert('No payment proof slip was uploaded for this transaction.');
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('sales')
+      .select('payment_proof_url')
+      .eq('id', sale.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Could not load payment proof slip:', error);
+      alert('Could not load the payment proof slip. Please try again.');
+      return;
+    }
+
+    if (!data?.payment_proof_url) {
+      alert('No payment proof slip was uploaded for this transaction.');
+      return;
+    }
+
+    setSelectedSlipUrl(data.payment_proof_url);
   };
 
 
@@ -891,7 +922,7 @@ export const SalesDashboard: React.FC = () => {
       setNewResetPassword('');
       setSelectedResetStaff('');
       setIsSettingsOpen(false);
-      dataCache.clearAll();
+      invalidateTables('staff_profiles');
     } catch (err: any) {
       alert('Failed to reset password: ' + err.message);
     } finally {
