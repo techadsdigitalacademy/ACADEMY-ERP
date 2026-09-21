@@ -164,12 +164,12 @@ export const FinanceDashboard: React.FC = () => {
             supabase.from('finance_settings').select('historical_opening_balance'),
             supabase.from('staff_profiles').select('id, full_name, designation, status'),
             supabase.from('staff').select('id, full_name'),
-            supabase.from('sales').select(`${SALES_COLUMNS}, staff(full_name)`).lt('created_at', startOfMonthStr),
+            supabase.from('sales').select('received_amount, staff_id, staff(full_name)').lt('created_at', startOfMonthStr),
             supabase.from('expenses').select('amount').lt('expense_date', startOfMonthDateStr),
             supabase.from('partner_withdrawals').select('amount').lt('withdrawal_date', startOfMonthDateStr),
             supabase.from('sales').select(`${SALES_COLUMNS}, staff(full_name)`).gte('created_at', startOfMonthStr).lte('created_at', endOfMonthStr),
-            supabase.from('expenses').select('*'),
-            supabase.from('sales').select(`${SALES_COLUMNS}, staff(full_name)`).eq('payment_type', 'Refund'),
+            supabase.from('expenses').select('*').or(`and(expense_date.gte.${startOfMonthDateStr},expense_date.lte.${endOfMonthDateStr}),expense_date.is.null`),
+            supabase.from('sales').select(`${SALES_COLUMNS}, staff(full_name)`).eq('payment_type', 'Refund').or(`and(created_at.gte.${startOfMonthStr},created_at.lte.${endOfMonthStr}),created_at.is.null`),
             supabase.from('partner_withdrawals').select('*').gte('withdrawal_date', startOfMonthDateStr).lte('withdrawal_date', endOfMonthDateStr)
           ]);
 
@@ -534,7 +534,7 @@ export const FinanceDashboard: React.FC = () => {
     loadFinanceData();
 
     const handleDataChanged = () => {
-      loadFinanceData(true);
+      loadFinanceData();
     };
 
     window.addEventListener('sales_data_changed', handleDataChanged);

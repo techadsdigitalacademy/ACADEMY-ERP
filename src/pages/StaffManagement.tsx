@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from '../components/Sidebar';
-import { useApp } from '../context/AppContext';
+import { useApp, invalidateTables } from '../context/AppContext';
 import { Card } from '../components/Card';
 import { StaffDrilldownModal } from '../components/StaffDrilldownModal';
 import { NoticeBoardAdminModal } from '../components/NoticeBoardAdminModal';
@@ -8,13 +8,12 @@ import { Megaphone } from 'lucide-react';
 import StaffProfileDrawer from '../components/StaffProfileDrawer';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
-import { supabase } from '../services/supabase';
+import { supabase, STAFF_PROFILE_COLUMNS } from '../services/supabase';
 import { 
   ensureStaffAuthUser, 
   resetStaffAuthPassword, 
   normalizePassword 
 } from '../services/staffAuth';
-import { dataCache } from '../services/dataCache';
 import { 
    
   Search, 
@@ -106,7 +105,7 @@ export const StaffManagement: React.FC = () => {
       // 1. Fetch profiles
       const { data: profs, error: profErr } = await supabase
         .from('staff_profiles')
-        .select('*')
+        .select(STAFF_PROFILE_COLUMNS)
         .order('created_at', { ascending: false });
       if (profErr) throw profErr;
 
@@ -235,7 +234,7 @@ export const StaffManagement: React.FC = () => {
       setShiftEnd('18:00');
       setWeeklyOff('Sunday');
 
-      dataCache.clearAll();
+      invalidateTables('staff', 'staff_profiles');
       window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'add' } }));
       await loadInitialData();
     } catch (err: any) {
@@ -301,7 +300,7 @@ export const StaffManagement: React.FC = () => {
         return;
       }
       alert(res.message);
-      dataCache.clearAll();
+      invalidateTables('staff', 'staff_profiles');
       await loadInitialData();
     } catch (err: any) {
       alert('Failed to reset password: ' + err.message);
@@ -339,7 +338,7 @@ export const StaffManagement: React.FC = () => {
         await supabase.from('staff').delete().ilike('full_name', name.trim());
       }
 
-      dataCache.clearAll();
+      invalidateTables('staff', 'staff_profiles');
       window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'delete', id, name } }));
       await loadInitialData();
       alert(`Staff profile "${name}" deleted successfully. Historical sales, financial ledgers, and reports remain safe and intact.`);
@@ -376,7 +375,7 @@ export const StaffManagement: React.FC = () => {
         .update({ status: nextStatus })
         .eq('id', profile.id);
 
-      dataCache.clearAll();
+      invalidateTables('staff', 'staff_profiles');
       window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'toggle_resign', id: profile.id, nextStatus } }));
       alert(`Staff member "${profile.full_name}" has been ${isResigned ? 'reactivated' : 'marked as Resigned'}. Historical data remains fully preserved.`);
       await loadInitialData();
@@ -411,10 +410,19 @@ export const StaffManagement: React.FC = () => {
 
       // If username changed or auth user is missing, sync auth user credentials
       if (!resolvedAuthUserId || editUsername.trim().toLowerCase() !== editingProfile.username.toLowerCase()) {
+        // The directory list omits `password` (see STAFF_PROFILE_COLUMNS), so read
+        // the credential for just this profile instead of shipping every staff
+        // member's password to the browser on every page load.
+        const { data: credential } = await supabase
+          .from('staff_profiles')
+          .select('password')
+          .eq('id', editingProfile.id)
+          .maybeSingle();
+
         resolvedAuthUserId = await ensureStaffAuthUser({
           username: editUsername.trim(),
           fullName: editFullName.trim(),
-          password: editingProfile.password
+          password: credential?.password
         });
       }
 
@@ -456,7 +464,7 @@ export const StaffManagement: React.FC = () => {
         status: editStatus
       } : p));
 
-      dataCache.clearAll();
+      invalidateTables('staff', 'staff_profiles');
       window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'update', id: editingProfile.id } }));
       setIsEditModalOpen(false);
       setEditingProfile(null);

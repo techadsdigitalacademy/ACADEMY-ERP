@@ -110,6 +110,16 @@ export const AcademyDashboard: React.FC = () => {
     if (data) setStaffList(data);
   };
 
+  // Marking attendance changes only this table, so it gets its own fetch rather
+  // than reloading all five academy tables per checkbox.
+  const fetchAcademyAttendance = async () => {
+    const { data } = await supabase
+      .from('academy_attendance')
+      .select('*')
+      .order('attendance_date', { ascending: false });
+    if (data) setAttendances(data);
+  };
+
   const fetchAcademyData = async () => {
     setIsLoading(true);
     try {
@@ -118,7 +128,7 @@ export const AcademyDashboard: React.FC = () => {
       if (bData) setBatches(bData);
 
       // 2. Students
-      const { data: sData } = await supabase.from('academy_students').select('*, batch:batch_id(*)').order('created_at', { ascending: false });
+      const { data: sData } = await supabase.from('academy_students').select('*, batch:batch_id(batch_name)').order('created_at', { ascending: false });
       if (sData) setStudents(sData);
 
       // 3. Installments
@@ -126,8 +136,7 @@ export const AcademyDashboard: React.FC = () => {
       if (iData) setInstallments(iData);
 
       // 4. Attendance
-      const { data: aData } = await supabase.from('academy_attendance').select('*').order('attendance_date', { ascending: false });
-      if (aData) setAttendances(aData);
+      await fetchAcademyAttendance();
 
       // 5. Expenses
       const { data: eData } = await supabase.from('academy_expenses').select('*').order('expense_date', { ascending: false });
@@ -224,7 +233,7 @@ export const AcademyDashboard: React.FC = () => {
           marked_by: activeStaff.id
         });
       }
-      fetchAcademyData();
+      fetchAcademyAttendance();
     } catch (err) {
       console.error(err);
     }
