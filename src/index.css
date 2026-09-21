@@ -41,19 +41,23 @@
   --radius: .5rem;
 }
 
+/* True black base. The surface ramp is shifted by the same amount the
+   background moved, so cards and popovers keep the separation they had
+   instead of flattening into the background. Borders carry the structure
+   here -- box shadows are invisible against #000. */
 .dark {
-  --background: #09090b;
-  --card: #131316;
-  --popover: #17171a;
-  --muted: #1c1c20;
-  --muted-2: #161619;
+  --background: #000000;
+  --card: #0a0a0b;
+  --popover: #0e0e0f;
+  --muted: #131315;
+  --muted-2: #0d0d0e;
 
   --foreground: #fafafa;
   --secondary-foreground: #a1a1aa;
   --muted-foreground: #71717a;
 
-  --border: #26262b;
-  --border-strong: #3f3f46;
+  --border: #1d1d20;
+  --border-strong: #36363b;
 
   --primary: #6366f1;
   --primary-foreground: #ffffff;
