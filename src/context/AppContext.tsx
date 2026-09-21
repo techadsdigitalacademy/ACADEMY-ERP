@@ -3,6 +3,7 @@ import type { Staff, Sale, Attendance, DailyReport } from '../types';
 import { supabase, supabaseAdmin, SALES_COLUMNS, monthWindowStart } from '../services/supabase';
 import { formatStaffEmail, ensureStaffAuthUser, normalizePassword } from '../services/staffAuth';
 import { dataCache } from '../services/dataCache';
+import { extensionForBlob } from '../utils/imageUtils';
 
 interface AppContextType {
   activeStaff: Staff | null;
@@ -716,11 +717,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateAvatar = async (avatarBlob: Blob) => {
     if (!activeStaff) return;
     try {
-      // 1. Upload to Storage and keep only the public URL in the database
-      const filePath = `${activeStaff.id}/${Date.now()}.jpg`;
+      // 1. Upload to Storage and keep only the public URL in the database.
+      // The encoder picks WebP or JPEG at runtime, so name and type follow the
+      // blob rather than being hardcoded.
+      const filePath = `${activeStaff.id}/${Date.now()}.${extensionForBlob(avatarBlob)}`;
       const { error: uploadErr } = await supabase.storage
         .from('avatars')
-        .upload(filePath, avatarBlob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: true });
+        .upload(filePath, avatarBlob, { contentType: avatarBlob.type, cacheControl: '31536000', upsert: true });
 
       if (uploadErr) throw uploadErr;
 
