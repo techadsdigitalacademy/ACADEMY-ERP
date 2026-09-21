@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { Staff, Sale, Attendance, DailyReport } from '../types';
-import { supabase, supabaseAdmin, SALES_COLUMNS } from '../services/supabase';
+import { supabase, supabaseAdmin, SALES_COLUMNS, monthWindowStart } from '../services/supabase';
 import { formatStaffEmail, ensureStaffAuthUser, normalizePassword } from '../services/staffAuth';
 import { dataCache } from '../services/dataCache';
+import { extensionForBlob } from '../utils/imageUtils';
 
 interface AppContextType {
   activeStaff: Staff | null;
@@ -99,6 +100,54 @@ const CACHE_KEYS_BY_TABLE: Record<string, string[]> = {
   staff: ['grid_targets_*', 'profile_details_*', 'admin_attendance_month_*', 'admin_dashboard_summaries_*'],
   staff_profiles: ['admin_attendance_month_*', 'admin_dashboard_summaries_*'],
   attendance: ['attendance_drill_*', 'admin_attendance_month_*', 'admin_dashboard_summaries_*'],
+  expenses: ['finance_ledger_*', 'profile_details_*'],
+  owner_expenses: ['finance_ledger_*', 'profile_details_*'],
+};
+
+/**
+ * Drop only the cache entries the named tables feed.
+ *
+ * Write paths must call this rather than dataCache.clearAll(): clearing
+ * everything makes an unrelated dashboard refetch its whole dataset the next
+ * time it renders, which is the single largest source of avoidable egress.
+ */
+export const invalidateTables = (...tables: string[]): void => {
+  tables.forEach((table) => {
+    (CACHE_KEYS_BY_TABLE[table] || []).forEach((key) => dataCache.invalidate(key));
+  });
+};
+
+type RealtimePayload = { eventType: string; new: any; old: any };
+
+/**
+ * Apply a realtime row change to a list already held in state.
+ *
+ * The payload carries the full row, so reacting to an event costs no egress at
+ * all. UPDATE merges over the existing entry instead of replacing it so fields
+ * the initial fetch joined in (e.g. `sales.staff(full_name)`) survive; an
+ * INSERT arrives without those joins, which is why nothing renders straight off
+ * these arrays -- see the note on `sales` in the provider.
+ */
+const mergeRealtimeRow = <T extends { id?: any }>(
+  setRows: React.Dispatch<React.SetStateAction<T[]>>,
+  payload: RealtimePayload
+): void => {
+  setRows((prev) => {
+    if (payload.eventType === 'DELETE') {
+      const removedId = payload.old?.id;
+      return removedId ? prev.filter((row) => row.id !== removedId) : prev;
+    }
+
+    const incoming = payload.new as T;
+    if (!incoming?.id) return prev;
+
+    const index = prev.findIndex((row) => row.id === incoming.id);
+    if (index === -1) return [incoming, ...prev];
+
+    const next = [...prev];
+    next[index] = { ...next[index], ...incoming };
+    return next;
+  });
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -193,10 +242,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         roleLower.includes('admin') ||
         roleLower.includes('director');
 
-      // Fetch sales from Supabase
+      // Sales, attendance and daily reports are only ever read through the
+      // month selector, which offers the last 12 months, so bound all three to
+      // that window instead of pulling the full history on every fetch.
+      const windowStartStr = monthWindowStart();
+
+      // Fetch sales from Supabase. Rows predating `created_at` are kept so the
+      // legacy `sale_month` name matching in the dashboards still resolves them.
       let salesQuery = supabase
         .from('sales')
         .select(`${SALES_COLUMNS}, staff(full_name)`)
+        .or(`created_at.gte.${windowStartStr},created_at.is.null`)
         .order('created_at', { ascending: false });
 
       if (!isAdminUser) {
@@ -205,14 +261,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const { data: salesData, error: salesErr } = await salesQuery;
       if (salesErr) throw salesErr;
-
-      // Attendance and daily reports are only ever read through the month
-      // selector, which offers the last 12 months, so bound both queries to
-      // that window instead of pulling the full history on every fetch.
-      const windowStart = new Date();
-      windowStart.setMonth(windowStart.getMonth() - 11);
-      windowStart.setDate(1);
-      const windowStartStr = windowStart.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
       // Fetch attendance records from Supabase
       const { data: attData, error: attErr } = await supabase
@@ -379,68 +427,100 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTodayAttendance(todayRecord || null);
   }, [attendance]);
 
-  // Real-time synchronization across clients & tabs
+  // Real-time synchronization across clients & tabs.
+  //
+  // This is the only realtime channel in the app. Views react by listening for
+  // the window events dispatched below rather than opening their own
+  // subscription to the same table, and they must not pass forceRefresh when
+  // they do: invalidateTables() has already dropped the affected cache keys, so the
+  // refetch misses cache anyway while a forced one also defeats the TTL and the
+  // in-flight request dedup when several events arrive together.
   useEffect(() => {
-    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    // A realtime event delivers the changed row, so it is applied to local
+    // state directly. Calling fetchDashboardData() here instead meant one sale
+    // logged by one rep made every open dashboard re-download twelve months of
+    // sales, attendance and reports -- for admins, across all staff.
 
-    const invalidate = (table: string) => {
-      (CACHE_KEYS_BY_TABLE[table] || []).forEach((key) => dataCache.invalidate(key));
-    };
-
-    // Coalesce bursts of writes into a single refetch rather than firing one
-    // full dashboard reload per event.
-    const scheduleRefresh = () => {
-      if (refreshTimer) clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(() => {
-        refreshTimer = null;
-        if (activeStaff?.id) fetchDashboardData(activeStaff.id);
-      }, 400);
-    };
+    // Non-admins only ever held their own rows, so keep that scope when merging
+    // rather than letting another staff member's row into this client's state.
+    const isOwnRow = (row: any) =>
+      isAdminMode || !row?.staff_id || row.staff_id === activeStaff?.id;
 
     const channel = supabase
       .channel('schema-db-changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sales' },
-        () => {
-          invalidate('sales');
+        (payload) => {
+          invalidateTables('sales');
+          if (isOwnRow(payload.new ?? payload.old)) {
+            mergeRealtimeRow<Sale>(setSales, payload as RealtimePayload);
+          }
           window.dispatchEvent(new CustomEvent('sales_data_changed'));
-          scheduleRefresh();
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'staff' },
-        () => {
-          invalidate('staff');
+        (payload) => {
+          invalidateTables('staff');
+          // Only the signed-in user's own target is mirrored onto activeStaff,
+          // so a change to anyone else's row needs no work beyond the event.
+          const row: any = payload.new;
+          if (row?.id && row.id === activeStaff?.id) {
+            setActiveStaff((prev) => {
+              if (!prev) return null;
+              const updated = { ...prev, monthly_target_amount: Number(row.monthly_target_amount) || 0 };
+              localStorage.setItem('tech_ads_active_staff', JSON.stringify(updated));
+              return updated;
+            });
+          }
           window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'db_sync' } }));
-          scheduleRefresh();
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'staff_profiles' },
         () => {
-          invalidate('staff_profiles');
+          invalidateTables('staff_profiles');
           window.dispatchEvent(new CustomEvent('staff_profiles_changed', { detail: { action: 'db_sync' } }));
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'attendance' },
-        () => {
-          invalidate('attendance');
+        (payload) => {
+          invalidateTables('attendance');
+          // This array is what todayAttendance derives from, so it is the one
+          // piece of context state a view actually renders.
+          if (isOwnRow(payload.new ?? payload.old)) {
+            mergeRealtimeRow<Attendance>(setAttendance, payload as RealtimePayload);
+          }
           window.dispatchEvent(new CustomEvent('attendance_data_changed'));
-          scheduleRefresh();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'expenses' },
+        () => {
+          invalidateTables('expenses');
+          window.dispatchEvent(new CustomEvent('company_expenses_changed'));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'owner_expenses' },
+        () => {
+          invalidateTables('owner_expenses');
+          window.dispatchEvent(new CustomEvent('company_expenses_changed'));
         }
       )
       .subscribe();
 
     return () => {
-      if (refreshTimer) clearTimeout(refreshTimer);
       supabase.removeChannel(channel);
     };
-  }, [activeStaff?.id]);
+  }, [activeStaff?.id, isAdminMode]);
 
   const login = async (username: string, pass: string) => {
     console.log('Incoming Login Attempt:', { username });
@@ -637,11 +717,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateAvatar = async (avatarBlob: Blob) => {
     if (!activeStaff) return;
     try {
-      // 1. Upload to Storage and keep only the public URL in the database
-      const filePath = `${activeStaff.id}/${Date.now()}.jpg`;
+      // 1. Upload to Storage and keep only the public URL in the database.
+      // The encoder picks WebP or JPEG at runtime, so name and type follow the
+      // blob rather than being hardcoded.
+      const filePath = `${activeStaff.id}/${Date.now()}.${extensionForBlob(avatarBlob)}`;
       const { error: uploadErr } = await supabase.storage
         .from('avatars')
-        .upload(filePath, avatarBlob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: true });
+        .upload(filePath, avatarBlob, { contentType: avatarBlob.type, cacheControl: '31536000', upsert: true });
 
       if (uploadErr) throw uploadErr;
 
@@ -741,9 +823,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    dataCache.clearAll();
+    invalidateTables('sales');
     window.dispatchEvent(new CustomEvent('sales_data_changed'));
-    await fetchDashboardData(activeStaff.id);
   };
 
   const addDailyReport = async (reportData: {
@@ -785,9 +866,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       throw error;
     }
 
-    dataCache.clearAll();
+    invalidateTables('sales');
     window.dispatchEvent(new CustomEvent('sales_data_changed'));
-    await fetchDashboardData(activeStaff.id);
   };
 
   const punchIn = async (selfieUrl?: string, lat?: number, lng?: number, status?: string) => {
@@ -821,9 +901,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (newAtt) {
       setAttendance((prev) => [newAtt as Attendance, ...prev]);
     }
-    dataCache.clearAll();
+    invalidateTables('attendance');
     window.dispatchEvent(new CustomEvent('attendance_data_changed'));
-    await fetchDashboardData(activeStaff.id);
   };
 
   const punchOut = async (status?: string) => {
@@ -854,9 +933,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         prev.map((item) => (item.id === updatedAtt.id ? (updatedAtt as Attendance) : item))
       );
     }
-    dataCache.clearAll();
+    invalidateTables('attendance');
     window.dispatchEvent(new CustomEvent('attendance_data_changed'));
-    await fetchDashboardData(activeStaff.id);
   };
 
   return (

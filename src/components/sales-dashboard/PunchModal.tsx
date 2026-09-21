@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../services/supabase';
+import { encodeCanvasImage, extensionForBlob } from '../../utils/imageUtils';
 import { Card } from '../Card';
 import { X, Camera } from 'lucide-react';
 
@@ -126,29 +127,29 @@ export const PunchModal: React.FC<PunchModalProps> = ({
     setIsPunching(true);
     try {
       // 1. Capture snapshot directly from video stream
-      let selfieBase64 = '';
+      let blob: Blob | null = null;
       if (canvasRef.current && videoRef.current) {
         const context = canvasRef.current.getContext('2d');
         if (context) {
           // Crop center to 1:1 aspect ratio (480x480 out of 640x480)
           context.drawImage(videoRef.current, 80, 0, 480, 480, 0, 0, 480, 480);
-          selfieBase64 = canvasRef.current.toDataURL('image/jpeg', 0.85);
+          // Encoded straight to a blob: the old data URL round-trip built a
+          // base64 copy of the image in memory for no benefit.
+          blob = await encodeCanvasImage(canvasRef.current, 0.85);
         }
       }
-      
-      if (!selfieBase64) {
+
+      if (!blob) {
         throw new Error("Could not capture webcam snapshot. Please ensure camera access is allowed.");
       }
 
       // 2. Upload selfie to Supabase Storage
-      const base64Response = await fetch(selfieBase64);
-      const blob = await base64Response.blob();
-      const fileName = `${activeStaff.id}/${Date.now()}.jpg`;
-      
+      const fileName = `${activeStaff.id}/${Date.now()}.${extensionForBlob(blob)}`;
+
       const { error: uploadErr } = await supabase.storage
         .from('attendance')
         .upload(fileName, blob, {
-          contentType: 'image/jpeg',
+          contentType: blob.type,
           // Filenames are timestamped and never rewritten, so they can be
           // cached indefinitely instead of re-fetched every hour.
           cacheControl: '31536000',

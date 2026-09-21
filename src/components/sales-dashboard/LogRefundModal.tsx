@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Upload, RotateCcw } from 'lucide-react';
 import { Button } from '../Button';
 import { supabase } from '../../services/supabase';
+import { compressSlipFile, extensionForBlob } from '../../utils/imageUtils';
 
 interface LogRefundModalProps {
   isOpen: boolean;
@@ -25,6 +26,16 @@ export const LogRefundModal: React.FC<LogRefundModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleSlipSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (file && file.size > 2 * 1024 * 1024) {
+      alert("File size must be under 2MB.");
+      e.target.value = '';
+      return;
+    }
+    setSlipFile(file);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!clientName.trim() || !refundAmount || !activeStaff) return;
@@ -39,13 +50,14 @@ export const LogRefundModal: React.FC<LogRefundModalProps> = ({
     try {
       let slipUrl: string | null = null;
       if (slipFile) {
-        const fileExt = slipFile.name.split('.').pop();
-        const fileName = `refund_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        // Images are resized before upload; a PDF passes through untouched.
+        const slip = await compressSlipFile(slipFile);
+        const fileName = `refund_${Date.now()}_${Math.random().toString(36).substring(7)}.${extensionForBlob(slip)}`;
         const filePath = `slips/${fileName}`;
 
         const { error: uploadErr } = await supabase.storage
           .from('payment_slips')
-          .upload(filePath, slipFile, { cacheControl: '31536000' });
+          .upload(filePath, slip, { contentType: slip.type, cacheControl: '31536000' });
 
         if (uploadErr) {
           console.error('Refund slip upload failed:', uploadErr);
@@ -269,7 +281,7 @@ export const LogRefundModal: React.FC<LogRefundModalProps> = ({
                 <input
                   type="file"
                   accept="image/*,.pdf"
-                  onChange={(e) => setSlipFile(e.target.files?.[0] || null)}
+                  onChange={handleSlipSelect}
                   className="hidden"
                 />
               </label>

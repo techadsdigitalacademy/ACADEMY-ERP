@@ -8,7 +8,7 @@ import { AttendanceDashboard } from '../AttendanceDashboard';
 import { EditSaleModal } from '../EditSaleModal';
 import { ExpenseHistoryTab } from './ExpenseHistoryTab';
 import { SelfieLightboxModal } from '../sales-dashboard/SelfieLightboxModal';
-import { supabase, SALES_COLUMNS } from '../../services/supabase';
+import { supabase, SALES_COLUMNS, monthWindowStart } from '../../services/supabase';
 import { formatCurrency } from '../../services/mockData';
 import { dataCache } from '../../services/dataCache';
 import { TableSkeleton } from '../Skeleton';
@@ -267,8 +267,20 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             ? supabase.from('staff').select('id, full_name, monthly_target_amount, monthly_targets').eq('id', p.id).maybeSingle()
             : supabase.from('staff').select('id, full_name, monthly_target_amount, monthly_targets').ilike('full_name', p.full_name).maybeSingle();
 
+          // Resolve the staff row first so the sales read can be scoped by id.
+          // matchedSales below only ever matches on staff_id: the other fields it
+          // tests (user_id, staff_name, full_name, logged_by_name, created_by) are
+          // not columns on `sales`, so they are always undefined for DB rows and
+          // those branches can never fire. Scoping here is therefore equivalent to
+          // downloading the whole table and filtering in the browser.
+          const staffRes = await staffQuery;
+          const staffIds = Array.from(new Set(
+            [staffRes.data?.id, p.id].filter(Boolean).map(String)
+          ));
+
+          const windowStartStr = monthWindowStart();
+
           const [
-            staffRes,
             salesRes,
             reportRes,
             leadRes,
@@ -276,13 +288,14 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             exp2Res,
             exp3Res
           ] = await Promise.all([
-            staffQuery,
-            supabase.from('sales').select(`${SALES_COLUMNS}, payment_proof_url`).order('created_at', { ascending: false }),
-            supabase.from('daily_reports').select('*').eq('staff_id', p.id).order('report_date', { ascending: false }),
-            supabase.from('leads').select('*').eq('assigned_to', p.id).order('created_at', { ascending: false }),
-            p.id ? supabase.from('expenses').select('*').eq('staff_id', p.id).order('expense_date', { ascending: false }) : Promise.resolve({ data: [] }),
-            p.id ? supabase.from('owner_expenses').select('*').eq('staff_id', p.id).order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
-            p.id ? supabase.from('partner_withdrawals').select('*').or(`partner_id.eq.${p.id},partner_name.eq.${p.full_name || ''}`).order('withdrawal_date', { ascending: false }) : Promise.resolve({ data: [] })
+            staffIds.length
+              ? supabase.from('sales').select(`${SALES_COLUMNS}, payment_proof_url`).in('staff_id', staffIds).order('created_at', { ascending: false })
+              : Promise.resolve({ data: [] }),
+            supabase.from('daily_reports').select('*').eq('staff_id', p.id).gte('report_date', windowStartStr).order('report_date', { ascending: false }),
+            supabase.from('leads').select('*').eq('assigned_to', p.id).or(`created_at.gte.${windowStartStr},created_at.is.null`).order('created_at', { ascending: false }),
+            p.id ? supabase.from('expenses').select('*').eq('staff_id', p.id).or(`expense_date.gte.${windowStartStr},expense_date.is.null`).order('expense_date', { ascending: false }) : Promise.resolve({ data: [] }),
+            p.id ? supabase.from('owner_expenses').select('*').eq('staff_id', p.id).or(`expense_date.gte.${windowStartStr},expense_date.is.null`).order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+            p.id ? supabase.from('partner_withdrawals').select('*').or(`partner_id.eq.${p.id},partner_name.eq.${p.full_name || ''}`).gte('withdrawal_date', windowStartStr).order('withdrawal_date', { ascending: false }) : Promise.resolve({ data: [] })
           ]);
 
           return {

@@ -44,6 +44,25 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   const [editClockOut, setEditClockOut] = useState<string>('18:30');
   const [isUpdating, setIsUpdating] = useState(false);
 
+  const fetchAttendanceForMonth = async () => {
+    try {
+      const [y, m] = selectedAttMonth.split('-').map(Number);
+      const monthStart = `${selectedAttMonth}-01`;
+      const monthEnd = `${selectedAttMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+
+      const { data, error } = await supabase
+        .from('attendance')
+        .select('*')
+        .eq('staff_id', staffId)
+        .gte('attendance_date', monthStart)
+        .lte('attendance_date', monthEnd);
+      if (error) throw error;
+      setAttendance(data || []);
+    } catch (err: any) {
+      console.error('Error fetching attendance logs:', err.message);
+    }
+  };
+
   const fetchLogs = async () => {
     setIsLoading(true);
     try {
@@ -70,15 +89,7 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
         }
       }
 
-      // 2. Fetch attendance logs
-      const { data: attData, error: attErr } = await supabase
-        .from('attendance')
-        .select('*')
-        .eq('staff_id', staffId);
-      if (attErr) throw attErr;
-      setAttendance(attData || []);
-
-      // 3. Fetch holidays
+      // 2. Holidays
       const { data: holData, error: holErr } = await supabase
         .from('holidays')
         .select('*');
@@ -94,6 +105,11 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   useEffect(() => {
     fetchLogs();
   }, [staffId]);
+
+  useEffect(() => {
+    fetchAttendanceForMonth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staffId, selectedAttMonth]);
 
   const handleUpdateStatus = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,7 +146,7 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       }
 
       setEditingAttendance(null);
-      await fetchLogs();
+      await fetchAttendanceForMonth();
       if (onOverrideSuccess) onOverrideSuccess();
     } catch (err: any) {
       alert('Failed to update status: ' + err.message);

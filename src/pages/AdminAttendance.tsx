@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { Card } from '../components/Card';
 import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
-import { supabase } from '../services/supabase';
+import { supabase, STAFF_PROFILE_COLUMNS } from '../services/supabase';
 import { dataCache } from '../services/dataCache';
 import { MetricCardsSkeleton, TableSkeleton } from '../components/Skeleton';
 import type { Staff, Attendance } from '../types';
@@ -200,10 +200,16 @@ export const AdminAttendance: React.FC = () => {
   const [drillLogs, setDrillLogs] = useState<any[]>([]);
   const [loadingDrill, setLoadingDrill] = useState(false);
 
-  const fetchDrillLogs = async (staffId: string, forceRefresh = false) => {
+  // The drill-down only ever reads the days of `drillMonth`, so fetch that month
+  // rather than the staff member's entire attendance history. The month is part of
+  // the cache key, and every month stays reachable through the picker.
+  const fetchDrillLogs = async (staffId: string, month: string, forceRefresh = false) => {
     setLoadingDrill(true);
     try {
-      const cacheKey = `attendance_drill_${staffId}`;
+      const cacheKey = `attendance_drill_${staffId}_${month}`;
+      const [dYear, dMonth] = month.split('-').map(Number);
+      const monthStart = `${month}-01`;
+      const monthEnd = `${month}-${String(new Date(dYear, dMonth, 0).getDate()).padStart(2, '0')}`;
       const logs = await dataCache.fetchWithCache(
         cacheKey,
         async () => {
@@ -211,6 +217,8 @@ export const AdminAttendance: React.FC = () => {
             .from('attendance')
             .select('*')
             .eq('staff_id', staffId)
+            .gte('attendance_date', monthStart)
+            .lte('attendance_date', monthEnd)
             .order('attendance_date', { ascending: false });
           if (error) throw error;
           return data || [];
@@ -228,8 +236,14 @@ export const AdminAttendance: React.FC = () => {
   const handleOpenDrillModal = (staff: any) => {
     setSelectedStaffForDrill(staff);
     setDrillMonth(new Date().toISOString().slice(0, 7));
-    fetchDrillLogs(staff.id);
   };
+
+  useEffect(() => {
+    if (selectedStaffForDrill?.id && drillMonth) {
+      fetchDrillLogs(selectedStaffForDrill.id, drillMonth);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStaffForDrill?.id, drillMonth]);
 
   const generateReport = async () => {
     setIsGeneratingReport(true);
@@ -542,7 +556,7 @@ export const AdminAttendance: React.FC = () => {
         async () => {
           const [staffRes, profilesRes, attRes] = await Promise.all([
             supabase.from('staff').select('*, departments(name), roles(role_name)'),
-            supabase.from('staff_profiles').select('*'),
+            supabase.from('staff_profiles').select(STAFF_PROFILE_COLUMNS),
             supabase.from('attendance').select('*').gte('attendance_date', startOfMonthStr)
           ]);
 
@@ -663,10 +677,10 @@ export const AdminAttendance: React.FC = () => {
     loadAttendanceData();
 
     const handleStaffChanged = () => {
-      loadAttendanceData(true);
+      loadAttendanceData();
     };
     const handleAttendanceChanged = () => {
-      loadAttendanceData(true);
+      loadAttendanceData();
     };
 
     window.addEventListener('staff_profiles_changed', handleStaffChanged);

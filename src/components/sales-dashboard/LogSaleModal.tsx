@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../../services/supabase';
+import { compressSlipFile, extensionForBlob } from '../../utils/imageUtils';
 import { Card } from '../Card';
 import { Button } from '../Button';
 import { X, Briefcase } from 'lucide-react';
@@ -60,13 +61,15 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
     setIsUploadingProof(true);
 
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      // Slips are only ever viewed as a receipt, so upload a resized copy
+      // rather than the camera original -- every view of it is billed egress.
+      const slip = await compressSlipFile(file);
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${extensionForBlob(slip)}`;
       const filePath = `slips/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from('payment_slips')
-        .upload(filePath, file, { cacheControl: '31536000' });
+        .upload(filePath, slip, { contentType: slip.type, cacheControl: '31536000' });
 
       if (uploadError) throw uploadError;
 
