@@ -50,6 +50,11 @@ export const monthWindowStart = (): string => {
  * and both fetch it for a single row. Keep it out of anything that returns many
  * rows -- it is both wasted egress and every staff member's password sitting in
  * an admin's browser.
+ *
+ * Every name here must be a real column. Unlike `select('*')`, naming one that
+ * does not exist fails the whole query with a 42703 and the view renders empty.
+ * `avatar_url`, `status` and `base_salary` look like they belong but live on
+ * `staff`, not here, so views read them off the joined staff row instead.
  */
 export const STAFF_PROFILE_COLUMNS =
-  'id, auth_user_id, avatar_url, full_name, designation, username, gender, shift_start_time, shift_end_time, weekly_off_day, created_at, base_salary, status';
+  'id, auth_user_id, full_name, designation, username, gender, shift_start_time, shift_end_time, weekly_off_day, created_at';
