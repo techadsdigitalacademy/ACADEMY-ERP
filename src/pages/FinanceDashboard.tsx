@@ -162,7 +162,10 @@ export const FinanceDashboard: React.FC = () => {
             witRes
           ] = await Promise.all([
             supabase.from('finance_settings').select('historical_opening_balance'),
-            supabase.from('staff_profiles').select('id, full_name, designation, status'),
+            // No `status` here: it is not a column on staff_profiles (it lives
+            // on `staff`), and naming it failed the whole query with a 42703,
+            // leaving the ledger with no profiles at all.
+            supabase.from('staff_profiles').select('id, full_name, designation'),
             supabase.from('staff').select('id, full_name'),
             supabase.from('sales').select('received_amount, staff_id, staff(full_name)').lt('created_at', startOfMonthStr),
             supabase.from('expenses').select('amount').lt('expense_date', startOfMonthDateStr),
@@ -202,8 +205,10 @@ export const FinanceDashboard: React.FC = () => {
       const staffIdToDesigMap = new Map<string, string>();
       const activeStaffNamesSet = new Set<string>();
 
+      // No status guard: `status` is not a column on staff_profiles (it lives
+      // on `staff`), so this check read undefined and never excluded anyone.
+      // Hiding inactive staff needs the value off the joined staff row.
       (bundle.profilesData || []).forEach(p => {
-        if (p.status === 'INACTIVE') return;
         if (!p.full_name) return;
         profilesMap.set(p.id, { name: p.full_name, desig: p.designation || 'Staff' });
         staffIdToNameMap.set(String(p.id), p.full_name);
@@ -286,8 +291,8 @@ export const FinanceDashboard: React.FC = () => {
         return false;
       };
 
+      // Same as above: the status guard here was always a no-op.
       (bundle.profilesData || []).forEach(p => {
-        if (p.status === 'INACTIVE' || p.status === 'RESIGNED') return;
         if (!p.full_name) return;
         if (isExcludedRoleOrDeletedStaff(p.designation, p.full_name)) return;
 

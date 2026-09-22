@@ -106,7 +106,10 @@ export const AcademyDashboard: React.FC = () => {
   }, [activeStaff]);
 
   const fetchStaff = async () => {
-    const { data } = await supabase.from('staff').select('id, full_name, designation').order('full_name');
+    // No `designation`: not a column on `staff` (it lives on staff_profiles),
+    // it failed the whole query with a 42703 and left the tutor dropdown empty.
+    // Only id and full_name are rendered from this list.
+    const { data } = await supabase.from('staff').select('id, full_name').order('full_name');
     if (data) setStaffList(data);
   };
 

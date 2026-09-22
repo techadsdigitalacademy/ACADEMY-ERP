@@ -440,7 +440,10 @@ export const SalesDashboard: React.FC = () => {
       // 1. Parallel fetch sales, staff, and profiles for instant calculation
       const [salesRes, staffRes, profilesRes] = await Promise.all([
         clientToUse.from('sales').select(SALES_COLUMNS).gte('created_at', todayISTStart).order('created_at', { ascending: false }),
-        clientToUse.from('staff').select('id, full_name, avatar_url, designation'),
+        // No `designation` here: it is not a column on `staff` (it lives on
+        // staff_profiles), it failed the whole query with a 42703, and nothing
+        // below reads it -- only full_name and avatar_url feed the staffMap.
+        clientToUse.from('staff').select('id, full_name, avatar_url'),
         clientToUse.from('staff_profiles').select('id, full_name')
       ]);
 
