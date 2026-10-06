@@ -57,4 +57,5 @@ export const monthWindowStart = (): string => {
  * `staff`, not here, so views read them off the joined staff row instead.
  */
 export const STAFF_PROFILE_COLUMNS =
-  'id, auth_user_id, full_name, designation, username, gender, shift_start_time, shift_end_time, weekly_off_day, created_at';
+  'id, auth_user_id, full_name, designation, username, gender, shift_start_time, shift_end_time, weekly_off_day, status, created_at';
+
