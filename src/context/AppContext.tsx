@@ -235,10 +235,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         nameUpper.includes('SHIBILI') ||
         nameUpper.includes('ASHIF') ||
         desigLower.includes('owner') ||
+        desigLower.includes('partner') ||
         desigLower.includes('admin') ||
         desigLower.includes('director') ||
         desigLower.includes('managing') ||
         roleLower.includes('owner') ||
+        roleLower.includes('partner') ||
         roleLower.includes('admin') ||
         roleLower.includes('director');
 
@@ -376,8 +378,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                             profile.designation.toLowerCase().includes('director') || 
                             profile.designation.toLowerCase().includes('coordinator') ||
                             profile.designation.toLowerCase().includes('owner') ||
+                            profile.designation.toLowerCase().includes('partner') ||
                             rName.toLowerCase().includes('admin') ||
-                            rName.toLowerCase().includes('director');
+                            rName.toLowerCase().includes('director') ||
+                            rName.toLowerCase().includes('partner') ||
+                            rName.toLowerCase().includes('owner');
 
             setActiveStaff(activeUser);
             setIsAdminMode(isAdmin);
@@ -684,8 +689,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       profile.designation.toLowerCase().includes('director') || 
                       profile.designation.toLowerCase().includes('coordinator') ||
                       profile.designation.toLowerCase().includes('owner') ||
+                      profile.designation.toLowerCase().includes('partner') ||
                       rName.toLowerCase().includes('admin') ||
                       rName.toLowerCase().includes('director') ||
+                      rName.toLowerCase().includes('partner') ||
                       rName.toLowerCase().includes('owner');
 
       setActiveStaff(activeUser);

@@ -162,13 +162,10 @@ export const FinanceDashboard: React.FC = () => {
             witRes
           ] = await Promise.all([
             supabase.from('finance_settings').select('historical_opening_balance'),
-            // No `status` here: it is not a column on staff_profiles (it lives
-            // on `staff`), and naming it failed the whole query with a 42703,
-            // leaving the ledger with no profiles at all.
-            supabase.from('staff_profiles').select('id, full_name, designation'),
-            supabase.from('staff').select('id, full_name'),
-            supabase.from('sales').select('received_amount, staff_id, staff(full_name)').lt('created_at', startOfMonthStr),
-            supabase.from('expenses').select('amount').lt('expense_date', startOfMonthDateStr),
+            supabase.from('staff_profiles').select('id, full_name, designation, status'),
+            supabase.from('staff').select('id, full_name, status'),
+            supabase.from('sales').select('received_amount, staff_id, payment_type, staff(full_name)').lt('created_at', startOfMonthStr),
+            supabase.from('expenses').select('amount, category').lt('expense_date', startOfMonthDateStr),
             supabase.from('partner_withdrawals').select('amount').lt('withdrawal_date', startOfMonthDateStr),
             supabase.from('sales').select(`${SALES_COLUMNS}, staff(full_name)`).gte('created_at', startOfMonthStr).lte('created_at', endOfMonthStr),
             supabase.from('expenses').select('*').or(`and(expense_date.gte.${startOfMonthDateStr},expense_date.lte.${endOfMonthDateStr}),expense_date.is.null`),
@@ -205,10 +202,27 @@ export const FinanceDashboard: React.FC = () => {
       const staffIdToDesigMap = new Map<string, string>();
       const activeStaffNamesSet = new Set<string>();
 
-      // No status guard: `status` is not a column on staff_profiles (it lives
-      // on `staff`), so this check read undefined and never excluded anyone.
-      // Hiding inactive staff needs the value off the joined staff row.
-      (bundle.profilesData || []).forEach(p => {
+      // Track resigned staff members
+      const resignedStaffIds = new Set<string>();
+      const resignedStaffNames = new Set<string>();
+      const staffResignationDateMap = new Map<string, string>();
+
+      const checkAndMarkResigned = (id?: string, name?: string, status?: string, resignDate?: string) => {
+        const s = String(status || '').toUpperCase().trim();
+        if (s === 'RESIGNED' || s === 'INACTIVE') {
+          if (id) {
+            resignedStaffIds.add(String(id));
+            if (resignDate) staffResignationDateMap.set(String(id), resignDate);
+          }
+          if (name) {
+            const clean = name.trim().toLowerCase();
+            resignedStaffNames.add(clean);
+            if (resignDate) staffResignationDateMap.set(clean, resignDate);
+          }
+        }
+      };
+
+      (bundle.profilesData || []).forEach((p: any) => {
         if (!p.full_name) return;
         profilesMap.set(p.id, { name: p.full_name, desig: p.designation || 'Staff' });
         staffIdToNameMap.set(String(p.id), p.full_name);
@@ -219,9 +233,10 @@ export const FinanceDashboard: React.FC = () => {
         if (firstName && firstName.length > 2) {
           activeStaffNamesSet.add(firstName);
         }
+        checkAndMarkResigned(p.id, p.full_name, p.status, p.resignation_date || p.resigned_at);
       });
 
-      (bundle.staffData || []).forEach(s => {
+      (bundle.staffData || []).forEach((s: any) => {
         if (s.id && s.full_name) {
           staffIdToNameMap.set(String(s.id), s.full_name);
           if (!staffIdToDesigMap.has(String(s.id))) {
@@ -233,8 +248,15 @@ export const FinanceDashboard: React.FC = () => {
           if (firstName && firstName.length > 2) {
             activeStaffNamesSet.add(firstName);
           }
+          checkAndMarkResigned(s.id, s.full_name, s.status, s.resignation_date || s.resigned_at);
         }
       });
+
+      const isStaffResigned = (staffId?: string, fullName?: string) => {
+        if (staffId && resignedStaffIds.has(String(staffId))) return true;
+        if (fullName && resignedStaffNames.has(fullName.trim().toLowerCase())) return true;
+        return false;
+      };
 
       setStaffProfilesMap(profilesMap);
       setStaffIdToName(staffIdToNameMap);
@@ -268,10 +290,15 @@ export const FinanceDashboard: React.FC = () => {
         return false;
       };
 
-      // 2. Calculate opening balance
+      // 2. Calculate opening balance (Net sales revenue minus operating expenses)
       const activePrevSales = (bundle.prevSales || []).filter(s => !isSaleFromDeletedStaff(s));
-      const prevSalesSum = activePrevSales.reduce((sum, s) => sum + (Number(s.received_amount) || 0), 0);
-      const prevExpensesSum = bundle.prevExpenses?.reduce((sum, e) => sum + (e.amount || 0), 0) || 0;
+      const prevSalesSum = activePrevSales.reduce((sum, s) => {
+        const amt = Number(s.received_amount) || 0;
+        return s.payment_type === 'Refund' ? sum - amt : sum + amt;
+      }, 0);
+      const prevExpensesSum = (bundle.prevExpenses || [])
+        .filter((e: any) => e.category !== 'Sales Refund' && e.category !== 'Return Sales')
+        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
       const prevWithdrawalsSum = bundle.prevWithdrawals?.reduce((sum, w) => sum + (w.amount || 0), 0) || 0;
 
       const calculatedOpeningBal = histBal + prevSalesSum - prevExpensesSum - prevWithdrawalsSum;
@@ -283,18 +310,34 @@ export const FinanceDashboard: React.FC = () => {
 
       const staffIncomesMap: Record<string, { staffId: string; fullName: string; designation: string; total: number; count: number }> = {};
 
+      const isPartnerOrOwnerRole = (desig: string, name: string) => {
+        const d = (desig || '').toLowerCase().trim();
+        const n = (name || '').toLowerCase().trim();
+        return (
+          d.includes('owner') ||
+          d.includes('partner') ||
+          d.includes('managing director') ||
+          n.includes('shibili') ||
+          n.includes('ashif')
+        );
+      };
+
       const isExcludedRoleOrDeletedStaff = (desig: string, name: string) => {
         const d = (desig || '').toLowerCase();
         const n = (name || '').toLowerCase();
-        if (d.includes('tutor') || d.includes('counselor') || d.includes('director')) return true;
+        if (isPartnerOrOwnerRole(desig, name)) return false;
+        if (d.includes('tutor') || d.includes('counselor')) return true;
+        if (d.includes('director') && !d.includes('managing director')) return true;
         if (n.includes('althaf') || n === 'sana' || n === 'sana nesrin') return true;
         return false;
       };
 
-      // Same as above: the status guard here was always a no-op.
+      // Pre-seed non-resigned profiles so active sales executives appear even if 0 sales
       (bundle.profilesData || []).forEach(p => {
         if (!p.full_name) return;
         if (isExcludedRoleOrDeletedStaff(p.designation, p.full_name)) return;
+        // Resigned staff should not be pre-seeded with zero sales
+        if (isStaffResigned(p.id, p.full_name)) return;
 
         staffIncomesMap[String(p.id)] = {
           staffId: String(p.id),
@@ -330,6 +373,13 @@ export const FinanceDashboard: React.FC = () => {
               break;
             }
           }
+        }
+
+        // If staff member has a recorded resignation date, ignore sales created after that date
+        const rDate = staffResignationDateMap.get(matchedProfileId) || (sName && staffResignationDateMap.get(sName.trim().toLowerCase()));
+        if (rDate) {
+          const saleDateStr = sale.created_at ? sale.created_at.substring(0, 10) : '';
+          if (saleDateStr && saleDateStr > rDate) return;
         }
 
         const sDesig = staffIdToDesigMap.get(matchedProfileId) || 'Sales Executive';
@@ -383,6 +433,14 @@ export const FinanceDashboard: React.FC = () => {
           const lower = item.fullName.trim().toLowerCase();
           if (lower.includes('althaf') || lower === 'sana' || lower === 'sana nesrin' || lower === 'unassigned staff') {
             return false;
+          }
+          const isResigned = isStaffResigned(item.staffId, item.fullName);
+          if (isResigned) {
+            // For staff members who have resigned, their name and sales should only appear
+            // in the financial summary for the specific month if they actually generated sales
+            // prior to their resignation date during that month.
+            // If they have zero sales or if it's past months after their resignation, their names are completely hidden.
+            return item.count > 0 && parseSafeNumber(item.total) !== 0;
           }
           return item.count > 0 || parseSafeNumber(item.total) !== 0 || (profilesMap.has(item.staffId) && item.designation === 'Sales Executive');
         })
@@ -746,7 +804,9 @@ export const FinanceDashboard: React.FC = () => {
   const handleExportFinanceExcel = () => {
     try {
       const totalIncome = (staffIncomesList || []).reduce((sum, r) => sum + r.totalAmount, 0);
-      const totalExpenses = (expenseCategories || []).reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
+      const totalRefunds = (salesList || []).filter((s: any) => s.payment_type === 'Refund').reduce((sum: number, s: any) => sum + (Number(s.received_amount) || 0), 0);
+      const operatingCategories = (expenseCategories || []).filter(c => c.category !== 'Sales Refund' && c.category !== 'Return Sales');
+      const totalExpenses = operatingCategories.reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
       const netProfit = totalIncome - totalExpenses;
       const totalWithdrawals = (withdrawalsList || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
       const currentBalance = openingBalance + totalIncome - totalExpenses - totalWithdrawals;
@@ -761,8 +821,11 @@ export const FinanceDashboard: React.FC = () => {
       // Section 1: FINANCIAL OVERVIEW SUMMARY
       csvRows.push(['--- FINANCIAL OVERVIEW SUMMARY ---']);
       csvRows.push(['Opening Balance (Carry over)', openingBalance]);
-      csvRows.push(['Total Sales Income', totalIncome]);
-      csvRows.push(['Total Expenses', totalExpenses]);
+      csvRows.push(['Total Sales Income (Net of Refunds)', totalIncome]);
+      if (totalRefunds > 0) {
+        csvRows.push(['Total Sales Refunds Processed (Contra-Revenue)', totalRefunds]);
+      }
+      csvRows.push(['Total Operating Expenses', totalExpenses]);
       csvRows.push(['Net Profit / Loss', netProfit]);
       csvRows.push(['Partner Withdrawals', totalWithdrawals]);
       csvRows.push(['Current Remaining Balance', currentBalance]);
@@ -781,10 +844,12 @@ export const FinanceDashboard: React.FC = () => {
       csvRows.push(['--- EXPENSE CATEGORY LEDGER ---']);
       csvRows.push(['Category', 'Ashif Paid (₹)', 'Shibili Paid (₹)', 'Total Category Amount (₹)', 'Share %']);
       expenseCategories.forEach(c => {
-        const pct = totalExpenses > 0 ? ((c.totalAmount / totalExpenses) * 100).toFixed(1) + '%' : '0%';
-        csvRows.push([c.category, c.ashifAmount, c.shibiliAmount, c.totalAmount, pct]);
+        const isRefundCat = c.category === 'Sales Refund' || c.category === 'Return Sales';
+        const pct = totalExpenses > 0 && !isRefundCat ? ((c.totalAmount / totalExpenses) * 100).toFixed(1) + '%' : isRefundCat ? 'Informational' : '0%';
+        const label = isRefundCat ? `${c.category} (Informational - Contra Revenue)` : c.category;
+        csvRows.push([label, c.ashifAmount, c.shibiliAmount, c.totalAmount, pct]);
       });
-      csvRows.push(['Total Expenses', '', '', totalExpenses, '100%']);
+      csvRows.push(['Total Operating Expenses', '', '', totalExpenses, '100%']);
       csvRows.push([]);
 
       // Section 4: DETAILED SALES LOGS
@@ -836,7 +901,9 @@ export const FinanceDashboard: React.FC = () => {
   const handleExportFinancePDF = () => {
     try {
       const totalIncome = (staffIncomesList || []).reduce((sum, r) => sum + r.totalAmount, 0);
-      const totalExpenses = (expenseCategories || []).reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
+      const totalRefunds = (salesList || []).filter((s: any) => s.payment_type === 'Refund').reduce((sum: number, s: any) => sum + (Number(s.received_amount) || 0), 0);
+      const operatingCategories = (expenseCategories || []).filter(c => c.category !== 'Sales Refund' && c.category !== 'Return Sales');
+      const totalExpenses = operatingCategories.reduce((sum, r) => sum + (Number(r.totalAmount) || 0), 0);
       const netProfit = totalIncome - totalExpenses;
       const totalWithdrawals = (withdrawalsList || []).reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
       const currentBalance = openingBalance + totalIncome - totalExpenses - totalWithdrawals;
@@ -861,14 +928,16 @@ export const FinanceDashboard: React.FC = () => {
 
       // Expense Categories HTML
       const expCatRowsHtml = expenseCategories.filter(c => c.totalAmount > 0).map(c => {
-        const pct = totalExpenses > 0 ? ((c.totalAmount / totalExpenses) * 100).toFixed(1) : '0';
+        const isRefundCat = c.category === 'Sales Refund' || c.category === 'Return Sales';
+        const pct = totalExpenses > 0 && !isRefundCat ? ((c.totalAmount / totalExpenses) * 100).toFixed(1) + '%' : isRefundCat ? 'Informational' : '0%';
+        const catName = isRefundCat ? `${c.category} (Informational - Contra Revenue)` : c.category;
         return `
           <tr style="border-bottom: 1px solid #e2e8f0;">
-            <td style="padding: 8px; font-weight: bold;">${c.category}</td>
+            <td style="padding: 8px; font-weight: bold;">${catName}</td>
             <td style="padding: 8px; text-align: right; color: #4f46e5;">₹${c.ashifAmount.toLocaleString()}</td>
             <td style="padding: 8px; text-align: right; color: #9333ea;">₹${c.shibiliAmount.toLocaleString()}</td>
-            <td style="padding: 8px; text-align: right; font-weight: bold; color: #e11d48;">₹${c.totalAmount.toLocaleString()}</td>
-            <td style="padding: 8px; text-align: right; font-weight: bold;">${pct}%</td>
+            <td style="padding: 8px; text-align: right; font-weight: bold; color: ${isRefundCat ? '#d97706' : '#e11d48'};">₹${c.totalAmount.toLocaleString()}</td>
+            <td style="padding: 8px; text-align: right; font-weight: bold;">${pct}</td>
           </tr>
         `;
       }).join('');
@@ -905,9 +974,10 @@ export const FinanceDashboard: React.FC = () => {
               <div class="metric-item">
                 <div class="metric-label">Total Sales Income</div>
                 <div class="metric-val" style="color: #059669;">₹${totalIncome.toLocaleString()}</div>
+                ${totalRefunds > 0 ? `<div style="font-size: 8px; color: #e11d48; font-weight: 600;">Refunds: -₹${totalRefunds.toLocaleString()}</div>` : ''}
               </div>
               <div class="metric-item">
-                <div class="metric-label">Total Expenses</div>
+                <div class="metric-label">Operating Expenses</div>
                 <div class="metric-val" style="color: #e11d48;">₹${totalExpenses.toLocaleString()}</div>
               </div>
               <div class="metric-item">
@@ -1001,7 +1071,11 @@ export const FinanceDashboard: React.FC = () => {
 
   // Summary Metrics calculations
   const summaryTotalIncome = (staffIncomesList || []).reduce((sum, r) => sum + r.totalAmount, 0);
-  const summaryTotalExpenses = expenseCategories.reduce((sum, r) => sum + r.totalAmount, 0);
+  const summaryTotalRefunds = (salesList || [])
+    .filter((s: any) => s.payment_type === 'Refund')
+    .reduce((sum: number, s: any) => sum + (Number(s.received_amount) || 0), 0);
+  const operatingExpenseCategories = expenseCategories.filter(c => c.category !== 'Sales Refund' && c.category !== 'Return Sales');
+  const summaryTotalExpenses = operatingExpenseCategories.reduce((sum, r) => sum + r.totalAmount, 0);
   const summaryNetProfit = summaryTotalIncome - summaryTotalExpenses;
   const summaryTotalWithdrawals = withdrawalsList.reduce((sum, r) => sum + r.amount, 0);
   const finalCompanyBalance = openingBalance + summaryTotalIncome - summaryTotalExpenses - summaryTotalWithdrawals;
@@ -1106,12 +1180,20 @@ export const FinanceDashboard: React.FC = () => {
                 </Card>
 
                 <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-border dark:border-border light:border-border bg-muted-2 dark:bg-muted-2 light:bg-card">
-                  <span className="text-[8.5px] font-bold text-success dark:text-success light:text-success uppercase tracking-wider">Total Income</span>
+                  <span className="text-[8.5px] font-bold text-success dark:text-success light:text-success uppercase tracking-wider flex items-center justify-between">
+                    Total Income
+                    {summaryTotalRefunds > 0 && <span className="text-[7.5px] font-semibold text-danger lowercase">(net of refunds)</span>}
+                  </span>
                   <p className="text-sm md:text-base font-extrabold text-success dark:text-success light:text-success mt-1.5">{formatCurrency(summaryTotalIncome)}</p>
+                  {summaryTotalRefunds > 0 && (
+                    <span className="text-[8px] text-danger font-semibold mt-0.5 truncate" title={`Total Refunds: ${formatCurrency(summaryTotalRefunds)} (deducted from sales revenue)`}>
+                      Refunds: -{formatCurrency(summaryTotalRefunds)}
+                    </span>
+                  )}
                 </Card>
 
                 <Card variant="glass" glowColor="none" className="p-3.5 flex flex-col justify-between border-border dark:border-border light:border-border bg-muted-2 dark:bg-muted-2 light:bg-card">
-                  <span className="text-[8.5px] font-bold text-danger dark:text-danger light:text-danger uppercase tracking-wider">Total Expenses</span>
+                  <span className="text-[8.5px] font-bold text-danger dark:text-danger light:text-danger uppercase tracking-wider">Operating Exp</span>
                   <p className="text-sm md:text-base font-extrabold text-danger dark:text-danger light:text-danger mt-1.5">{formatCurrency(summaryTotalExpenses)}</p>
                 </Card>
 
@@ -1206,35 +1288,46 @@ export const FinanceDashboard: React.FC = () => {
                       <div className="w-24 text-right">Total</div>
                     </div>
                     {/* Rows */}
-                    {expenseCategories.map(cat => (
-                      <div 
-                        key={`cat-${cat.category}`} 
-                        onClick={() => cat.items.length > 0 && setDrilldownCategory(cat)}
-                        className={`flex items-center px-2 py-2.5 rounded-lg transition-all ${cat.items.length > 0 ? 'hover:bg-muted cursor-pointer' : 'opacity-60'}`}
-                      >
-                        <div className="flex-1 flex items-center gap-2 text-xs font-bold text-foreground">
-                          {cat.category}
-                          {cat.items.length > 0 && <Badge variant="purple" className="text-[8px] py-0 px-1 font-extrabold">{cat.items.length}</Badge>}
+                    {expenseCategories.map(cat => {
+                      const isRefundCat = cat.category === 'Sales Refund' || cat.category === 'Return Sales';
+                      return (
+                        <div 
+                          key={`cat-${cat.category}`} 
+                          onClick={() => cat.items.length > 0 && setDrilldownCategory(cat)}
+                          className={`flex items-center px-2 py-2.5 rounded-lg transition-all ${cat.items.length > 0 ? 'hover:bg-muted cursor-pointer' : 'opacity-60'}`}
+                        >
+                          <div className="flex-1 flex items-center gap-2 text-xs font-bold text-foreground">
+                            {cat.category}
+                            {cat.items.length > 0 && <Badge variant="purple" className="text-[8px] py-0 px-1 font-extrabold">{cat.items.length}</Badge>}
+                            {isRefundCat && (
+                              <Badge variant="warning" className="text-[7.5px] py-0 px-1 font-bold">Informational / Contra-Rev</Badge>
+                            )}
+                          </div>
+                          <div className="w-20 text-right text-[11px] font-medium text-muted-foreground">{cat.ashifAmount > 0 ? formatCurrency(cat.ashifAmount) : '-'}</div>
+                          <div className="w-20 text-right text-[11px] font-medium text-muted-foreground">{cat.shibiliAmount > 0 ? formatCurrency(cat.shibiliAmount) : '-'}</div>
+                          <div className={`w-24 text-right text-xs font-extrabold ${isRefundCat ? 'text-warning' : 'text-danger'}`}>{formatCurrency(cat.totalAmount)}</div>
                         </div>
-                        <div className="w-20 text-right text-[11px] font-medium text-muted-foreground">{cat.ashifAmount > 0 ? formatCurrency(cat.ashifAmount) : '-'}</div>
-                        <div className="w-20 text-right text-[11px] font-medium text-muted-foreground">{cat.shibiliAmount > 0 ? formatCurrency(cat.shibiliAmount) : '-'}</div>
-                        <div className="w-24 text-right text-xs font-extrabold text-danger">{formatCurrency(cat.totalAmount)}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     
                     {/* Grand Totals */}
                     <div className="flex items-center px-2 py-3 mt-2 border-t border-border bg-muted-2 rounded-lg">
-                      <div className="flex-1 text-[10px] font-black text-muted-foreground uppercase tracking-wider">Grand Total</div>
+                      <div className="flex-1 text-[10px] font-black text-muted-foreground uppercase tracking-wider">Total Operating Expenses</div>
                       <div className="w-20 text-right text-[11px] font-bold text-secondary-foreground">
-                        {formatCurrency(expenseCategories.reduce((sum, cat) => sum + cat.ashifAmount, 0))}
+                        {formatCurrency(operatingExpenseCategories.reduce((sum, cat) => sum + cat.ashifAmount, 0))}
                       </div>
                       <div className="w-20 text-right text-[11px] font-bold text-secondary-foreground">
-                        {formatCurrency(expenseCategories.reduce((sum, cat) => sum + cat.shibiliAmount, 0))}
+                        {formatCurrency(operatingExpenseCategories.reduce((sum, cat) => sum + cat.shibiliAmount, 0))}
                       </div>
                       <div className="w-24 text-right text-sm font-black text-danger">
                         {formatCurrency(summaryTotalExpenses)}
                       </div>
                     </div>
+                    {summaryTotalRefunds > 0 && (
+                      <p className="text-[9.5px] text-muted-foreground italic px-2 pt-1">
+                        * Note: Sales Refunds ({formatCurrency(summaryTotalRefunds)}) are deducted directly from sales revenue as contra-revenue and tracked above as informational metrics to prevent double deduction from company balances.
+                      </p>
+                    )}
                   </div>
 
                   {/* Partner Withdrawals Read-Only Book */}

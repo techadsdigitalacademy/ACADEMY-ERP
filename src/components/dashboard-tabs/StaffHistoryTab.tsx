@@ -1225,10 +1225,10 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                       <div className="w-full bg-muted dark:bg-card/80 h-2 rounded-full overflow-hidden border border-border dark:border-border p-0.5">
                         <div 
                           className={`h-full rounded-full transition-all duration-500 ${
- targetPct >= 100 
- ? 'bg-success ' 
- : ''
- }`}
+                            targetPct >= 100 
+                              ? 'bg-success' 
+                              : 'bg-primary'
+                          }`}
                           style={{ width: `${targetPct}%` }}
                         ></div>
                       </div>

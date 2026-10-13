@@ -30,6 +30,27 @@ import {
 } from 'lucide-react';
 import { LogRefundModal } from '../components/sales-dashboard/LogRefundModal';
 
+export const isPartnerOrOwner = (staff: any) => {
+  if (!staff) return false;
+  const cleanName = String(staff.full_name || staff.name || '').trim().toLowerCase();
+  const desig = String(staff.designation || '').toLowerCase().trim();
+  const rName = String(staff.role_name || staff.role || '').toLowerCase().trim();
+
+  if (cleanName.includes('shibili') || cleanName.includes('ashif')) return true;
+  if (
+    desig.includes('owner') ||
+    desig.includes('partner') ||
+    desig.includes('managing director') ||
+    rName.includes('owner') ||
+    rName.includes('partner') ||
+    rName.includes('managing director')
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
 export const SalesDashboard: React.FC = () => {
   const { 
     activeStaff, 
@@ -145,9 +166,9 @@ export const SalesDashboard: React.FC = () => {
 
   // Set default view on load
   useEffect(() => {
-    const isOwnerUser = activeStaff?.designation?.toLowerCase().includes('owner') || false;
+    const isOwnerUser = isPartnerOrOwner(activeStaff);
     setIsAdminView(isAdminMode && !isOwnerUser);
-  }, [isAdminMode, activeStaff?.designation]);
+  }, [isAdminMode, activeStaff]);
 
 
 
@@ -209,17 +230,12 @@ export const SalesDashboard: React.FC = () => {
             { ttlMs: 45000, forceRefresh }
           );
 
-          // Helper to identify Company Owners (matching AdminAttendance.tsx)
+          // Helper to identify Company Owners and Partners (matching AdminAttendance.tsx)
           const isOwnerProfile = (p: any) => {
             if (!p || !p.full_name) return true;
             const cleanName = String(p.full_name || '').trim().toLowerCase();
-            const desig = String(p.designation || '').toLowerCase().trim();
-            const rName = String(p.role_name || p.role || '').toLowerCase().trim();
-
-            if (cleanName.includes('althaf') || cleanName.includes('shibili') || cleanName.includes('ashif')) return true;
-            if (desig.includes('owner') || rName.includes('owner') || desig.includes('managing director') || rName.includes('managing director')) return true;
-
-            return false;
+            if (cleanName.includes('althaf')) return true;
+            return isPartnerOrOwner(p);
           };
 
           // Filter active profiles matching Staff Management directory (excludes Company Owners, tutors, counselors, admins)
@@ -548,7 +564,11 @@ export const SalesDashboard: React.FC = () => {
             avatar: staffObj?.avatar_url
           };
         }
-        collections[staffKey].amount += recAmount;
+        if (sale.payment_type === 'Refund') {
+          collections[staffKey].amount -= recAmount;
+        } else {
+          collections[staffKey].amount += recAmount;
+        }
       });
 
       const sortedLeaderboard = Object.values(collections)
@@ -703,7 +723,7 @@ export const SalesDashboard: React.FC = () => {
   }, [activeTab, activeStaff, isAdminMode]);
 
   if (!activeStaff) return null;
-  const isOwner = activeStaff?.designation?.toLowerCase().includes('owner') || false;
+  const isOwner = isPartnerOrOwner(activeStaff);
     
 
 
@@ -956,14 +976,23 @@ export const SalesDashboard: React.FC = () => {
     });
   }, [sales, selectedMonth]);
 
-  // Filter owner's personal sales for their personal Sales History view
+  // Filter owner/partner personal sales for their personal Sales History view
   const ownerPersonalSales = useMemo(() => {
     if (!activeStaff) return [];
-    return (sales || []).filter((s: any) => 
-      s.staff_id === activeStaff.id || 
-      (s.staff_name && activeStaff.full_name && String(s.staff_name).toLowerCase() === activeStaff.full_name.toLowerCase()) ||
-      (s.full_name && activeStaff.full_name && String(s.full_name).toLowerCase() === activeStaff.full_name.toLowerCase())
-    );
+    const staffIdStr = String(activeStaff.id || '');
+    const cleanStaffName = String(activeStaff.full_name || '').trim().toLowerCase();
+
+    return (sales || []).filter((s: any) => {
+      if (!s) return false;
+      const sStaffId = String(s.staff_id || s.user_id || '').trim();
+      if (staffIdStr && sStaffId && sStaffId === staffIdStr) return true;
+
+      const sName = String(s.staff_name || s.full_name || s.staff?.full_name || '').trim().toLowerCase();
+      if (cleanStaffName && sName && (sName === cleanStaffName || cleanStaffName.includes(sName) || sName.includes(cleanStaffName))) {
+        return true;
+      }
+      return false;
+    });
   }, [sales, activeStaff]);
 
   {/* Main Content Area */}
