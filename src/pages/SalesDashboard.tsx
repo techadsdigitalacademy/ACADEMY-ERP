@@ -14,7 +14,7 @@ import { SalesDashboardModals } from '../components/sales-dashboard/SalesDashboa
 import { SalesDashboardMetrics } from '../components/sales-dashboard/SalesDashboardMetrics';
 import { AgencyNoticeBoardWidget } from '../components/AgencyNoticeBoardWidget';
 import { NoticeBoardAdminModal } from '../components/NoticeBoardAdminModal';
-import { supabase, supabaseAdmin, SALES_COLUMNS, STAFF_PROFILE_COLUMNS, monthWindowStart } from '../services/supabase';
+import { supabase, SALES_COLUMNS, STAFF_PROFILE_COLUMNS, monthWindowStart } from '../services/supabase';
 import { formatCurrency } from '../services/mockData';
 import { dataCache } from '../services/dataCache';
 import { resetStaffAuthPassword } from '../services/staffAuth';
@@ -26,7 +26,8 @@ import {
   Sun,
   Moon,
   RotateCcw,
-  Menu
+  Menu,
+  UserPlus
 } from 'lucide-react';
 import { LogRefundModal } from '../components/sales-dashboard/LogRefundModal';
 
@@ -111,9 +112,11 @@ export const SalesDashboard: React.FC = () => {
 
   const [isAdminView, setIsAdminView] = useState(false);
   const [isClosingReportOpen, setIsClosingReportOpen] = useState(false);
-  const [todayAttendanceStats, setTodayAttendanceStats] = useState({ present: 0, late: 0, halfDay: 0, leave: 0, inOffice: 0 });
   const [academyRevenue, setAcademyRevenue] = useState(0);
+  const [activeStudentsCount, setActiveStudentsCount] = useState(0);
+  const [batchesStats, setBatchesStats] = useState({ total: 0, upcoming: 0, running: 0 });
   const [dailyLeaderboard, setDailyLeaderboard] = useState<{ name: string; amount: number; avatar?: string }[]>([]);
+  const [todayAttendanceStats, setTodayAttendanceStats] = useState({ present: 0, late: 0, halfDay: 0, leave: 0, inOffice: 0 });
 
   // Daily Report editing states
   const [editingReport, setEditingReport] = useState<any | null>(null);
@@ -164,6 +167,133 @@ export const SalesDashboard: React.FC = () => {
   const [enlargedSelfie, setEnlargedSelfie] = useState<string | null>(null);
   const [isNoticeBoardModalOpen, setIsNoticeBoardModalOpen] = useState(false);
 
+  // Counselor Portal Specific States
+  const isCounselor = activeStaff?.designation === 'Academy Counselor' || 
+    activeStaff?.designation?.toLowerCase().includes('counselor');
+  const [counselorBatches, setCounselorBatches] = useState<any[]>([]);
+  const [counselorStudents, setCounselorStudents] = useState<any[]>([]);
+  const [isAdmissionModalOpen, setIsAdmissionModalOpen] = useState(false);
+  const [targetBatchForAdmission, setTargetBatchForAdmission] = useState<any | null>(null);
+  const [admissionForm, setAdmissionForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    batch_id: '',
+    total_fee: '',
+    paid_fee: '',
+    payment_mode: 'GPay',
+    notes: ''
+  });
+  const [isSubmittingAdmission, setIsSubmittingAdmission] = useState(false);
+
+  const loadCounselorBatchesData = async () => {
+    try {
+      const [batchesRes, studentsRes] = await Promise.all([
+        supabase.from('batches').select('*').order('start_date', { ascending: true }),
+        supabase.from('students').select('*')
+      ]);
+      if (batchesRes.data) setCounselorBatches(batchesRes.data);
+      if (studentsRes.data) setCounselorStudents(studentsRes.data);
+    } catch (err) {
+      console.warn('Error loading batches and students for counselor:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadCounselorBatchesData();
+  }, [activeTab]);
+
+  const handleOpenAdmissionModal = (batch?: any) => {
+    const selected = batch || counselorBatches[0] || null;
+    setTargetBatchForAdmission(selected);
+    setAdmissionForm({
+      name: '',
+      phone: '',
+      email: '',
+      batch_id: selected?.id || '',
+      total_fee: selected?.fee_amount ? String(selected.fee_amount) : '',
+      paid_fee: selected?.fee_amount ? String(selected.fee_amount) : '',
+      payment_mode: 'GPay',
+      notes: ''
+    });
+    setIsAdmissionModalOpen(true);
+  };
+
+  const handleSaveAdmission = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!admissionForm.name.trim() || !admissionForm.phone.trim() || !admissionForm.batch_id) {
+      alert('Student Name, Phone Number, and Batch selection are required.');
+      return;
+    }
+
+    setIsSubmittingAdmission(true);
+    try {
+      const studentCode = `STD-${Date.now().toString().slice(-5)}`;
+      const studentPayload: any = {
+        student_id_code: studentCode,
+        name: admissionForm.name.trim(),
+        phone: admissionForm.phone.trim(),
+        email: admissionForm.email.trim() || null,
+        batch_id: admissionForm.batch_id,
+        counselor_id: activeStaff?.id || null,
+        enrollment_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
+        total_fee: parseFloat(admissionForm.total_fee) || 0,
+        paid_fee: parseFloat(admissionForm.paid_fee) || 0
+      };
+
+      let newStudent: any = null;
+      const { data, error } = await supabase.from('students').insert([studentPayload]).select().single();
+      if (!error && data) {
+        newStudent = data;
+      } else {
+        const res = await fetch('/supabase-admin/rest/v1/students', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify([studentPayload])
+        });
+        if (res.ok) {
+          const resArr = await res.json();
+          newStudent = resArr[0];
+        }
+      }
+
+      const paidAmt = parseFloat(admissionForm.paid_fee) || 0;
+      if (paidAmt > 0 && newStudent?.id) {
+        const feePayload = {
+          student_id: newStudent.id,
+          batch_id: admissionForm.batch_id,
+          collected_by: activeStaff?.id || null,
+          amount: paidAmt,
+          payment_mode: admissionForm.payment_mode,
+          installment_month: new Date().toISOString().slice(0, 7),
+          notes: admissionForm.notes || 'Initial Admission Fee'
+        };
+
+        const { error: fErr } = await supabase.from('fee_collections').insert([feePayload]);
+        if (fErr) {
+          await fetch('/supabase-admin/rest/v1/fee_collections', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([feePayload])
+          });
+        }
+      }
+
+      alert(`Student "${admissionForm.name}" enrolled successfully! Seat availability updated.`);
+      setIsAdmissionModalOpen(false);
+      await loadCounselorBatchesData();
+      window.dispatchEvent(new CustomEvent('students_data_changed'));
+    } catch (err: any) {
+      console.error('Admission error:', err);
+      alert('Failed to admit student: ' + err.message);
+    } finally {
+      setIsSubmittingAdmission(false);
+    }
+  };
+
   // Set default view on load
   useEffect(() => {
     const isOwnerUser = isPartnerOrOwner(activeStaff);
@@ -192,10 +322,14 @@ export const SalesDashboard: React.FC = () => {
             salesData,
             reportsData,
             monthAttData,
-            staffData
+            staffData,
+            feeCollectionsData,
+            studentsData,
+            batchesData
           } = await dataCache.fetchWithCache(
             cacheKey,
             async () => {
+              const dbClient = supabase;
               const [
                 attendanceRes,
                 paymentsRes,
@@ -204,27 +338,47 @@ export const SalesDashboard: React.FC = () => {
                 salesRes,
                 reportsRes,
                 monthAttRes,
-                staffRes
+                staffRes,
+                feeCollectionsRes,
+                studentsRes,
+                batchesRes
               ] = await Promise.all([
-                supabase.from('attendance').select('staff_id, status, punch_in').eq('attendance_date', todayStr),
-                supabase.from('academy_student_payments').select('amount'),
+                supabase.from('staff_attendance').select('staff_id, status, created_at').eq('attendance_date', todayStr),
+                dbClient.from('fee_collections').select('amount'),
                 supabase.from('staff_profiles').select(STAFF_PROFILE_COLUMNS).order('created_at', { ascending: false }),
                 supabase.from('staff').select('id, monthly_target_amount, monthly_targets, full_name, avatar_url'),
                 supabase.from('sales').select(SALES_COLUMNS).or(`created_at.gte.${windowStartStr},created_at.is.null`),
                 supabase.from('daily_reports').select('*').gte('report_date', windowStartStr),
-                supabase.from('attendance').select('staff_id, status, attendance_date').gte('attendance_date', windowStartStr),
-                supabase.from('staff').select('*, departments(name), roles(role_name)')
+                supabase.from('staff_attendance').select('staff_id, status, attendance_date').gte('attendance_date', windowStartStr),
+                supabase.from('staff').select('*, departments(name), roles(role_name)'),
+                dbClient.from('fee_collections').select('amount'),
+                dbClient.from('students').select('*'),
+                dbClient.from('batches').select('*').order('start_date', { ascending: true })
               ]);
 
+              const normalizedAttendance = (attendanceRes.data || []).map((a: any) => ({
+                ...a,
+                status: (a.status || 'present').toUpperCase(),
+                punch_in: a.punch_in || (a.created_at ? new Date(a.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
+              }));
+
+              const normalizedMonthAtt = (monthAttRes.data || []).map((a: any) => ({
+                ...a,
+                status: (a.status || 'present').toUpperCase()
+              }));
+
               return {
-                attendanceData: attendanceRes.data || [],
-                paymentsData: paymentsRes.data || [],
+                attendanceData: normalizedAttendance,
+                paymentsData: paymentsRes.data || feeCollectionsRes.data || [],
                 profilesData: profilesRes.data || [],
                 targetsData: targetsRes.data || [],
                 salesData: salesRes.data || [],
                 reportsData: reportsRes.data || [],
-                monthAttData: monthAttRes.data || [],
-                staffData: staffRes.data || []
+                monthAttData: normalizedMonthAtt,
+                staffData: staffRes.data || [],
+                feeCollectionsData: feeCollectionsRes.data || [],
+                studentsData: studentsRes.data || [],
+                batchesData: batchesRes.data || []
               };
             },
             { ttlMs: 45000, forceRefresh }
@@ -305,9 +459,21 @@ export const SalesDashboard: React.FC = () => {
           // 1. Process Attendance Stats
           setTodayAttendanceStats({ present, late, halfDay, leave, inOffice });
 
-          // 2. Process Academy Revenue
-          const sumRev = (paymentsData || []).reduce((acc: number, p: any) => acc + (Number(p.amount) || 0), 0);
+          // 2. Process Academy Revenue & Stats
+          const sumRev = (feeCollectionsData || paymentsData || []).reduce((acc: number, p: any) => acc + (Number(p.amount) || 0), 0);
           setAcademyRevenue(sumRev);
+
+          const studentList = studentsData || [];
+          setActiveStudentsCount(studentList.length);
+
+          const batchList = batchesData || [];
+          const upCount = batchList.filter((b: any) => (b.status || '').toLowerCase() === 'upcoming').length;
+          const runCount = batchList.filter((b: any) => (b.status || '').toLowerCase() === 'running').length;
+          setBatchesStats({
+            total: batchList.length,
+            upcoming: upCount,
+            running: runCount
+          });
 
           // 3. Process Staff Profiles & Performance Stats
           const profiles = profilesData || [];
@@ -446,7 +612,7 @@ export const SalesDashboard: React.FC = () => {
 
   const fetchDailyLeaderboard = async () => {
     try {
-      const clientToUse = supabaseAdmin || supabase;
+      const clientToUse = supabase;
 
       // Only today's rows are ever shown, so filter server-side at the IST day
       // boundary rather than pulling the last 300 sales and discarding most of
@@ -1713,7 +1879,7 @@ export const SalesDashboard: React.FC = () => {
                   <Menu className="w-5 h-5" />
                 </button>
                 <h1 className="text-xs sm:text-sm md:text-lg font-bold text-foreground dark:text-white tracking-wide truncate">
-                  {isAdminView ? 'Admin Control Dashboard' :  'Consultant Sales Terminal'}
+                  {isAdminView ? 'Admin Control Dashboard' : isCounselor ? 'Academy Admissions' : 'Consultant Sales Terminal'}
                 </h1>
               </div>
 
@@ -1750,7 +1916,20 @@ export const SalesDashboard: React.FC = () => {
                 </Button>
               )}
 
-              {(!isAdminView || isOwner) && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && activeStaff?.designation !== 'Videographer' && (
+              {/* Counselor New Admission Trigger */}
+              {isCounselor && (
+                <Button 
+                  variant="primary" 
+                  size="sm" 
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-md text-[11px] sm:text-xs font-bold shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-1.5 cursor-pointer" 
+                  onClick={() => handleOpenAdmissionModal()}
+                  icon={<UserPlus className="w-3.5 h-3.5" />}
+                >
+                  + New Admission
+                </Button>
+              )}
+
+              {(!isAdminView || isOwner) && !isCounselor && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && activeStaff?.designation !== 'Videographer' && (
                 <button
                   onClick={() => setIsRefundModalOpen(true)}
                   className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 bg-danger hover:text-white font-extrabold text-[11px] sm:text-xs rounded-md flex items-center gap-1 shrink-0 transition-all border border-danger/20 cursor-pointer"
@@ -1760,7 +1939,7 @@ export const SalesDashboard: React.FC = () => {
                 </button>
               )}
 
-              {!isAdminView && !isOwner && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && activeStaff?.designation !== 'Videographer' && (
+              {!isAdminView && !isOwner && !isCounselor && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && activeStaff?.designation !== 'Videographer' && (
                 <Button 
                   variant="primary" 
                   size="sm" 
@@ -1796,9 +1975,15 @@ export const SalesDashboard: React.FC = () => {
                 isAdminView={isAdminView}
                 activeStaff={activeStaff}
                 isOwner={isOwner}
+                isCounselor={isCounselor}
+                counselorBatches={counselorBatches}
+                counselorStudents={counselorStudents}
+                onOpenAdmissionModal={handleOpenAdmissionModal}
                 dailyLeaderboard={dailyLeaderboard}
                 todayAttendanceStats={todayAttendanceStats}
                 academyRevenue={academyRevenue}
+                activeStudentsCount={activeStudentsCount}
+                batchesStats={batchesStats}
                 totalReceived={isOwner && !isAdminView ? ownerTotalReceived : totalReceived}
                 totalPackage={isOwner && !isAdminView ? ownerTotalPackage : totalPackage}
                 totalBalance={isOwner && !isAdminView ? ownerTotalBalance : totalBalance}
@@ -1994,6 +2179,218 @@ export const SalesDashboard: React.FC = () => {
           staffId={activeStaff?.id}
           onClose={() => setIsNoticeBoardModalOpen(false)}
         />
+      )}
+
+      {/* QUICK ADMISSION / STUDENT ENROLLMENT MODAL (FOR COUNSELORS) */}
+      {isAdmissionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-card/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg p-5 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-primary text-primary-foreground">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-foreground">Academy Student Admission</h3>
+                  <p className="text-xs text-muted-foreground font-semibold">
+                    {targetBatchForAdmission?.batch_name 
+                      ? `Enrolling in ${targetBatchForAdmission.course_name || targetBatchForAdmission.batch_name}` 
+                      : 'Admit student & assign to upcoming course batch'}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsAdmissionModalOpen(false)}
+                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAdmission} className="space-y-3.5">
+              {/* Batch Select */}
+              <div>
+                <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
+                  Select Batch *
+                </label>
+                <select
+                  value={admissionForm.batch_id}
+                  onChange={(e) => {
+                    const selId = e.target.value;
+                    const matchedBatch = counselorBatches.find(b => b.id === selId);
+                    setAdmissionForm(prev => ({
+                      ...prev,
+                      batch_id: selId,
+                      total_fee: matchedBatch?.fee_amount ? String(matchedBatch.fee_amount) : prev.total_fee,
+                      paid_fee: matchedBatch?.fee_amount ? String(matchedBatch.fee_amount) : prev.paid_fee
+                    }));
+                  }}
+                  className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
+                  required
+                >
+                  <option value="">-- Choose a Batch --</option>
+                  {counselorBatches.map(b => {
+                    const bStus = counselorStudents.filter(s => s.batch_id === b.id);
+                    const filled = bStus.length;
+                    const total = Number(b.total_seats) || 30;
+                    const bal = Math.max(0, total - filled);
+                    return (
+                      <option key={b.id} value={b.id}>
+                        {b.course_name || b.batch_name} ({b.batch_name}) &bull; {bal} seats left
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Student Name */}
+              <div>
+                <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
+                  Student Full Name *
+                </label>
+                <input
+                  type="text"
+                  value={admissionForm.name}
+                  onChange={(e) => setAdmissionForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g. Rahul Sharma"
+                  className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
+                  required
+                />
+              </div>
+
+              {/* Phone and Email */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
+                    Phone Number *
+                  </label>
+                  <input
+                    type="tel"
+                    value={admissionForm.phone}
+                    onChange={(e) => setAdmissionForm(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="+91 9876543210"
+                    className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={admissionForm.email}
+                    onChange={(e) => setAdmissionForm(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="student@example.com"
+                    className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              {/* Fee and Initial Paid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
+                    Total Course Fee (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    value={admissionForm.total_fee}
+                    onChange={(e) => setAdmissionForm(prev => ({ ...prev, total_fee: e.target.value }))}
+                    placeholder="35000"
+                    className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-bold text-foreground focus:outline-none focus:border-primary"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-success uppercase block mb-1">
+                    Initial Amount Paid (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    value={admissionForm.paid_fee}
+                    onChange={(e) => setAdmissionForm(prev => ({ ...prev, paid_fee: e.target.value }))}
+                    placeholder="10000"
+                    className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-bold text-success focus:outline-none focus:border-success"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Payment Mode */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
+                    Payment Mode
+                  </label>
+                  <select
+                    value={admissionForm.payment_mode}
+                    onChange={(e) => setAdmissionForm(prev => ({ ...prev, payment_mode: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
+                  >
+                    <option value="GPay">GPay (Google Pay)</option>
+                    <option value="PhonePe">PhonePe</option>
+                    <option value="Bank Transfer">Bank Transfer / IMPS</option>
+                    <option value="Cash">Cash</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
+                    Admissions Counselor
+                  </label>
+                  <input
+                    type="text"
+                    value={activeStaff?.full_name || 'Counselor'}
+                    disabled
+                    className="w-full px-3 py-2 rounded-lg bg-muted-2 border border-border text-xs font-bold text-muted-foreground cursor-not-allowed"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
+                  Notes / Remarks
+                </label>
+                <input
+                  type="text"
+                  value={admissionForm.notes}
+                  onChange={(e) => setAdmissionForm(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Optional admission remarks or installment details"
+                  className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsAdmissionModalOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAdmission}
+                  className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md hover:shadow-lg transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {isSubmittingAdmission ? (
+                    <>
+                      <div className="w-3.5 h-3.5 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
+                      <span>Enrolling...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>Confirm & Enroll Student</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

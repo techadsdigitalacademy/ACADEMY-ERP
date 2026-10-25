@@ -124,10 +124,6 @@ export const StaffManagement: React.FC = () => {
       }
 
       const mergedProfs = (profs || [])
-        ?.filter(p => {
-          const desig = p.designation?.toLowerCase() || '';
-          return !desig.includes('tutor') && !desig.includes('counselor');
-        })
         ?.map(p => ({
           ...p,
           avatar_url: avatarMap.get(p.full_name) || undefined
@@ -165,15 +161,14 @@ export const StaffManagement: React.FC = () => {
     setSelectedProfile(profile);
   };
 
-  // Filter profiles (strictly excluding Tutor & Academy Counselor)
+  // Filter profiles based on search query
   const filteredProfiles = profiles?.filter(p => {
-    const desig = p.designation?.toLowerCase() || '';
-    if (desig.includes('tutor') || desig.includes('counselor')) return false;
-
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return true;
     return (
-      p.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.designation.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.username.toLowerCase().includes(searchQuery.toLowerCase())
+      (p.full_name || '').toLowerCase().includes(q) ||
+      (p.designation || '').toLowerCase().includes(q) ||
+      (p.username || '').toLowerCase().includes(q)
     );
   });
   
@@ -316,8 +311,8 @@ export const StaffManagement: React.FC = () => {
     setProfiles(prev => prev.filter(p => p.id !== id && (!name || p.full_name?.toLowerCase().trim() !== name.toLowerCase().trim())));
 
     try {
-      // 1. Unlink foreign key references across tables so foreign key constraint crashes (23503) never occur
-      await supabase.from('attendance').delete().eq('staff_id', id);
+      try { await supabase.from('staff_attendance').delete().eq('staff_id', id); } catch (e) {}
+      try { await fetch(`/supabase-admin/rest/v1/staff_attendance?staff_id=eq.${id}`, { method: 'DELETE' }); } catch (e) {}
       await supabase.from('daily_reports').delete().eq('staff_id', id);
       await supabase.from('expenses').delete().eq('staff_id', id);
       await supabase.from('leads').update({ assigned_to: null }).eq('assigned_to', id);
@@ -642,15 +637,12 @@ export const StaffManagement: React.FC = () => {
                       className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary transition-colors"
                     >
                       <option value="">Select Designation</option>
-                      <option value="Managing Director">Managing Director</option>
-                      <option value="Sales Executive">Sales Executive</option>
-                      <option value="Digital Marketer">Digital Marketer</option>
-                      <option value="Graphic Designer">Graphic Designer</option>
-                      <option value="Content Creator">Content Creator</option>
-                      <option value="Company Owner">Company Owner</option>
+                      <option value="Academy Counselor">Academy Counselor</option>
+                      <option value="Academy Tutor">Academy Tutor</option>
                       <option value="Videographer">Videographer</option>
+                      <option value="Graphic Designer">Graphic Designer</option>
+                      <option value="Company Owner">Company Owner</option>
                       <option value="Company Staff">Company Staff</option>
-                      <option value="Demo">Demo</option>
                     </select>
                   </div>
 
@@ -920,15 +912,12 @@ export const StaffManagement: React.FC = () => {
                   className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-sm text-foreground focus:outline-none focus:border-primary transition-colors"
                 >
                   <option value="">Select Designation</option>
-                  <option value="Managing Director">Managing Director</option>
-                  <option value="Sales Executive">Sales Executive</option>
-                  <option value="Digital Marketer">Digital Marketer</option>
-                  <option value="Graphic Designer">Graphic Designer</option>
-                  <option value="Content Creator">Content Creator</option>
-                  <option value="Company Owner">Company Owner</option>
+                  <option value="Academy Counselor">Academy Counselor</option>
+                  <option value="Academy Tutor">Academy Tutor</option>
                   <option value="Videographer">Videographer</option>
+                  <option value="Graphic Designer">Graphic Designer</option>
+                  <option value="Company Owner">Company Owner</option>
                   <option value="Company Staff">Company Staff</option>
-                  <option value="Demo">Demo</option>
                 </select>
               </div>
 

@@ -39,10 +39,11 @@ export const AdminAttendance: React.FC = () => {
   // bounce a deep link away from this page on first paint.
   useEffect(() => {
     if (isLoading) return;
-    if (!isAdminMode) {
+    const isOwnerUser = activeStaff?.designation?.toLowerCase().includes('owner') || false;
+    if (!isAdminMode && !isOwnerUser) {
       setActiveTab('sales');
     }
-  }, [isAdminMode, isLoading]);
+  }, [isAdminMode, isLoading, activeStaff]);
 
   // Component local states
   const [loading, setLoading] = useState(true);
@@ -214,14 +215,21 @@ export const AdminAttendance: React.FC = () => {
         cacheKey,
         async () => {
           const { data, error } = await supabase
-            .from('attendance')
+            .from('staff_attendance')
             .select('*')
             .eq('staff_id', staffId)
             .gte('attendance_date', monthStart)
             .lte('attendance_date', monthEnd)
             .order('attendance_date', { ascending: false });
-          if (error) throw error;
-          return data || [];
+          if (error) {
+            console.warn("Could not load drill logs from staff_attendance:", error);
+            return [];
+          }
+          return (data || []).map((d: any) => ({
+            ...d,
+            status: (d.status || 'present').toUpperCase(),
+            punch_in: d.punch_in || (d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
+          }));
         },
         { ttlMs: 60000, forceRefresh }
       );
@@ -248,13 +256,24 @@ export const AdminAttendance: React.FC = () => {
   const generateReport = async () => {
     setIsGeneratingReport(true);
     try {
-      const { data: rangeAttData, error: rangeAttErr } = await supabase
-        .from('attendance')
-        .select('*')
-        .gte('attendance_date', reportFromDate)
-        .lte('attendance_date', reportToDate);
+      let rangeAttData: any[] = [];
+      try {
+        const { data, error: rangeAttErr } = await supabase
+          .from('staff_attendance')
+          .select('*')
+          .gte('attendance_date', reportFromDate)
+          .lte('attendance_date', reportToDate);
 
-      if (rangeAttErr) throw rangeAttErr;
+        if (!rangeAttErr && data) {
+          rangeAttData = data.map((d: any) => ({
+            ...d,
+            status: (d.status || 'present').toUpperCase(),
+            punch_in: d.punch_in || (d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
+          }));
+        }
+      } catch (err: any) {
+        console.warn("Could not query staff_attendance for report:", err);
+      }
 
       const logs = rangeAttData || [];
       const targetStaffs = (masterStaffList.length > 0 ? masterStaffList : staffList).filter(s => s && s.full_name && !s.full_name.toLowerCase().includes('althaf'));
@@ -557,15 +576,24 @@ export const AdminAttendance: React.FC = () => {
           const [staffRes, profilesRes, attRes] = await Promise.all([
             supabase.from('staff').select('*, departments(name), roles(role_name)'),
             supabase.from('staff_profiles').select(STAFF_PROFILE_COLUMNS),
-            supabase.from('attendance').select('*').gte('attendance_date', startOfMonthStr)
+            supabase.from('staff_attendance').select('*').gte('attendance_date', startOfMonthStr)
           ]);
 
-          if (attRes.error) throw attRes.error;
+          let attRecords: any[] = [];
+          if (attRes.data) {
+            attRecords = attRes.data.map((a: any) => ({
+              ...a,
+              status: (a.status || 'present').toUpperCase(),
+              punch_in: a.punch_in || (a.created_at ? new Date(a.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
+            }));
+          } else if (attRes.error) {
+            console.warn("staff_attendance load info:", attRes.error);
+          }
 
           return {
             staffData: staffRes.data || [],
             profilesData: profilesRes.data || [],
-            attData: attRes.data || []
+            attData: attRecords
           };
         },
         { ttlMs: 45000, forceRefresh }
@@ -600,12 +628,10 @@ export const AdminAttendance: React.FC = () => {
         const desig = String(p.designation || '').toLowerCase().trim();
         const rName = String(p.role_name || p.role || '').toLowerCase().trim();
 
-        const isTutor = desig.includes('tutor') || rName.includes('tutor');
-        const isCounselor = desig.includes('counselor') || rName.includes('counselor');
-        const isAdminDir = desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director');
+        const isAdminDir = (desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director')) && 
+          desig !== 'managing director';
 
         if (isAdminDir) return false;
-        if (isTutor || isCounselor) return false;
 
         return true;
       });
@@ -618,12 +644,10 @@ export const AdminAttendance: React.FC = () => {
         const desig = String(p.designation || '').toLowerCase().trim();
         const rName = String(p.role_name || p.role || '').toLowerCase().trim();
 
-        const isTutor = desig.includes('tutor') || rName.includes('tutor');
-        const isCounselor = desig.includes('counselor') || rName.includes('counselor');
-        const isAdminDir = desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director');
+        const isAdminDir = (desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director')) && 
+          desig !== 'managing director';
 
         if (isAdminDir) return false;
-        if (isTutor || isCounselor) return false;
 
         return true;
       });

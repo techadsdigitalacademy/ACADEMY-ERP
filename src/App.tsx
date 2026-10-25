@@ -29,8 +29,8 @@ function DashboardContainer() {
       {(() => {
         if (activeTab === 'assets') return <AssetLibrary />;
         if (activeTab === 'sales' || activeTab === 'history' || activeTab === 'staff-history' || activeTab === 'expense_history' || activeTab === 'reports') return <SalesDashboard />;
-        if (activeTab === 'attendance') return (isAdminMode && !isOwner) ? <AdminAttendance /> : <SalesDashboard />;
-        if (activeTab.startsWith('academy')) return (isAdminMode || isTutor || isCounselor) ? <AcademyDashboard /> : <SalesDashboard />;
+        if (activeTab === 'attendance') return (isAdminMode || isOwner) ? <AdminAttendance /> : <SalesDashboard />;
+        if (activeTab.startsWith('academy')) return (isAdminMode || isTutor || isCounselor || isOwner) ? <AcademyDashboard /> : <SalesDashboard />;
         if (activeTab === 'staff') return (isAdminMode || isOwner) ? <StaffManagement /> : <SalesDashboard />;
         if (activeTab === 'finance') return (isAdminMode || isOwner) ? <FinanceDashboard /> : <SalesDashboard />;
         if (activeTab === 'withdrawals') return (isAdminMode || isOwner) ? <PartnerWithdrawals /> : <SalesDashboard />;

@@ -51,6 +51,7 @@ interface StaffIncome {
   designation: string;
   totalAmount: number;
   count: number;
+  batches?: string[];
 }
 
 interface ExpenseCategoryGroup {
@@ -74,15 +75,32 @@ export const FinanceDashboard: React.FC = () => {
 
   if (!activeStaff) return null;
 
+  const staffDesig = (activeStaff?.designation || '').toLowerCase();
+  const staffName = (activeStaff?.full_name || '').toUpperCase();
+  const isCompanyOwner = 
+    staffName.includes('SHIBILI') || 
+    staffName.includes('ASHIF') || 
+    staffDesig.includes('owner') ||
+    staffDesig.includes('partner') ||
+    staffDesig.includes('director') ||
+    isAdminMode;
+
+  const isAccountant = 
+    staffDesig.includes('accountant') ||
+    staffDesig.includes('finance');
+
+  const canAccessFinance = isCompanyOwner || isAccountant;
+  const canLogEntry = isCompanyOwner || isAccountant;
+
   // Wait for the session to resolve before enforcing the permission
-  // redirect - isAdminMode is false while loading, which would otherwise
+  // redirect - canAccessFinance is false while loading, which would otherwise
   // bounce a deep link away from this page on first paint.
   useEffect(() => {
     if (isLoading) return;
-    if (!isAdminMode) {
-      setActiveTab('sales');
+    if (!canAccessFinance) {
+      setActiveTab('academy_overview');
     }
-  }, [isAdminMode, isLoading]);
+  }, [canAccessFinance, isLoading]);
 
   // Selected ledger month (e.g. '2026-07')
   const [selectedLedgerMonth, setSelectedLedgerMonth] = useState<string>(new Date().toISOString().slice(0, 7));
@@ -104,6 +122,9 @@ export const FinanceDashboard: React.FC = () => {
   const [withdrawalsList, setWithdrawalsList] = useState<PartnerWithdrawal[]>([]);
   const [staffProfilesMap, setStaffProfilesMap] = useState<Map<string, { name: string; desig: string }>>(new Map());
   const [staffIdToName, setStaffIdToName] = useState<Map<string, string>>(new Map());
+  const [batchesList, setBatchesList] = useState<{ id: string; batch_name: string; course_name?: string }[]>([]);
+  const [studentsList, setStudentsList] = useState<any[]>([]);
+  const [feesList, setFeesList] = useState<any[]>([]);
 
   // Modal / Side-Drawer state
   const [isEntryDrawerOpen, setIsEntryDrawerOpen] = useState(false);
@@ -114,6 +135,7 @@ export const FinanceDashboard: React.FC = () => {
   const [drilldownCategory, setDrilldownCategory] = useState<ExpenseCategoryGroup | null>(null);
 
   // Add Income (Sale) Form states
+  const [incomeType, setIncomeType] = useState<'sale' | 'academy_fee'>('sale');
   const [incClientName, setIncClientName] = useState('');
   const [incServicePkg, setIncServicePkg] = useState('');
   const [incPaymentType, setIncPaymentType] = useState<'Full' | 'Advance' | 'Clearance'>('Advance');
@@ -122,11 +144,22 @@ export const FinanceDashboard: React.FC = () => {
   const [incPaymentMethod, setIncPaymentMethod] = useState('UPI');
   const [isAddingIncome, setIsAddingIncome] = useState(false);
 
+  // Add Academy Fee Form states
+  const [feeStudentId, setFeeStudentId] = useState('');
+  const [feeBatchId, setFeeBatchId] = useState('');
+  const [feeCounselorId, setFeeCounselorId] = useState('');
+  const [feeAmount, setFeeAmount] = useState('');
+  const [feePaymentMode, setFeePaymentMode] = useState('UPI');
+  const [feeInstallmentMonth, setFeeInstallmentMonth] = useState('');
+  const [feeNotes, setFeeNotes] = useState('');
+  const [isAddingFee, setIsAddingFee] = useState(false);
+
   // Add Expense Form states
   const [expCategory, setExpCategory] = useState('Salary');
   const [expAmount, setExpAmount] = useState('');
   const [expDate, setExpDate] = useState(new Date().toISOString().split('T')[0]);
   const [expDescription, setExpDescription] = useState('');
+  const [expPayer, setExpPayer] = useState<'Ashif' | 'Shibin' | 'Company Shared'>('Ashif');
   const [isAddingExpense, setIsAddingExpense] = useState(false);
 
   // Load all finance details in parallel with caching
@@ -149,6 +182,7 @@ export const FinanceDashboard: React.FC = () => {
       const bundle = await dataCache.fetchWithCache(
         cacheKey,
         async () => {
+          const dbClient = supabase;
           const [
             settingsRes,
             profilesRes,
@@ -159,7 +193,11 @@ export const FinanceDashboard: React.FC = () => {
             currentSalesRes,
             dbExpRes,
             refundSalesRes,
-            witRes
+            witRes,
+            prevFeesRes,
+            currentFeesRes,
+            batchesRes,
+            studentsRes
           ] = await Promise.all([
             supabase.from('finance_settings').select('historical_opening_balance'),
             supabase.from('staff_profiles').select('id, full_name, designation, status'),
@@ -170,7 +208,11 @@ export const FinanceDashboard: React.FC = () => {
             supabase.from('sales').select(`${SALES_COLUMNS}, staff(full_name)`).gte('created_at', startOfMonthStr).lte('created_at', endOfMonthStr),
             supabase.from('expenses').select('*').or(`and(expense_date.gte.${startOfMonthDateStr},expense_date.lte.${endOfMonthDateStr}),expense_date.is.null`),
             supabase.from('sales').select(`${SALES_COLUMNS}, staff(full_name)`).eq('payment_type', 'Refund').or(`and(created_at.gte.${startOfMonthStr},created_at.lte.${endOfMonthStr}),created_at.is.null`),
-            supabase.from('partner_withdrawals').select('*').gte('withdrawal_date', startOfMonthDateStr).lte('withdrawal_date', endOfMonthDateStr)
+            supabase.from('partner_withdrawals').select('*').gte('withdrawal_date', startOfMonthDateStr).lte('withdrawal_date', endOfMonthDateStr),
+            dbClient.from('fee_collections').select('amount').lt('created_at', startOfMonthStr),
+            dbClient.from('fee_collections').select('id, amount, student_id, batch_id, collected_by, installment_month, payment_mode, notes, created_at').gte('created_at', startOfMonthStr).lte('created_at', endOfMonthStr),
+            dbClient.from('batches').select('id, batch_name, course_name'),
+            dbClient.from('students').select('id, name, student_id_code, batch_id, counselor_id, paid_fee')
           ]);
 
           return {
@@ -183,7 +225,11 @@ export const FinanceDashboard: React.FC = () => {
             rawSalesData: currentSalesRes.data || [],
             dbExpData: dbExpRes.data || [],
             refundSalesData: refundSalesRes.data || [],
-            witData: witRes.data || []
+            witData: witRes.data || [],
+            prevFees: prevFeesRes.data || [],
+            currentFees: currentFeesRes.data || [],
+            batchesData: batchesRes.data || [],
+            studentsData: studentsRes.data || []
           };
         },
         { ttlMs: 45000, forceRefresh }
@@ -195,6 +241,24 @@ export const FinanceDashboard: React.FC = () => {
         histBal = Number(bundle.settingsData[0].historical_opening_balance) || 0;
       }
       setHistoricalBalance(histBal);
+
+      setBatchesList(bundle.batchesData || []);
+      setStudentsList(bundle.studentsData || []);
+      setFeesList(bundle.currentFees || []);
+
+      const batchMap = new Map<string, string>();
+      (bundle.batchesData || []).forEach((b: any) => {
+        if (b.id && b.batch_name) {
+          batchMap.set(String(b.id), b.batch_name);
+        }
+      });
+
+      const studentMap = new Map<string, any>();
+      (bundle.studentsData || []).forEach((st: any) => {
+        if (st.id) {
+          studentMap.set(String(st.id), st);
+        }
+      });
 
       // Process profiles & staff mappings
       const profilesMap = new Map<string, { name: string; desig: string }>();
@@ -290,25 +354,26 @@ export const FinanceDashboard: React.FC = () => {
         return false;
       };
 
-      // 2. Calculate opening balance (Net sales revenue minus operating expenses)
+      // 2. Calculate opening balance (Net sales revenue + past academy tuition minus operating expenses and withdrawals)
       const activePrevSales = (bundle.prevSales || []).filter(s => !isSaleFromDeletedStaff(s));
       const prevSalesSum = activePrevSales.reduce((sum, s) => {
         const amt = Number(s.received_amount) || 0;
         return s.payment_type === 'Refund' ? sum - amt : sum + amt;
       }, 0);
+      const prevFeesSum = (bundle.prevFees || []).reduce((sum: number, f: any) => sum + (Number(f.amount) || 0), 0);
       const prevExpensesSum = (bundle.prevExpenses || [])
         .filter((e: any) => e.category !== 'Sales Refund' && e.category !== 'Return Sales')
         .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
       const prevWithdrawalsSum = bundle.prevWithdrawals?.reduce((sum, w) => sum + (w.amount || 0), 0) || 0;
 
-      const calculatedOpeningBal = histBal + prevSalesSum - prevExpensesSum - prevWithdrawalsSum;
+      const calculatedOpeningBal = histBal + prevSalesSum + prevFeesSum - prevExpensesSum - prevWithdrawalsSum;
       setOpeningBalance(calculatedOpeningBal);
 
       // 3. Process current month sales
       const activeSalesOnly = (bundle.rawSalesData || []).filter(s => !isSaleFromDeletedStaff(s));
       setSalesList(activeSalesOnly);
 
-      const staffIncomesMap: Record<string, { staffId: string; fullName: string; designation: string; total: number; count: number }> = {};
+      const staffIncomesMap: Record<string, { staffId: string; fullName: string; designation: string; total: number; count: number; batches: Set<string> }> = {};
 
       const isPartnerOrOwnerRole = (desig: string, name: string) => {
         const d = (desig || '').toLowerCase().trim();
@@ -325,14 +390,16 @@ export const FinanceDashboard: React.FC = () => {
       const isExcludedRoleOrDeletedStaff = (desig: string, name: string) => {
         const d = (desig || '').toLowerCase();
         const n = (name || '').toLowerCase();
+        if (n.includes('academy tuition')) return false;
         if (isPartnerOrOwnerRole(desig, name)) return false;
-        if (d.includes('tutor') || d.includes('counselor')) return true;
+        if (d.includes('counselor')) return false; // Academy Counselors are included!
+        if (d.includes('tutor')) return true;
         if (d.includes('director') && !d.includes('managing director')) return true;
         if (n.includes('althaf') || n === 'sana' || n === 'sana nesrin') return true;
         return false;
       };
 
-      // Pre-seed non-resigned profiles so active sales executives appear even if 0 sales
+      // Pre-seed non-resigned profiles so active sales executives and counselors appear even if 0 sales
       (bundle.profilesData || []).forEach(p => {
         if (!p.full_name) return;
         if (isExcludedRoleOrDeletedStaff(p.designation, p.full_name)) return;
@@ -344,7 +411,8 @@ export const FinanceDashboard: React.FC = () => {
           fullName: p.full_name,
           designation: p.designation || 'Staff',
           total: 0,
-          count: 0
+          count: 0,
+          batches: new Set<string>()
         };
       });
 
@@ -402,7 +470,8 @@ export const FinanceDashboard: React.FC = () => {
             fullName: sName || 'Staff Member',
             designation: sDesig,
             total: sale.payment_type === 'Refund' ? -amt : amt,
-            count: sale.payment_type === 'Refund' ? 0 : 1
+            count: sale.payment_type === 'Refund' ? 0 : 1,
+            batches: new Set<string>()
           };
         } else {
           const unassignedKey = 'company_direct';
@@ -412,7 +481,8 @@ export const FinanceDashboard: React.FC = () => {
               fullName: 'Tech Ads Direct / Unassigned',
               designation: 'Direct Income',
               total: 0,
-              count: 0
+              count: 0,
+              batches: new Set<string>()
             };
           }
           const currentTotal = parseSafeNumber(staffIncomesMap[unassignedKey].total);
@@ -428,8 +498,81 @@ export const FinanceDashboard: React.FC = () => {
         }
       });
 
+      // Process Academy Tuition Collections & map to counselors and batches
+      (bundle.currentFees || []).forEach((fee: any) => {
+        const amt = Number(fee.amount) || 0;
+        if (amt === 0) return;
+
+        const st = fee.student_id ? studentMap.get(String(fee.student_id)) : null;
+        const bId = fee.batch_id || st?.batch_id;
+        const batchName = bId ? (batchMap.get(String(bId)) || 'Academy Batch') : 'Academy';
+
+        const collectorCandidate = fee.collected_by || st?.counselor_id;
+        let matchedKey: string | null = null;
+        let matchedName: string | null = null;
+        let matchedDesig: string = 'Academy Counselor';
+
+        if (collectorCandidate) {
+          const candIdStr = String(collectorCandidate);
+          if (staffIncomesMap[candIdStr]) {
+            matchedKey = candIdStr;
+            matchedName = staffIncomesMap[candIdStr].fullName;
+            matchedDesig = staffIncomesMap[candIdStr].designation;
+          } else if (staffIdToNameMap.has(candIdStr)) {
+            matchedKey = candIdStr;
+            matchedName = staffIdToNameMap.get(candIdStr)!;
+            matchedDesig = staffIdToDesigMap.get(candIdStr) || 'Academy Counselor';
+          }
+        }
+
+        if (!matchedKey && collectorCandidate) {
+          const lowerCand = String(collectorCandidate).toLowerCase();
+          for (const [idKey, item] of Object.entries(staffIncomesMap)) {
+            if (item.fullName.toLowerCase() === lowerCand || idKey.toLowerCase() === lowerCand) {
+              matchedKey = idKey;
+              matchedName = item.fullName;
+              matchedDesig = item.designation;
+              break;
+            }
+          }
+        }
+
+        if (matchedKey && matchedName) {
+          if (!staffIncomesMap[matchedKey]) {
+            staffIncomesMap[matchedKey] = {
+              staffId: matchedKey,
+              fullName: matchedName,
+              designation: matchedDesig,
+              total: 0,
+              count: 0,
+              batches: new Set<string>()
+            };
+          }
+          staffIncomesMap[matchedKey].total += amt;
+          staffIncomesMap[matchedKey].count += 1;
+          if (batchName) staffIncomesMap[matchedKey].batches.add(batchName);
+        } else {
+          // Unassigned Academy tuition fees bucket
+          const key = 'academy_tuition_fees';
+          if (!staffIncomesMap[key]) {
+            staffIncomesMap[key] = {
+              staffId: key,
+              fullName: 'Academy Tuition Collections',
+              designation: 'Academy Fee Collections',
+              total: 0,
+              count: 0,
+              batches: new Set<string>()
+            };
+          }
+          staffIncomesMap[key].total += amt;
+          staffIncomesMap[key].count += 1;
+          if (batchName) staffIncomesMap[key].batches.add(batchName);
+        }
+      });
+
       const staffIncomesArray = Object.values(staffIncomesMap)
         .filter(item => {
+          if (item.staffId === 'academy_tuition_fees') return item.count > 0 && parseSafeNumber(item.total) > 0;
           const lower = item.fullName.trim().toLowerCase();
           if (lower.includes('althaf') || lower === 'sana' || lower === 'sana nesrin' || lower === 'unassigned staff') {
             return false;
@@ -442,14 +585,19 @@ export const FinanceDashboard: React.FC = () => {
             // If they have zero sales or if it's past months after their resignation, their names are completely hidden.
             return item.count > 0 && parseSafeNumber(item.total) !== 0;
           }
-          return item.count > 0 || parseSafeNumber(item.total) !== 0 || (profilesMap.has(item.staffId) && item.designation === 'Sales Executive');
+          return (
+            item.count > 0 || 
+            parseSafeNumber(item.total) !== 0 || 
+            (profilesMap.has(item.staffId) && (item.designation.includes('Sales') || item.designation.includes('Counselor')))
+          );
         })
         .map(info => ({
           staffId: info.staffId,
           fullName: info.fullName,
           designation: info.designation,
           totalAmount: parseSafeNumber(info.total),
-          count: parseSafeNumber(info.count)
+          count: parseSafeNumber(info.count),
+          batches: Array.from(info.batches || [])
         }))
         .sort((a, b) => b.totalAmount - a.totalAmount);
 
@@ -556,10 +704,14 @@ export const FinanceDashboard: React.FC = () => {
             ''
           ).toUpperCase();
 
-          if (nameStr.includes('SHIBILI')) {
+          if (nameStr.includes('SHIBILI') || nameStr.includes('SHIBIN')) {
             shibiliAmt += (Number(exp.amount) || 0);
           } else if (nameStr.includes('ASHIF')) {
             ashifAmt += (Number(exp.amount) || 0);
+          } else if (nameStr.includes('50/50') || nameStr.includes('SHARED') || nameStr.includes('COMPANY')) {
+            const half = (Number(exp.amount) || 0) / 2;
+            ashifAmt += half;
+            shibiliAmt += half;
           } else if (exp.category === 'Sales Refund' || exp.category === 'Return Sales' || String(exp.id).startsWith('converted-refund-')) {
             ashifAmt += (Number(exp.amount) || 0);
           } else {
@@ -652,28 +804,35 @@ export const FinanceDashboard: React.FC = () => {
 
     setIsAddingExpense(true);
     try {
+      const payerTag = expPayer === 'Shibin' ? 'SHIBILI' : expPayer === 'Ashif' ? 'ASHIF' : 'Company Shared';
+      const expTitle = expDescription.trim() || `${expCategory} (${payerTag})`;
       const expPayload: any = {
         id: 'exp-' + Date.now(),
+        title: expTitle,
         category: expCategory,
         amount: Number(expAmount),
         expense_date: expDate,
         description: expDescription.trim() || null,
         staff_id: activeStaff.id,
-        staff_name: activeStaff.full_name,
-        logged_by_name: activeStaff.full_name,
+        staff_name: payerTag,
+        logged_by_name: payerTag,
+        added_by: activeStaff.full_name,
         created_at: new Date().toISOString()
       };
 
-      const { error } = await supabase
+      const dbClient = supabase;
+      const { error } = await dbClient
         .from('expenses')
-        .insert(expPayload);
+        .insert({
+          title: expPayload.title,
+          amount: expPayload.amount,
+          category: expPayload.category,
+          expense_date: expPayload.expense_date,
+          added_by: payerTag
+        });
 
       if (error) {
         console.warn('Supabase expense insert info:', error.message);
-        const fallbackPayload = { ...expPayload };
-        delete fallbackPayload.logged_by_name;
-        delete fallbackPayload.staff_name;
-        await supabase.from('expenses').insert(fallbackPayload);
       }
 
       // Dual-sync to local storage
@@ -686,22 +845,73 @@ export const FinanceDashboard: React.FC = () => {
         console.warn('LocalStorage expense save info:', err);
       }
 
-      // Instant 0ms event notification across all dashboards
+      // Dual event notification
       window.dispatchEvent(new CustomEvent('company_expenses_changed', { detail: expPayload }));
 
       // Reset
       setExpAmount('');
       setExpDescription('');
       setExpCategory('Salary');
+      setExpPayer('Ashif');
       setExpDate(new Date().toISOString().split('T')[0]);
       setIsEntryDrawerOpen(false);
 
       alert('Expense logged successfully!');
-      await loadFinanceData();
+      await loadFinanceData(true);
     } catch (err: any) {
       alert('Failed to log expense: ' + err.message);
     } finally {
       setIsAddingExpense(false);
+    }
+  };
+
+  // Log Academy Student Fee Submission
+  const handleAddFeeCollection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!feeAmount) return;
+
+    setIsAddingFee(true);
+    try {
+      const dbClient = supabase;
+      const parsedAmt = Number(feeAmount);
+
+      const { error: feeErr } = await dbClient
+        .from('fee_collections')
+        .insert({
+          student_id: feeStudentId || null,
+          batch_id: feeBatchId || null,
+          collected_by: feeCounselorId || activeStaff.id,
+          amount: parsedAmt,
+          payment_mode: feePaymentMode,
+          installment_month: feeInstallmentMonth || selectedLedgerMonth,
+          notes: feeNotes.trim() || null
+        });
+
+      if (feeErr) throw feeErr;
+
+      // Update student's paid_fee if student selected
+      if (feeStudentId) {
+        const targetStudent = studentsList.find(s => s.id === feeStudentId);
+        if (targetStudent) {
+          const newPaid = (Number(targetStudent.paid_fee) || 0) + parsedAmt;
+          await dbClient.from('students').update({ paid_fee: newPaid }).eq('id', feeStudentId);
+        }
+      }
+
+      setFeeAmount('');
+      setFeeStudentId('');
+      setFeeBatchId('');
+      setFeeCounselorId('');
+      setFeeNotes('');
+      setFeePaymentMode('UPI');
+      setIsEntryDrawerOpen(false);
+
+      alert('Academy fee collection logged successfully!');
+      await loadFinanceData(true);
+    } catch (err: any) {
+      alert('Failed to log fee collection: ' + err.message);
+    } finally {
+      setIsAddingFee(false);
     }
   };
 
@@ -831,13 +1041,13 @@ export const FinanceDashboard: React.FC = () => {
       csvRows.push(['Current Remaining Balance', currentBalance]);
       csvRows.push([]);
 
-      // Section 2: INCOME BREAKDOWN (SALES BY STAFF)
-      csvRows.push(['--- INCOME BREAKDOWN (SALES BY STAFF) ---']);
-      csvRows.push(['Staff Name', 'Designation', 'Sales Count', 'Received Revenue Amount (₹)']);
+      // Section 2: INCOME BREAKDOWN (SALES & ACADEMY BY STAFF)
+      csvRows.push(['--- INCOME BREAKDOWN (SALES & ACADEMY BY STAFF) ---']);
+      csvRows.push(['Staff Name', 'Designation', 'Batch Details', 'Sales / Fees Count', 'Received Revenue Amount (₹)']);
       staffIncomesList.forEach(s => {
-        csvRows.push([s.fullName, s.designation, s.count, s.totalAmount]);
+        csvRows.push([s.fullName, s.designation, (s.batches || []).join('; ') || 'Agency / Direct', s.count, s.totalAmount]);
       });
-      csvRows.push(['Total Sales Income', '', '', totalIncome]);
+      csvRows.push(['Total Sales Income', '', '', '', totalIncome]);
       csvRows.push([]);
 
       // Section 3: EXPENSE CATEGORY LEDGER
@@ -921,6 +1131,7 @@ export const FinanceDashboard: React.FC = () => {
         <tr style="border-bottom: 1px solid #e2e8f0;">
           <td style="padding: 8px; font-weight: bold;">${s.fullName}</td>
           <td style="padding: 8px; color: #64748b;">${s.designation}</td>
+          <td style="padding: 8px; font-size: 10px; color: #0284c7;">${(s.batches || []).join(', ') || 'Agency / Direct'}</td>
           <td style="padding: 8px; text-align: center;">${s.count}</td>
           <td style="padding: 8px; text-align: right; font-weight: bold; color: #059669;">₹${s.totalAmount.toLocaleString()}</td>
         </tr>
@@ -994,18 +1205,19 @@ export const FinanceDashboard: React.FC = () => {
               </div>
             </div>
 
-            <h2>1. Income Breakdown (Sales by Staff)</h2>
+            <h2>1. Income Breakdown (Sales & Academy Fees by Staff)</h2>
             <table>
               <thead>
                 <tr>
                   <th>Staff Name</th>
                   <th>Designation</th>
-                  <th class="center">Sales Count</th>
+                  <th>Batch Details</th>
+                  <th class="center">Count</th>
                   <th class="right">Received Revenue Total</th>
                 </tr>
               </thead>
               <tbody>
-                ${staffRowsHtml || '<tr><td colspan="4" style="padding: 10px; text-align: center; color: #94a3b8;">No sales records logged for this period.</td></tr>'}
+                ${staffRowsHtml || '<tr><td colspan="5" style="padding: 10px; text-align: center; color: #94a3b8;">No sales records logged for this period.</td></tr>'}
               </tbody>
             </table>
 
@@ -1141,15 +1353,17 @@ export const FinanceDashboard: React.FC = () => {
               >
                 Analytics
               </Button>
-              <Button 
-                variant="primary" 
-                size="sm" 
-                className="!py-1.5 !px-3 shadow-md rounded-md text-xs font-bold shrink-0" 
-                onClick={() => setIsEntryDrawerOpen(true)}
-                icon={<Plus className="w-3.5 h-3.5" />}
-              >
-                Log Entry
-              </Button>
+              {canLogEntry && (
+                <Button 
+                  variant="primary" 
+                  size="sm" 
+                  className="!py-1.5 !px-3 shadow-md rounded-md text-xs font-bold shrink-0" 
+                  onClick={() => setIsEntryDrawerOpen(true)}
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                >
+                  Log Entry
+                </Button>
+              )}
             </div>
           </div>
         </header>
@@ -1239,7 +1453,8 @@ export const FinanceDashboard: React.FC = () => {
                         <tr className="bg-muted-2 dark:bg-muted-2 light:bg-muted text-[9px] font-bold text-muted-foreground dark:text-muted-foreground light:text-muted-foreground uppercase tracking-wider border-b border-border dark:border-border light:border-border">
                           <th className="py-2.5 px-3">Staff Member</th>
                           <th className="py-2.5 px-3">Designation</th>
-                          <th className="py-2.5 px-3 text-center">Sales Count</th>
+                          <th className="py-2.5 px-3">Batch Details</th>
+                          <th className="py-2.5 px-3 text-center">Sales / Fees</th>
                           <th className="py-2.5 px-3 text-right">Total Income</th>
                         </tr>
                       </thead>
@@ -1247,20 +1462,37 @@ export const FinanceDashboard: React.FC = () => {
                         {staffIncomesList.map(item => (
                           <tr key={`inc-${item.staffId}`} className="hover:bg-muted-2 dark:hover:bg-muted-2 light:hover:bg-muted transition-colors">
                             <td className="py-2.5 px-3 font-semibold text-foreground dark:text-foreground light:text-foreground">{item.fullName}</td>
-                            <td className="py-2.5 px-3 text-muted-foreground dark:text-muted-foreground light:text-muted-foreground">{item.designation}</td>
+                            <td className="py-2.5 px-3 text-muted-foreground dark:text-muted-foreground light:text-muted-foreground">
+                              <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${item.designation.toLowerCase().includes('counselor') ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-muted text-muted-foreground'}`}>
+                                {item.designation}
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {item.batches && item.batches.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {item.batches.map((batchName, bIdx) => (
+                                    <span key={bIdx} className="inline-block px-1.5 py-0.5 rounded text-[9.5px] font-bold bg-success-soft text-success border border-success/30">
+                                      {batchName}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground text-[10px] italic">Agency / Direct</span>
+                              )}
+                            </td>
                             <td className="py-2.5 px-3 text-center text-muted-foreground font-bold">{item.count}</td>
                             <td className="py-2.5 px-3 text-right font-extrabold text-success">{formatCurrency(item.totalAmount)}</td>
                           </tr>
                         ))}
                         {staffIncomesList.length === 0 && (
                           <tr>
-                            <td colSpan={4} className="text-center py-6 text-muted-foreground font-bold uppercase text-[10px]">No sales recorded.</td>
+                            <td colSpan={5} className="text-center py-6 text-muted-foreground font-bold uppercase text-[10px]">No sales or fee collections recorded.</td>
                           </tr>
                         )}
                       </tbody>
                       <tfoot className="border-t border-border bg-muted-2 text-foreground font-extrabold">
                         <tr>
-                          <td colSpan={3} className="py-2.5 px-3 uppercase text-[9px] text-muted-foreground text-right">Total Monthly Income:</td>
+                          <td colSpan={4} className="py-2.5 px-3 uppercase text-[9px] text-muted-foreground text-right">Total Monthly Income:</td>
                           <td className="py-2.5 px-3 text-right text-success font-extrabold">{formatCurrency(summaryTotalIncome)}</td>
                         </tr>
                       </tfoot>
@@ -1417,100 +1649,231 @@ export const FinanceDashboard: React.FC = () => {
 
               {/* Tab 1: Log Income */}
               {entryTab === 'income' && (
-                <form onSubmit={handleAddIncome} className="space-y-4 text-xs text-left">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-muted-foreground uppercase block">Client Name</label>
-                    <input 
-                      type="text" 
-                      required
-                      placeholder="e.g. Acme Corp"
-                      value={incClientName}
-                      onChange={(e) => setIncClientName(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-muted-foreground uppercase block">Service Package</label>
-                    <input 
-                      type="text" 
-                      required
-                      placeholder="e.g. SEO & Content Pack"
-                      value={incServicePkg}
-                      onChange={(e) => setIncServicePkg(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-muted-foreground uppercase block">Status</label>
-                      <select
-                        value={incPaymentType}
-                        onChange={(e) => {
-                          const val = e.target.value as any;
-                          setIncPaymentType(val);
-                          if (val === 'Full') {
-                            setIncRecAmt(incPackageAmt);
-                          } else if (val === 'Clearance') {
-                            setIncPackageAmt('0');
-                          }
-                        }}
-                        className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
-                      >
-                        <option value="Advance">Advance</option>
-                        <option value="Full">Full Payment</option>
-                        <option value="Clearance">Clearance</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-muted-foreground uppercase block">Method</label>
-                      <select
-                        value={incPaymentMethod}
-                        onChange={(e) => setIncPaymentMethod(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
-                      >
-                        <option value="UPI">UPI</option>
-                        <option value="Bank Transfer">Bank Transfer</option>
-                        <option value="Cash">Cash</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3.5">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-muted-foreground uppercase block">Package Amount (₹)</label>
-                      <input 
-                        type="number" 
-                        required
-                        disabled={incPaymentType === 'Clearance'}
-                        value={incPackageAmt}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setIncPackageAmt(val);
-                          if (incPaymentType === 'Full') {
-                            setIncRecAmt(val);
-                          }
-                        }}
-                        className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground disabled:opacity-50 focus:outline-none focus:border-primary"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-bold text-muted-foreground uppercase block">Received Amount (₹)</label>
-                      <input 
-                        type="number" 
-                        required
-                        disabled={incPaymentType === 'Full'}
-                        value={incRecAmt}
-                        onChange={(e) => setIncRecAmt(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground disabled:opacity-50 focus:outline-none focus:border-primary"
-                      />
-                    </div>
+                <div className="space-y-4">
+                  <div className="flex p-1 bg-muted rounded-lg border border-border">
+                    <button
+                      type="button"
+                      onClick={() => setIncomeType('sale')}
+                      className={`flex-1 py-1.5 rounded-md text-[11px] font-bold transition-all ${incomeType === 'sale' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      Agency Client Sale
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIncomeType('academy_fee')}
+                      className={`flex-1 py-1.5 rounded-md text-[11px] font-bold transition-all ${incomeType === 'academy_fee' ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      Academy Student Fee
+                    </button>
                   </div>
 
-                  <div className="pt-4">
-                    <Button type="submit" variant="primary" fullWidth disabled={isAddingIncome}>
-                      {isAddingIncome ? 'Logging...' : 'Log Income Entry'}
-                    </Button>
-                  </div>
-                </form>
+                  {incomeType === 'sale' ? (
+                    <form onSubmit={handleAddIncome} className="space-y-4 text-xs text-left">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block">Client Name</label>
+                        <input 
+                          type="text" 
+                          required
+                          placeholder="e.g. Acme Corp"
+                          value={incClientName}
+                          onChange={(e) => setIncClientName(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block">Service Package</label>
+                        <input 
+                          type="text" 
+                          required
+                          placeholder="e.g. SEO & Content Pack"
+                          value={incServicePkg}
+                          onChange={(e) => setIncServicePkg(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3.5">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase block">Status</label>
+                          <select
+                            value={incPaymentType}
+                            onChange={(e) => {
+                              const val = e.target.value as any;
+                              setIncPaymentType(val);
+                              if (val === 'Full') {
+                                setIncRecAmt(incPackageAmt);
+                              } else if (val === 'Clearance') {
+                                setIncPackageAmt('0');
+                              }
+                            }}
+                            className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
+                          >
+                            <option value="Advance">Advance</option>
+                            <option value="Full">Full Payment</option>
+                            <option value="Clearance">Clearance</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase block">Method</label>
+                          <select
+                            value={incPaymentMethod}
+                            onChange={(e) => setIncPaymentMethod(e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
+                          >
+                            <option value="UPI">UPI</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                            <option value="Cash">Cash</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3.5">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase block">Package Amount (₹)</label>
+                          <input 
+                            type="number" 
+                            required
+                            disabled={incPaymentType === 'Clearance'}
+                            value={incPackageAmt}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setIncPackageAmt(val);
+                              if (incPaymentType === 'Full') {
+                                setIncRecAmt(val);
+                              }
+                            }}
+                            className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground disabled:opacity-50 focus:outline-none focus:border-primary"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase block">Received Amount (₹)</label>
+                          <input 
+                            type="number" 
+                            required
+                            disabled={incPaymentType === 'Full'}
+                            value={incRecAmt}
+                            onChange={(e) => setIncRecAmt(e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground disabled:opacity-50 focus:outline-none focus:border-primary"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-4">
+                        <Button type="submit" variant="primary" fullWidth disabled={isAddingIncome}>
+                          {isAddingIncome ? 'Logging...' : 'Log Sale Income Entry'}
+                        </Button>
+                      </div>
+                    </form>
+                  ) : (
+                    <form onSubmit={handleAddFeeCollection} className="space-y-4 text-xs text-left">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block">Student (Optional if General)</label>
+                        <select
+                          value={feeStudentId}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setFeeStudentId(val);
+                            const st = studentsList.find(s => s.id === val);
+                            if (st?.batch_id) setFeeBatchId(st.batch_id);
+                            if (st?.counselor_id) setFeeCounselorId(st.counselor_id);
+                          }}
+                          className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary cursor-pointer"
+                        >
+                          <option value="">-- Direct / Walk-in / Select Student --</option>
+                          {studentsList.map(st => (
+                            <option key={st.id} value={st.id}>
+                              {st.name} {st.student_id_code ? `(${st.student_id_code})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block">Academy Batch</label>
+                        <select
+                          value={feeBatchId}
+                          onChange={(e) => setFeeBatchId(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary cursor-pointer"
+                        >
+                          <option value="">-- Select Batch (Optional) --</option>
+                          {batchesList.map(b => (
+                            <option key={b.id} value={b.id}>
+                              {b.batch_name} {b.course_name ? `(${b.course_name})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block">Counselor / Staff Collector</label>
+                        <select
+                          value={feeCounselorId}
+                          onChange={(e) => setFeeCounselorId(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary cursor-pointer"
+                        >
+                          <option value="">-- Active Staff ({activeStaff.full_name}) --</option>
+                          {Array.from(staffProfilesMap.entries()).map(([pId, pInfo]) => (
+                            <option key={pId} value={pId}>
+                              {pInfo.name} ({pInfo.desig})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3.5">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase block">Fee Amount (₹)</label>
+                          <input 
+                            type="number" 
+                            required
+                            placeholder="e.g. 15000"
+                            value={feeAmount}
+                            onChange={(e) => setFeeAmount(e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase block">Payment Mode</label>
+                          <select
+                            value={feePaymentMode}
+                            onChange={(e) => setFeePaymentMode(e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary cursor-pointer"
+                          >
+                            <option value="UPI">UPI</option>
+                            <option value="Bank Transfer">Bank Transfer</option>
+                            <option value="Cash">Cash</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3.5">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase block">Installment Month</label>
+                          <input 
+                            type="month"
+                            value={feeInstallmentMonth || selectedLedgerMonth}
+                            onChange={(e) => setFeeInstallmentMonth(e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase block">Notes / Info</label>
+                          <input 
+                            type="text" 
+                            placeholder="e.g. Admission fee / Installment 1"
+                            value={feeNotes}
+                            onChange={(e) => setFeeNotes(e.target.value)}
+                            className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-4">
+                        <Button type="submit" variant="primary" fullWidth disabled={isAddingFee}>
+                          {isAddingFee ? 'Logging Fee...' : 'Log Academy Fee Collection'}
+                        </Button>
+                      </div>
+                    </form>
+                  )}
+                </div>
               )}
 
               {/* Tab 2: Log Expense */}
@@ -1521,7 +1884,7 @@ export const FinanceDashboard: React.FC = () => {
                     <select
                       value={expCategory}
                       onChange={(e) => setExpCategory(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
+                      className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary cursor-pointer"
                     >
                       <option value="Salary">Salary</option>
                       <option value="Rent">Rent</option>
@@ -1539,6 +1902,20 @@ export const FinanceDashboard: React.FC = () => {
                       <option value="Other Expense">Other Expense</option>
                     </select>
                   </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-muted-foreground uppercase block">Paid By / Split</label>
+                    <select
+                      value={expPayer}
+                      onChange={(e) => setExpPayer(e.target.value as any)}
+                      className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary cursor-pointer font-bold"
+                    >
+                      <option value="Ashif">Paid by Ashif</option>
+                      <option value="Shibin">Paid by Shibin (Shibili)</option>
+                      <option value="Company Shared">50/50 Company Shared</option>
+                    </select>
+                  </div>
+
                   <div className="space-y-1">
                     <label className="text-[9px] font-bold text-muted-foreground uppercase block">Amount (₹)</label>
                     <input 
@@ -1713,6 +2090,10 @@ export const FinanceDashboard: React.FC = () => {
                   const dayIncome = salesList
                     .filter(s => s.created_at && s.created_at.startsWith(dateMatch))
                     .reduce((sum, s) => sum + (Number(s.received_amount) || 0), 0);
+
+                  const dayFees = feesList
+                    .filter(f => f.created_at && f.created_at.startsWith(dateMatch))
+                    .reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
                     
                   const dayExpense = expensesList
                     .filter(e => e.expense_date === dateMatch)
@@ -1720,7 +2101,7 @@ export const FinanceDashboard: React.FC = () => {
                     
                   return {
                     name: dayStr,
-                    Income: dayIncome,
+                    Income: dayIncome + dayFees,
                     Expenses: dayExpense
                   };
                 });

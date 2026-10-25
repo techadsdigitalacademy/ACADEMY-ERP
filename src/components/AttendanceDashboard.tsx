@@ -21,7 +21,7 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   fullName,
   designation,
   gender,
-  avatarUrl,
+  avatarUrl: _avatarUrl,
   isAdmin = false,
   onOverrideSuccess
 }) => {
@@ -51,13 +51,18 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       const monthEnd = `${selectedAttMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
 
       const { data, error } = await supabase
-        .from('attendance')
+        .from('staff_attendance')
         .select('*')
         .eq('staff_id', staffId)
         .gte('attendance_date', monthStart)
         .lte('attendance_date', monthEnd);
       if (error) throw error;
-      setAttendance(data || []);
+      const normalized = (data || []).map((d: any) => ({
+        ...d,
+        status: (d.status || 'present').toUpperCase(),
+        punch_in: d.punch_in || (d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
+      }));
+      setAttendance(normalized);
     } catch (err: any) {
       console.error('Error fetching attendance logs:', err.message);
     }
@@ -116,33 +121,42 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
     if (!editingAttendance) return;
     setIsUpdating(true);
     try {
-      const formattedIn = editClockIn.length === 5 ? `${editClockIn}:00` : editClockIn;
-      const formattedOut = editClockOut.length === 5 ? `${editClockOut}:00` : editClockOut;
-
+      const dbStatus = editAttStatus.toLowerCase();
       if (editingAttendance.isVirtual) {
         // Insert a new attendance row for that date
         const { error } = await supabase
-          .from('attendance')
+          .from('staff_attendance')
           .insert({
             staff_id: staffId,
             attendance_date: editingAttendance.date,
-            status: editAttStatus,
-            punch_in: formattedIn,
-            punch_out: formattedOut,
-            selfie_url: avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256&auto=format&fit=crop'
+            status: dbStatus
           });
-        if (error) throw error;
+        if (error) {
+          await fetch('/supabase-admin/rest/v1/staff_attendance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([{
+              staff_id: staffId,
+              attendance_date: editingAttendance.date,
+              status: dbStatus
+            }])
+          });
+        }
       } else {
         // Update the existing row
         const { error } = await supabase
-          .from('attendance')
+          .from('staff_attendance')
           .update({ 
-            status: editAttStatus,
-            punch_in: formattedIn,
-            punch_out: formattedOut
+            status: dbStatus
           })
           .eq('id', editingAttendance.id);
-        if (error) throw error;
+        if (error) {
+          await fetch(`/supabase-admin/rest/v1/staff_attendance?id=eq.${editingAttendance.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: dbStatus })
+          });
+        }
       }
 
       setEditingAttendance(null);

@@ -4,7 +4,6 @@ import { processAvatarFile } from '../utils/imageUtils';
 import { 
   Briefcase, 
   DollarSign, 
-  FileText, 
   Clock, 
   Users, 
   Edit2, 
@@ -14,7 +13,6 @@ import {
   Settings,
   LogOut,
   Camera,
-  FolderOpen,
   Sun,
   Moon,
   Menu,
@@ -81,18 +79,27 @@ export const Sidebar: React.FC = () => {
     window.dispatchEvent(new CustomEvent('close_mobile_sidebar'));
   };
 
+  const isTutor = activeStaff.designation === 'Academy Tutor';
+  const isCounselor = activeStaff.designation === 'Academy Counselor' || activeStaff.designation?.toLowerCase().includes('counselor');
+
   const renderNavLinks = () => (
     <nav className="space-y-1.5 pt-4">
+      {/* 1. Admin Hub / Academy Admissions / Sales Hub */}
       <button 
         onClick={() => handleNavClick('sales')}
         className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'sales' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
       >
-        <Briefcase className="w-4 h-4 shrink-0" />
-        <span>{(isAdminView && !isOwner) ? 'Admin Hub' : 'Sales Hub'}</span>
+        {isCounselor ? (
+          <GraduationCap className="w-4 h-4 shrink-0 text-primary" />
+        ) : (
+          <Briefcase className="w-4 h-4 shrink-0" />
+        )}
+        <span>{(isAdminView || isOwner) ? 'Admin Hub' : isCounselor ? 'Academy Admissions' : isCreativeRole ? 'Work Hub' : 'Sales Hub'}</span>
       </button>
 
+      {/* 2. Staff History / Admissions History / Sales History / Daily Reports */}
       <button 
-        onClick={() => handleNavClick(isAdminView && !isOwner ? 'staff-history' : 'history')}
+        onClick={() => handleNavClick((isAdminView || isOwner) ? 'staff-history' : 'history')}
         className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'history' || activeTab === 'staff-history' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
       >
         {isCreativeRole ? (
@@ -103,38 +110,33 @@ export const Sidebar: React.FC = () => {
         ) : (
           <>
             <DollarSign className="w-4 h-4 shrink-0" />
-            <span>{(isAdminView && !isOwner) ? 'Staff History' : 'Sales History'}</span>
+            <span>{(isAdminView || isOwner) ? 'Staff History' : isCounselor ? 'Admissions History' : 'Sales History'}</span>
           </>
         )}
       </button>
 
-      {isOwner && (
-        <button 
-          onClick={() => handleNavClick('expense_history')}
-          className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'expense_history' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
-        >
-          <FileText className="w-4 h-4 shrink-0" />
-          <span>Expense History</span>
-        </button>
-      )}
-
+      {/* 3. Staff Attendance */}
       <button 
         onClick={() => handleNavClick('attendance')}
         className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'attendance' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
       >
         <Clock className="w-4 h-4 shrink-0" />
-        <span>Attendance</span>
+        <span>Staff Attendance</span>
       </button>
 
-      <button 
-        onClick={() => handleNavClick('assets')}
-        className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'assets' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
-      >
-        <FolderOpen className="w-4 h-4 shrink-0" />
-        <span>Asset Library</span>
-      </button>
+      {/* 4. Academy Overview (Single unified link for Academy ERP) */}
+      {(isAdminMode || isOwner || isTutor || isCounselor) && (
+        <button 
+          onClick={() => handleNavClick('academy_overview')}
+          className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab.startsWith('academy') ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
+        >
+          <GraduationCap className="w-4 h-4 shrink-0" />
+          <span>Academy Overview</span>
+        </button>
+      )}
 
-      {activeStaff && activeStaff.designation !== 'Graphic Designer' && activeStaff.designation !== 'Videographer' && (
+      {/* 6. Leads */}
+      {(isAdminMode || isOwner || isCounselor || (!isCreativeRole && !isTutor)) && (
         <button 
           onClick={() => handleNavClick('leads')}
           className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'leads' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
@@ -144,42 +146,29 @@ export const Sidebar: React.FC = () => {
         </button>
       )}
 
-      {isAdminMode && !isOwner && (
-        <>
-          <button 
-            onClick={() => handleNavClick('reports')}
-            className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'reports' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
-          >
-            <Edit2 className="w-4 h-4 shrink-0" />
-            <span>Daily Reports Log</span>
-          </button>
-
-          <button 
-            onClick={() => handleNavClick('academy_overview')}
-            className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'academy_overview' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
-          >
-            <GraduationCap className="w-4 h-4 shrink-0" />
-            <span>Academy</span>
-          </button>
-
-          <button 
-            onClick={() => handleNavClick('staff')}
-            className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'staff' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
-          >
-            <Users className="w-4 h-4 shrink-0" />
-            <span>Staff Management</span>
-          </button>
-
-          <button 
-            onClick={() => handleNavClick('finance')}
-            className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'finance' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
-          >
-            <Briefcase className="w-4 h-4 shrink-0" />
-            <span>Finance</span>
-          </button>
-        </>
+      {/* 7. Staff Management */}
+      {(isAdminMode || isOwner) && (
+        <button 
+          onClick={() => handleNavClick('staff')}
+          className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'staff' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
+        >
+          <Users className="w-4 h-4 shrink-0" />
+          <span>Staff Management</span>
+        </button>
       )}
 
+      {/* 8. Finance */}
+      {(isAdminMode || isOwner) && (
+        <button 
+          onClick={() => handleNavClick('finance')}
+          className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'finance' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
+        >
+          <Briefcase className="w-4 h-4 shrink-0" />
+          <span>Finance</span>
+        </button>
+      )}
+
+      {/* 9. Partner Withdrawals */}
       {(isAdminMode || isOwner) && (
         <button 
           onClick={() => handleNavClick('withdrawals')}

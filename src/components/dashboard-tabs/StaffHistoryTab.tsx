@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Star, ArrowLeft, MessageSquare, AlertTriangle, Edit2, Trash2, X } from 'lucide-react';
+import { Star, ArrowLeft, MessageSquare, AlertTriangle, Edit2, Trash2, X, Users, GraduationCap, ShieldCheck } from 'lucide-react';
 import { Card } from '../Card';
 import { Badge } from '../Badge';
 import { Button } from '../Button';
@@ -136,7 +136,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
     }
   };
 
-  // Filter out extra academy-specific roles (Tutor and Academy Counselor), Admin Director, and resigned/inactive staff
+  // Filter out resigned/inactive staff and deleted staff
   const validStaffProfiles = (staffProfiles || []).filter(p => {
     if (!p) return false;
     if (p.status === 'INACTIVE' || p.status === 'RESIGNED') return false;
@@ -146,21 +146,43 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
 
     if (nameStr.includes('althaf')) return false;
 
-    const isTutor = desig.includes('tutor') || rName.includes('tutor');
-    const isCounselor = desig.includes('counselor') || rName.includes('counselor');
-    
-    // Explicitly filter out Admin Director or Admin designation/role (excluding Managing Director)
-    const isAdminDirector = desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director');
-    const isManagingDirector = desig === 'managing director' || nameStr.includes('shibili');
+    // Explicitly filter out generic admin or system records (excluding Managing Director / Owners)
+    const isAdminDirector = (desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director')) && 
+      desig !== 'managing director' && !desig.includes('owner') && !nameStr.includes('shibili') && !nameStr.includes('shibin') && !nameStr.includes('ashif');
 
-    if (isAdminDirector && !isManagingDirector) return false;
-    if (isTutor || isCounselor) return false;
+    if (isAdminDirector) return false;
 
     return true;
   });
 
-  const salesTeam = validStaffProfiles.filter(p => p.designation === 'Sales Executive');
-  const creativeTeam = validStaffProfiles.filter(p => p.designation !== 'Sales Executive');
+  // SECTION 1: Academy Counselors (displayed first)
+  const counselorTeam = validStaffProfiles.filter(p => {
+    const d = (p.designation || '').toLowerCase();
+    return d.includes('counselor');
+  });
+
+  // SECTION 2: Academy Tutors
+  const tutorTeam = validStaffProfiles.filter(p => {
+    const d = (p.designation || '').toLowerCase();
+    return (d.includes('tutor') || d.includes('faculty')) && !counselorTeam.some(c => c.id === p.id);
+  });
+
+  // SECTION 3: Company Owners (Shibin, Ashif), Creative, and other staff members (displayed last)
+  const ownersAndOtherTeam = validStaffProfiles
+    .filter(p => !counselorTeam.some(c => c.id === p.id) && !tutorTeam.some(t => t.id === p.id))
+    .sort((a, b) => {
+      const aDesig = (a.designation || '').toLowerCase();
+      const bDesig = (b.designation || '').toLowerCase();
+      const aName = (a.full_name || '').toLowerCase();
+      const bName = (b.full_name || '').toLowerCase();
+
+      const isOwnerA = aDesig.includes('owner') || aDesig.includes('managing director') || aName.includes('shibin') || aName.includes('ashif') || aName.includes('shibili');
+      const isOwnerB = bDesig.includes('owner') || bDesig.includes('managing director') || bName.includes('shibin') || bName.includes('ashif') || bName.includes('shibili');
+
+      if (isOwnerA && !isOwnerB) return -1;
+      if (!isOwnerA && isOwnerB) return 1;
+      return (a.full_name || '').localeCompare(b.full_name || '');
+    });
 
   // Safe Month-Specific Target Resolver
   const resolveMonthTarget = (staffRecord: any, monthKey: string) => {
@@ -237,9 +259,18 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
 
   useEffect(() => {
     if (selectedProfile) {
-      const isOwner = selectedProfile.designation === 'Company Owner' || selectedProfile.designation === 'Company Owner / Partner' || selectedProfile.designation === 'Managing Director';
-      if (isOwner || selectedProfile.designation === 'Sales Executive') {
+      const d = (selectedProfile.designation || '').toLowerCase();
+      const isOwner = d.includes('owner') || d.includes('managing director');
+      const isCounselor = d.includes('counselor');
+      const isTutor = d.includes('tutor');
+      const isSales = d.includes('sales') || isCounselor;
+
+      if (isCounselor) {
+        setProfileDetailTab('leads');
+      } else if (isOwner || isSales) {
         setProfileDetailTab('sales');
+      } else if (isTutor) {
+        setProfileDetailTab('attendance');
       } else {
         setProfileDetailTab('daily_reports');
       }
@@ -286,21 +317,37 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             leadRes,
             exp1Res,
             exp2Res,
-            exp3Res
+            exp3Res,
+            studentsRes
           ] = await Promise.all([
             staffIds.length
               ? supabase.from('sales').select(`${SALES_COLUMNS}, payment_proof_url`).in('staff_id', staffIds).order('created_at', { ascending: false })
               : Promise.resolve({ data: [] }),
             supabase.from('daily_reports').select('*').eq('staff_id', p.id).gte('report_date', windowStartStr).order('report_date', { ascending: false }),
-            supabase.from('leads').select('*').eq('assigned_to', p.id).or(`created_at.gte.${windowStartStr},created_at.is.null`).order('created_at', { ascending: false }),
+            supabase.from('leads').select('*').or(`assigned_to.eq.${p.id},assigned_to.is.null`).or(`created_at.gte.${windowStartStr},created_at.is.null`).order('created_at', { ascending: false }),
             p.id ? supabase.from('expenses').select('*').eq('staff_id', p.id).or(`expense_date.gte.${windowStartStr},expense_date.is.null`).order('expense_date', { ascending: false }) : Promise.resolve({ data: [] }),
             p.id ? supabase.from('owner_expenses').select('*').eq('staff_id', p.id).or(`expense_date.gte.${windowStartStr},expense_date.is.null`).order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
-            p.id ? supabase.from('partner_withdrawals').select('*').or(`partner_id.eq.${p.id},partner_name.eq.${p.full_name || ''}`).gte('withdrawal_date', windowStartStr).order('withdrawal_date', { ascending: false }) : Promise.resolve({ data: [] })
+            p.id ? supabase.from('partner_withdrawals').select('*').or(`partner_id.eq.${p.id},partner_name.eq.${p.full_name || ''}`).gte('withdrawal_date', windowStartStr).order('withdrawal_date', { ascending: false }) : Promise.resolve({ data: [] }),
+            p.id ? supabase.from('students').select('*').eq('counselor_id', p.id).order('created_at', { ascending: false }) : Promise.resolve({ data: [] })
           ]);
+
+          const studentSales = (studentsRes.data || []).map((st: any) => ({
+            id: `student-${st.id}`,
+            staff_id: p.id,
+            client_name: `${st.name} (${st.student_id_code})`,
+            service_package: 'Academy Admission',
+            payment_type: Number(st.paid_fee) >= Number(st.total_fee) && Number(st.total_fee) > 0 ? 'Full' : 'Advance',
+            package_amount: Number(st.total_fee) || 0,
+            received_amount: Number(st.paid_fee) || 0,
+            balance_amount: Math.max(0, (Number(st.total_fee) || 0) - (Number(st.paid_fee) || 0)),
+            payment_method: 'Direct / Installment',
+            created_at: st.enrollment_date || st.created_at,
+            is_student_enrollment: true
+          }));
 
           return {
             staffRecord: staffRes.data || null,
-            allSalesData: salesRes.data || [],
+            allSalesData: [...(salesRes.data || []), ...studentSales],
             reportData: reportRes.data || [],
             leadData: leadRes.data || [],
             exp1: exp1Res.data || [],
@@ -529,8 +576,11 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
 
   // FULL-PAGE DETAIL VIEW
   if (selectedProfile) {
-    const isSalesRole = selectedProfile.designation === 'Sales Executive';
-    const isOwnerRole = selectedProfile.designation === 'Company Owner' || selectedProfile.designation === 'Company Owner / Partner' || selectedProfile.designation === 'Managing Director';
+    const desigLower = (selectedProfile.designation || '').toLowerCase();
+    const isOwnerRole = desigLower.includes('owner') || desigLower.includes('managing director');
+    const isCounselorRole = desigLower.includes('counselor');
+    const isTutorRole = desigLower.includes('tutor');
+    const isSalesRole = desigLower.includes('sales executive') || isCounselorRole;
 
     return (
       <div className="space-y-6 pt-2 animate-fade-in max-w-7xl mx-auto">
@@ -553,7 +603,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
               <div>
                 <h2 className="text-base md:text-lg font-black text-foreground leading-tight">{selectedProfile.full_name}</h2>
                 <div className="flex items-center gap-2 mt-0.5">
-                  <Badge variant={isOwnerRole ? 'purple' : isSalesRole ? 'info' : 'success'}>
+                  <Badge variant={isOwnerRole ? 'purple' : isCounselorRole ? 'indigo' : isTutorRole ? 'warning' : isSalesRole ? 'info' : 'success'}>
                     {selectedProfile.designation}
                   </Badge>
                   <span className="text-[10px] font-bold text-primary bg-primary-soft px-2 py-0.5 rounded border border-primary/20">
@@ -602,32 +652,88 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
               <button
                 onClick={() => setProfileDetailTab('sales')}
                 className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
- profileDetailTab === 'sales'
- ? 'bg-primary border-primary text-foreground '
- : 'bg-card border-border text-muted-foreground hover:text-foreground'
- }`}
+                  profileDetailTab === 'sales'
+                    ? 'bg-primary border-primary text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
               >
                 Sales History ({profileSales.length})
               </button>
               <button
                 onClick={() => setProfileDetailTab('attendance')}
                 className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
- profileDetailTab === 'attendance'
- ? 'bg-primary border-primary text-foreground '
- : 'bg-card border-border text-muted-foreground hover:text-foreground'
- }`}
+                  profileDetailTab === 'attendance'
+                    ? 'bg-primary border-primary text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
               >
                 Attendance
               </button>
               <button
                 onClick={() => setProfileDetailTab('expense_history')}
                 className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
- profileDetailTab === 'expense_history'
- ? 'bg-danger border-danger text-foreground '
- : 'bg-card border-border text-muted-foreground hover:text-foreground'
- }`}
+                  profileDetailTab === 'expense_history'
+                    ? 'bg-danger border-danger text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
               >
                 Expense History ({profileExpenses.length})
+              </button>
+            </>
+          ) : isCounselorRole ? (
+            <>
+              <button
+                onClick={() => setProfileDetailTab('leads')}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+                  profileDetailTab === 'leads'
+                    ? 'bg-primary border-primary text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Student Leads ({profileLeads.length})
+              </button>
+              <button
+                onClick={() => setProfileDetailTab('sales')}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+                  profileDetailTab === 'sales'
+                    ? 'bg-primary border-primary text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Admissions / Sales ({profileSales.length})
+              </button>
+              <button
+                onClick={() => setProfileDetailTab('attendance')}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+                  profileDetailTab === 'attendance'
+                    ? 'bg-primary border-primary text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Attendance
+              </button>
+            </>
+          ) : isTutorRole ? (
+            <>
+              <button
+                onClick={() => setProfileDetailTab('attendance')}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+                  profileDetailTab === 'attendance'
+                    ? 'bg-success border-success text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Tutor Attendance
+              </button>
+              <button
+                onClick={() => setProfileDetailTab('daily_reports')}
+                className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
+                  profileDetailTab === 'daily_reports'
+                    ? 'bg-success border-success text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Class Logs / Daily Reports ({profileReports.length})
               </button>
             </>
           ) : isSalesRole ? (
@@ -635,30 +741,30 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
               <button
                 onClick={() => setProfileDetailTab('sales')}
                 className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
- profileDetailTab === 'sales'
- ? 'bg-primary border-primary text-foreground '
- : 'bg-card border-border text-muted-foreground hover:text-foreground'
- }`}
+                  profileDetailTab === 'sales'
+                    ? 'bg-primary border-primary text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
               >
                 Sales Log ({profileSales.length})
               </button>
               <button
                 onClick={() => setProfileDetailTab('attendance')}
                 className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
- profileDetailTab === 'attendance'
- ? 'bg-primary border-primary text-foreground '
- : 'bg-card border-border text-muted-foreground hover:text-foreground'
- }`}
+                  profileDetailTab === 'attendance'
+                    ? 'bg-primary border-primary text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
               >
                 Attendance
               </button>
               <button
                 onClick={() => setProfileDetailTab('leads')}
                 className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
- profileDetailTab === 'leads'
- ? 'bg-primary border-primary text-foreground '
- : 'bg-card border-border text-muted-foreground hover:text-foreground'
- }`}
+                  profileDetailTab === 'leads'
+                    ? 'bg-primary border-primary text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
               >
                 Leads ({profileLeads.length})
               </button>
@@ -668,20 +774,20 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
               <button
                 onClick={() => setProfileDetailTab('daily_reports')}
                 className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
- profileDetailTab === 'daily_reports'
- ? 'bg-success border-success text-foreground '
- : 'bg-card border-border text-muted-foreground hover:text-foreground'
- }`}
+                  profileDetailTab === 'daily_reports'
+                    ? 'bg-success border-success text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
               >
                 Daily Reports ({profileReports.length})
               </button>
               <button
                 onClick={() => setProfileDetailTab('attendance')}
                 className={`px-4 py-2 rounded-md text-xs font-extrabold uppercase tracking-wider transition-all border ${
- profileDetailTab === 'attendance'
- ? 'bg-success border-success text-foreground '
- : 'bg-card border-border text-muted-foreground hover:text-foreground'
- }`}
+                  profileDetailTab === 'attendance'
+                    ? 'bg-success border-success text-foreground'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                }`}
               >
                 Attendance
               </button>
@@ -1169,115 +1275,45 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
           </span>
         </div>
 
-        {/* SECTION 1: SALES TEAM */}
+        {/* SECTION 1: ACADEMY COUNSELORS (FIRST) */}
         <div className="space-y-3">
-          <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-2 border-l-2 border-primary/30">
-            Sales & Field Operations
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
-            {salesTeam?.map(member => {
-              const cardTarget = monthTargetsMap[member.id] ?? resolveMonthTarget(member, activeMonthStr);
-              const achievedAmt = member.achievedAmount || 0;
-              const targetPct = cardTarget > 0 ? Math.min(Math.round((achievedAmt / cardTarget) * 100), 100) : 0;
-              const avatarSrc = member.avatar_url || getAvatarUrl(member.full_name, member.gender);
-
-              return (
-                <div 
-                  key={member.id}
-                  onClick={() => setSelectedProfile(member)}
-                  className="group relative p-5 rounded-lg bg-card dark:bg-muted-2 border border-border dark:border-border hover:border-primary/40 dark:hover:border-primary/40 hover:bg-muted dark:hover:bg-card/70 hover:shadow-xl hover:transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-4"
-                >
-                  {/* Top Header Row */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="relative shrink-0">
-                        <img 
-                          src={avatarSrc} 
-                          alt={member.full_name} 
-                          className="w-12 h-12 rounded-lg object-cover border-2 border-primary group-hover:border-primary group-hover:scale-105 transition-all duration-300 bg-muted dark:bg-card"
-                        />
-                        <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-success border-2 border-white dark:border-border rounded-full" title="Active Staff"></span>
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-sm font-extrabold text-foreground dark:text-white group-hover:text-primary dark:group-hover:text-primary transition-colors truncate">
-                          {member.full_name}
-                        </h4>
-                        <span className="inline-block mt-0.5 text-[9.5px] font-bold text-primary dark:text-primary uppercase tracking-wider bg-primary-soft dark:bg-primary-soft px-2 py-0.5 rounded-md border border-primary/25 dark:border-primary/25">
-                          {member.designation}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="p-2 rounded-md bg-muted dark:bg-muted group-hover:bg-primary group-hover:text-white text-muted-foreground dark:text-muted-foreground transition-all border border-border dark:border-border shrink-0">
-                      <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
-                    </div>
-                  </div>
-
-                  {/* Target Progress Bar (Sales) */}
-                  {cardTarget > 0 && (
-                    <div className="space-y-1.5 pt-1">
-                      <div className="flex justify-between items-center text-[10px] font-bold">
-                        <span className="text-muted-foreground dark:text-muted-foreground uppercase tracking-wider">Target Goal</span>
-                        <span className={targetPct >= 100 ? 'text-success dark:text-success font-extrabold' : 'text-primary dark:text-primary font-extrabold'}>
-                          {targetPct}% Achieved
-                        </span>
-                      </div>
-                      <div className="w-full bg-muted dark:bg-card/80 h-2 rounded-full overflow-hidden border border-border dark:border-border p-0.5">
-                        <div 
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            targetPct >= 100 
-                              ? 'bg-success' 
-                              : 'bg-primary'
-                          }`}
-                          style={{ width: `${targetPct}%` }}
-                        ></div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Metric Pillars Grid */}
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border dark:border-border">
-                    <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
-                      <span className="text-[9px] font-bold text-muted-foreground dark:text-muted-foreground uppercase tracking-wider">Target</span>
-                      <span className="text-xs font-black text-foreground dark:text-foreground mt-1">{formatCurrency(cardTarget)}</span>
-                    </div>
-
-                    <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
-                      <span className="text-[9px] font-bold text-success dark:text-success uppercase tracking-wider">Achieved</span>
-                      <span className="text-xs font-black text-success dark:text-success mt-1">{formatCurrency(achievedAmt)}</span>
-                    </div>
-
-                    <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
-                      <span className="text-[9px] font-bold text-primary dark:text-primary uppercase tracking-wider">Deals Logged</span>
-                      <span className="text-xs font-black text-primary dark:text-primary mt-1">{member.salesWorksCount || 0} Works</span>
-                    </div>
-
-                    <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
-                      <span className="text-[9px] font-bold text-success dark:text-success uppercase tracking-wider">Attendance</span>
-                      <span className="text-xs font-black text-success dark:text-success mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="flex items-center justify-between pb-2 border-b border-border">
+            <div className="flex items-center gap-2.5">
+              <span className="w-6 h-6 rounded-md bg-primary/10 text-primary flex items-center justify-center font-black text-xs border border-primary/20">
+                1
+              </span>
+              <div>
+                <h3 className="text-sm font-extrabold text-foreground flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" />
+                  Academy Admissions Counselors
+                </h3>
+                <p className="text-[11px] text-muted-foreground font-medium">
+                  Student inquiries, parent counseling & admission enrollments
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-primary/10 text-primary font-bold px-2.5 py-0.5 rounded-full border border-primary/20">
+              {counselorTeam.length} Counselors
+            </span>
           </div>
-        </div>
 
-        {/* SECTION 2: CREATIVE TEAM */}
-        {creativeTeam?.length > 0 && (
-          <div className="space-y-3 pt-4">
-            <h3 className="text-[10px] font-black text-muted-foreground uppercase tracking-widest pl-2 border-l-2 border-success/30">
-              Creative & Marketing Team
-            </h3>
+          {counselorTeam.length === 0 ? (
+            <div className="p-6 rounded-xl border border-dashed border-border text-center text-xs text-muted-foreground bg-muted/20">
+              No Academy Counselors registered in the staff database.
+            </div>
+          ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
-              {creativeTeam.map(member => {
+              {counselorTeam.map(member => {
+                const cardTarget = monthTargetsMap[member.id] ?? resolveMonthTarget(member, activeMonthStr);
+                const achievedAmt = member.achievedAmount || 0;
+                const targetPct = cardTarget > 0 ? Math.min(Math.round((achievedAmt / cardTarget) * 100), 100) : 0;
                 const avatarSrc = member.avatar_url || getAvatarUrl(member.full_name, member.gender);
 
                 return (
                   <div 
                     key={member.id}
                     onClick={() => setSelectedProfile(member)}
-                    className="group relative p-5 rounded-lg bg-card dark:bg-muted-2 border border-border dark:border-border hover:border-success/40 dark:hover:border-success/40 hover:bg-muted dark:hover:bg-card/70 hover:shadow-xl hover:transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-4"
+                    className="group relative p-5 rounded-lg bg-card dark:bg-muted-2 border border-border dark:border-border hover:border-primary/50 dark:hover:border-primary/50 hover:bg-muted dark:hover:bg-card/70 hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-4"
                   >
                     {/* Top Header Row */}
                     <div className="flex items-start justify-between gap-3">
@@ -1286,21 +1322,133 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                           <img 
                             src={avatarSrc} 
                             alt={member.full_name} 
-                            className="w-12 h-12 rounded-lg object-cover border-2 border-success group-hover:border-success group-hover:scale-105 transition-all duration-300 bg-muted dark:bg-card"
+                            className="w-12 h-12 rounded-lg object-cover border-2 border-primary group-hover:border-primary group-hover:scale-105 transition-all duration-300 bg-muted dark:bg-card"
                           />
-                          <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-success border-2 border-white dark:border-border rounded-full" title="Active Staff"></span>
+                          <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-success border-2 border-white dark:border-border rounded-full" title="Active Counselor"></span>
                         </div>
                         <div className="min-w-0">
-                          <h4 className="text-sm font-extrabold text-foreground dark:text-white group-hover:text-success dark:group-hover:text-success transition-colors truncate">
+                          <h4 className="text-sm font-extrabold text-foreground dark:text-white group-hover:text-primary dark:group-hover:text-primary transition-colors truncate">
                             {member.full_name}
                           </h4>
-                          <span className="inline-block mt-0.5 text-[9.5px] font-bold text-success dark:text-success uppercase tracking-wider bg-success-soft dark:bg-success-soft px-2 py-0.5 rounded-md border border-success/25 dark:border-success/25">
-                            {member.designation}
+                          <span className="inline-block mt-0.5 text-[9.5px] font-bold text-primary uppercase tracking-wider bg-primary/10 px-2 py-0.5 rounded-md border border-primary/25">
+                            {member.designation || 'Academy Counselor'}
                           </span>
                         </div>
                       </div>
 
-                      <div className="p-2 rounded-md bg-muted dark:bg-muted group-hover:bg-success group-hover:text-white text-muted-foreground dark:text-muted-foreground transition-all border border-border dark:border-border shrink-0">
+                      <div className="p-2 rounded-md bg-muted dark:bg-muted group-hover:bg-primary group-hover:text-white text-muted-foreground dark:text-muted-foreground transition-all border border-border dark:border-border shrink-0">
+                        <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
+                      </div>
+                    </div>
+
+                    {/* Target Progress Bar (Counselor) */}
+                    {cardTarget > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex justify-between items-center text-[10px] font-bold">
+                          <span className="text-muted-foreground uppercase tracking-wider">Target Goal</span>
+                          <span className={targetPct >= 100 ? 'text-success font-extrabold' : 'text-primary font-extrabold'}>
+                            {targetPct}% Achieved
+                          </span>
+                        </div>
+                        <div className="w-full bg-muted dark:bg-card/80 h-2 rounded-full overflow-hidden border border-border dark:border-border p-0.5">
+                          <div 
+                            className={`h-full rounded-full transition-all duration-500 ${
+                              targetPct >= 100 ? 'bg-success' : 'bg-primary'
+                            }`}
+                            style={{ width: `${targetPct}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Metric Pillars Grid */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border dark:border-border">
+                      <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                        <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Monthly Target</span>
+                        <span className="text-xs font-black text-foreground mt-1">{formatCurrency(cardTarget)}</span>
+                      </div>
+
+                      <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                        <span className="text-[9px] font-bold text-success uppercase tracking-wider">Collections</span>
+                        <span className="text-xs font-black text-success mt-1">{formatCurrency(achievedAmt)}</span>
+                      </div>
+
+                      <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                        <span className="text-[9px] font-bold text-primary uppercase tracking-wider">Deals Logged</span>
+                        <span className="text-xs font-black text-primary mt-1">{member.salesWorksCount || 0} Deals</span>
+                      </div>
+
+                      <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                        <span className="text-[9px] font-bold text-success uppercase tracking-wider">Attendance</span>
+                        <span className="text-xs font-black text-success mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* SECTION 2: ACADEMY TUTORS */}
+        <div className="space-y-3 pt-4">
+          <div className="flex items-center justify-between pb-2 border-b border-border">
+            <div className="flex items-center gap-2.5">
+              <span className="w-6 h-6 rounded-md bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-black text-xs border border-emerald-500/20">
+                2
+              </span>
+              <div>
+                <h3 className="text-sm font-extrabold text-foreground flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-emerald-400" />
+                  Academy Tutors & Faculty
+                </h3>
+                <p className="text-[11px] text-muted-foreground font-medium">
+                  Curriculum delivery, batch mentoring & student attendance tracking
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-emerald-500/10 text-emerald-400 font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+              {tutorTeam.length} Tutors
+            </span>
+          </div>
+
+          {tutorTeam.length === 0 ? (
+            <div className="p-6 rounded-xl border border-dashed border-border text-center text-xs text-muted-foreground bg-muted/20">
+              No Academy Tutors registered in the staff database.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
+              {tutorTeam.map(member => {
+                const avatarSrc = member.avatar_url || getAvatarUrl(member.full_name, member.gender);
+
+                return (
+                  <div 
+                    key={member.id}
+                    onClick={() => setSelectedProfile(member)}
+                    className="group relative p-5 rounded-lg bg-card dark:bg-muted-2 border border-border dark:border-border hover:border-emerald-500/50 dark:hover:border-emerald-500/50 hover:bg-muted dark:hover:bg-card/70 hover:shadow-xl transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-4"
+                  >
+                    {/* Top Header Row */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="relative shrink-0">
+                          <img 
+                            src={avatarSrc} 
+                            alt={member.full_name} 
+                            className="w-12 h-12 rounded-lg object-cover border-2 border-emerald-500 group-hover:border-emerald-400 group-hover:scale-105 transition-all duration-300 bg-muted dark:bg-card"
+                          />
+                          <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-success border-2 border-white dark:border-border rounded-full" title="Active Faculty"></span>
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-extrabold text-foreground dark:text-white group-hover:text-emerald-400 dark:group-hover:text-emerald-400 transition-colors truncate">
+                            {member.full_name}
+                          </h4>
+                          <span className="inline-block mt-0.5 text-[9.5px] font-bold text-emerald-400 uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/25">
+                            {member.designation || 'Academy Tutor'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="p-2 rounded-md bg-muted dark:bg-muted group-hover:bg-emerald-500 group-hover:text-white text-muted-foreground dark:text-muted-foreground transition-all border border-border dark:border-border shrink-0">
                         <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
                       </div>
                     </div>
@@ -1308,21 +1456,157 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                     {/* Metric Pillars Grid */}
                     <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border dark:border-border">
                       <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
-                        <span className="text-[9px] font-bold text-success dark:text-success uppercase tracking-wider">Completed Works</span>
-                        <span className="text-xs font-black text-success dark:text-success mt-1">{member.creativeWorksCount || 0} Deliverables</span>
+                        <span className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider">Faculty Role</span>
+                        <span className="text-xs font-black text-foreground mt-1">Lead Tutor</span>
                       </div>
 
                       <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
-                        <span className="text-[9px] font-bold text-success dark:text-success uppercase tracking-wider">Attendance Log</span>
-                        <span className="text-xs font-black text-success dark:text-success mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
+                        <span className="text-[9px] font-bold text-success uppercase tracking-wider">Attendance Log</span>
+                        <span className="text-xs font-black text-success mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
+                      </div>
+
+                      <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                        <span className="text-[9px] font-bold text-primary uppercase tracking-wider">Work Records</span>
+                        <span className="text-xs font-black text-primary mt-1">{member.creativeWorksCount || member.salesWorksCount || 0} Entries</span>
+                      </div>
+
+                      <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                        <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Batch Mentorship</span>
+                        <span className="text-xs font-black text-foreground mt-1">Active Faculty</span>
                       </div>
                     </div>
                   </div>
                 );
               })}
             </div>
+          )}
+        </div>
+
+        {/* SECTION 3: COMPANY OWNERS (SHIBIN, ASHIF), CREATIVE, AND OTHER STAFF (LAST) */}
+        <div className="space-y-3 pt-4">
+          <div className="flex items-center justify-between pb-2 border-b border-border">
+            <div className="flex items-center gap-2.5">
+              <span className="w-6 h-6 rounded-md bg-purple-500/10 text-purple-400 flex items-center justify-center font-black text-xs border border-purple-500/20">
+                3
+              </span>
+              <div>
+                <h3 className="text-sm font-extrabold text-foreground flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-purple-400" />
+                  Company Owners, Creative & Other Staff
+                </h3>
+                <p className="text-[11px] text-muted-foreground font-medium">
+                  Company owners (Shibin, Ashif), media production, videography & operations
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-purple-500/10 text-purple-400 font-bold px-2.5 py-0.5 rounded-full border border-purple-500/20">
+              {ownersAndOtherTeam.length} Members
+            </span>
           </div>
-        )}
+
+          {ownersAndOtherTeam.length === 0 ? (
+            <div className="p-6 rounded-xl border border-dashed border-border text-center text-xs text-muted-foreground bg-muted/20">
+              No management or creative staff registered.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
+              {ownersAndOtherTeam.map(member => {
+                const desigLower = (member.designation || '').toLowerCase();
+                const isOwner = desigLower.includes('owner') || desigLower.includes('managing director') || (member.full_name || '').toLowerCase().includes('shibin') || (member.full_name || '').toLowerCase().includes('ashif');
+                const cardTarget = monthTargetsMap[member.id] ?? resolveMonthTarget(member, activeMonthStr);
+                const achievedAmt = member.achievedAmount || 0;
+                const avatarSrc = member.avatar_url || getAvatarUrl(member.full_name, member.gender);
+
+                return (
+                  <div 
+                    key={member.id}
+                    onClick={() => setSelectedProfile(member)}
+                    className={`group relative p-5 rounded-lg bg-card dark:bg-muted-2 border transition-all duration-300 cursor-pointer flex flex-col justify-between space-y-4 hover:shadow-xl ${
+                      isOwner
+                        ? 'border-purple-500/30 hover:border-purple-500/60 hover:bg-muted dark:hover:bg-card/70'
+                        : 'border-border hover:border-primary/40 hover:bg-muted dark:hover:bg-card/70'
+                    }`}
+                  >
+                    {/* Top Header Row */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="relative shrink-0">
+                          <img 
+                            src={avatarSrc} 
+                            alt={member.full_name} 
+                            className={`w-12 h-12 rounded-lg object-cover border-2 transition-all duration-300 bg-muted dark:bg-card ${
+                              isOwner ? 'border-purple-500 group-hover:border-purple-400' : 'border-border group-hover:border-primary'
+                            }`}
+                          />
+                          <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-success border-2 border-white dark:border-border rounded-full" title="Active"></span>
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className={`text-sm font-extrabold text-foreground dark:text-white transition-colors truncate ${
+                            isOwner ? 'group-hover:text-purple-400' : 'group-hover:text-primary'
+                          }`}>
+                            {member.full_name}
+                          </h4>
+                          <span className={`inline-block mt-0.5 text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                            isOwner 
+                              ? 'text-purple-400 bg-purple-500/10 border-purple-500/25'
+                              : 'text-primary bg-primary/10 border-primary/25'
+                          }`}>
+                            {member.designation || 'Staff'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className={`p-2 rounded-md bg-muted dark:bg-muted transition-all border border-border dark:border-border shrink-0 ${
+                        isOwner ? 'group-hover:bg-purple-500 group-hover:text-white' : 'group-hover:bg-primary group-hover:text-white'
+                      }`}>
+                        <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
+                      </div>
+                    </div>
+
+                    {/* Metric Pillars Grid */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-border dark:border-border">
+                      {isOwner ? (
+                        <>
+                          <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                            <span className="text-[9px] font-bold text-purple-400 uppercase tracking-wider">Role</span>
+                            <span className="text-xs font-black text-foreground mt-1">Company Owner</span>
+                          </div>
+
+                          <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                            <span className="text-[9px] font-bold text-success uppercase tracking-wider">Attendance</span>
+                            <span className="text-xs font-black text-success mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
+                          </div>
+
+                          <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                            <span className="text-[9px] font-bold text-primary uppercase tracking-wider">Deals / Works</span>
+                            <span className="text-xs font-black text-primary mt-1">{member.salesWorksCount || member.creativeWorksCount || 0} Logged</span>
+                          </div>
+
+                          <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                            <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">{cardTarget > 0 ? 'Target' : 'Operations'}</span>
+                            <span className="text-xs font-black text-foreground mt-1">{cardTarget > 0 ? formatCurrency(achievedAmt) : 'Executive'}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                            <span className="text-[9px] font-bold text-success uppercase tracking-wider">Deliverables</span>
+                            <span className="text-xs font-black text-success mt-1">{member.creativeWorksCount || 0} Works</span>
+                          </div>
+
+                          <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
+                            <span className="text-[9px] font-bold text-success uppercase tracking-wider">Attendance Log</span>
+                            <span className="text-xs font-black text-success mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );

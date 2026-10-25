@@ -3,18 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://oxlcmtytydtudsdjsixh.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2ojRmy5ZwCsaGn9chslteg_JDFzr6ot';
 
-const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY;
-
+// In frontend browser environments, always use the public anon client.
+// Service keys must not be used with createClient in browser to avoid security violations.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-export const supabaseAdmin = supabaseServiceKey 
-  ? createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
-  : null;
+export const supabaseAdmin: any = null;
 
 /**
  * Explicit column list for `sales` queries.

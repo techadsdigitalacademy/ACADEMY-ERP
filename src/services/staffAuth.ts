@@ -66,7 +66,7 @@ export async function ensureStaffAuthUser(params: {
     // 2. If already exists (or creation failed because user exists), find existing user by email
     const { data: usersData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
     const existingUser = usersData?.users?.find(
-      (u) => u.email?.trim().toLowerCase() === email.trim().toLowerCase()
+      (u: any) => u.email?.trim().toLowerCase() === email.trim().toLowerCase()
     );
 
     if (existingUser?.id) {
