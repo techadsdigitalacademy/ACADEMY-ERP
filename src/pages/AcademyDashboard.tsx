@@ -7,6 +7,7 @@ import { Button } from '../components/Button';
 import { supabase } from '../services/supabase';
 import { formatCurrency } from '../services/mockData';
 import { AcademyBatches } from '../components/AcademyBatches';
+import { compressSlipFile, extensionForBlob } from '../utils/imageUtils';
 import { 
   Users, BookOpen, UserPlus, GraduationCap, DollarSign,
   Wallet, Search, X,
@@ -260,15 +261,22 @@ export const AcademyDashboard: React.FC = () => {
 
       let uploadedSlipUrl = '';
       if (proofFile) {
-        const ext = proofFile.name.split('.').pop() || 'png';
+        const compressedSlip = await compressSlipFile(proofFile);
+        const ext = extensionForBlob(compressedSlip);
         const fileName = `fee_${Date.now()}_${Math.random().toString(36).substring(2, 6)}.${ext}`;
         
-        let uploadRes = await dbClient.storage.from('academy_slips').upload(fileName, proofFile);
+        let uploadRes = await dbClient.storage.from('academy_slips').upload(fileName, compressedSlip, {
+          contentType: compressedSlip.type,
+          cacheControl: '31536000'
+        });
         if (uploadRes.error) {
-          uploadRes = await dbClient.storage.from('payment_slips').upload(fileName, proofFile);
+          uploadRes = await dbClient.storage.from('payment_slips').upload(fileName, compressedSlip, {
+            contentType: compressedSlip.type,
+            cacheControl: '31536000'
+          });
         }
         if (!uploadRes.error) {
-          const bucketUsed = uploadRes.data?.path?.includes('academy_slips') ? 'academy_slips' : 'academy_slips';
+          const bucketUsed = uploadRes.data?.path?.includes('academy_slips') ? 'academy_slips' : 'payment_slips';
           const { data: pubData } = dbClient.storage.from(bucketUsed).getPublicUrl(fileName);
           uploadedSlipUrl = pubData?.publicUrl || '';
         }

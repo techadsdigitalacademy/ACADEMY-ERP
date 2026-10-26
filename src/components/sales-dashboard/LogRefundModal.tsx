@@ -60,9 +60,20 @@ export const LogRefundModal: React.FC<LogRefundModalProps> = ({
           .upload(filePath, slip, { contentType: slip.type, cacheControl: '31536000' });
 
         if (uploadErr) {
-          console.error('Refund slip upload failed:', uploadErr);
-          alert('Refund slip upload failed: ' + uploadErr.message + '. Please try again.');
-          return;
+          console.warn('Direct refund slip upload failed, attempting proxy upload fallback:', uploadErr);
+          const proxyRes = await fetch(`/supabase-admin/storage/v1/object/payment_slips/${filePath}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': slip.type,
+              'x-upsert': 'true'
+            },
+            body: slip
+          });
+          if (!proxyRes.ok) {
+            console.error('Refund slip upload failed:', uploadErr);
+            alert('Refund slip upload failed: ' + uploadErr.message + '. Please try again.');
+            return;
+          }
         }
 
         const { data: publicUrlData } = supabase.storage

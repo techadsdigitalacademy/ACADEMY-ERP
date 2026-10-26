@@ -71,7 +71,18 @@ export const LogSaleModal: React.FC<LogSaleModalProps> = ({
         .from('payment_slips')
         .upload(filePath, slip, { contentType: slip.type, cacheControl: '31536000' });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.warn('Direct slip upload failed, attempting proxy upload fallback:', uploadError);
+        const proxyRes = await fetch(`/supabase-admin/storage/v1/object/payment_slips/${filePath}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': slip.type,
+            'x-upsert': 'true'
+          },
+          body: slip
+        });
+        if (!proxyRes.ok) throw uploadError;
+      }
 
       const { data } = supabase.storage.from('payment_slips').getPublicUrl(filePath);
       if (!data?.publicUrl) throw new Error('Could not resolve public URL for the uploaded slip.');

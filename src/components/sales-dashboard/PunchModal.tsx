@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../services/supabase';
-import { encodeCanvasImage, extensionForBlob } from '../../utils/imageUtils';
+import { compressSelfieFromVideo, extensionForBlob } from '../../utils/imageUtils';
 import { Card } from '../Card';
 import { X, Camera } from 'lucide-react';
 
@@ -32,7 +32,6 @@ export const PunchModal: React.FC<PunchModalProps> = ({
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [isPunching, setIsPunching] = useState(false);
@@ -126,17 +125,10 @@ export const PunchModal: React.FC<PunchModalProps> = ({
   const handlePunch = async () => {
     setIsPunching(true);
     try {
-      // 1. Capture snapshot directly from video stream
+      // 1. Capture & compress snapshot directly from video stream (lightweight WebP ~15-25KB)
       let blob: Blob | null = null;
-      if (canvasRef.current && videoRef.current) {
-        const context = canvasRef.current.getContext('2d');
-        if (context) {
-          // Crop center to 1:1 aspect ratio (480x480 out of 640x480)
-          context.drawImage(videoRef.current, 80, 0, 480, 480, 0, 0, 480, 480);
-          // Encoded straight to a blob: the old data URL round-trip built a
-          // base64 copy of the image in memory for no benefit.
-          blob = await encodeCanvasImage(canvasRef.current, 0.85);
-        }
+      if (videoRef.current) {
+        blob = await compressSelfieFromVideo(videoRef.current, 360, 0.72);
       }
 
       if (!blob) {
@@ -295,8 +287,6 @@ export const PunchModal: React.FC<PunchModalProps> = ({
           )}
         </div>
 
-        {/* Hidden canvas for snapshot */}
-        <canvas ref={canvasRef} className="hidden" width={480} height={480} />
 
         {/* Confirmation action */}
         <div className="pt-2">
