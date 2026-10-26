@@ -146,21 +146,42 @@ export const PunchModal: React.FC<PunchModalProps> = ({
       // 2. Upload selfie to Supabase Storage
       const fileName = `${activeStaff.id}/${Date.now()}.${extensionForBlob(blob)}`;
 
-      const { error: uploadErr } = await supabase.storage
-        .from('attendance')
-        .upload(fileName, blob, {
-          contentType: blob.type,
-          // Filenames are timestamped and never rewritten, so they can be
-          // cached indefinitely instead of re-fetched every hour.
-          cacheControl: '31536000',
-          upsert: true
+      let selfiePublicUrl = '';
+      try {
+        const { error: uploadErr } = await supabase.storage
+          .from('attendance')
+          .upload(fileName, blob, {
+            contentType: blob.type,
+            cacheControl: '31536000',
+            upsert: true
+          });
+
+        if (uploadErr) throw uploadErr;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('attendance')
+          .getPublicUrl(fileName);
+        selfiePublicUrl = publicUrl;
+      } catch (storageErr) {
+        console.warn('Direct selfie upload error, attempting proxy upload fallback:', storageErr);
+        const proxyRes = await fetch(`/supabase-admin/storage/v1/object/attendance/${fileName}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': blob.type,
+            'x-upsert': 'true'
+          },
+          body: blob
         });
 
-      if (uploadErr) throw uploadErr;
+        if (!proxyRes.ok) {
+          throw storageErr;
+        }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('attendance')
-        .getPublicUrl(fileName);
+        const { data: { publicUrl } } = supabase.storage
+          .from('attendance')
+          .getPublicUrl(fileName);
+        selfiePublicUrl = publicUrl;
+      }
 
       // 3. Perform Time Calculations
       const now = new Date();
@@ -190,7 +211,7 @@ export const PunchModal: React.FC<PunchModalProps> = ({
         }
 
         if (!userCoords) throw new Error('Location unavailable — cannot record punch.');
-        await punchIn(publicUrl, userCoords.lat, userCoords.lng, status);
+        await punchIn(selfiePublicUrl, userCoords.lat, userCoords.lng, status);
         alert(`Successfully punched in! Status: ${status}`);
       } else {
         // Punch Out
