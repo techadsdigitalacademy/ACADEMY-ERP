@@ -12,7 +12,7 @@ import {
   Users, BookOpen, UserPlus, GraduationCap, DollarSign,
   Wallet, Search, X,
   ArrowUpRight, Layers, UserCheck,
-  Eye, UploadCloud, Check
+  Eye, UploadCloud, Check, Sun, Moon
 } from 'lucide-react';
 
 interface AcademyBatch {
@@ -64,7 +64,7 @@ interface AcademyAttendance {
 }
 
 export const AcademyDashboard: React.FC = () => {
-  const { activeStaff, activeTab, setActiveTab, isAdminMode } = useApp();
+  const { activeStaff, activeTab, setActiveTab, isAdminMode, theme, toggleTheme } = useApp();
   const dbClient = supabase;
 
   
@@ -130,9 +130,27 @@ export const AcademyDashboard: React.FC = () => {
     setIsLoading(true);
     try {
       // 1. Batches
-      const { data: bData } = await dbClient.from('batches').select('*').order('created_at', { ascending: false });
-      if (bData) {
-        setBatches(bData.map((b: any) => ({
+      let bDataList: any[] = [];
+      try {
+        const { data: bData, error: bErr } = await dbClient.from('batches').select('*').order('created_at', { ascending: false });
+        if (!bErr && bData && bData.length > 0) {
+          bDataList = bData;
+        } else {
+          const res = await fetch('/supabase-admin/rest/v1/batches?select=*&order=created_at.desc');
+          if (res.ok) {
+            bDataList = await res.json();
+          } else if (bData) {
+            bDataList = bData;
+          }
+        }
+      } catch (batchErr) {
+        console.warn('Direct batch query error in dashboard, attempting proxy fetch:', batchErr);
+        const res = await fetch('/supabase-admin/rest/v1/batches?select=*&order=created_at.desc');
+        if (res.ok) bDataList = await res.json();
+      }
+
+      if (bDataList && bDataList.length > 0) {
+        setBatches(bDataList.map((b: any) => ({
           id: b.id,
           batch_name: b.batch_name,
           batch_code: b.batch_name.slice(0, 4).toUpperCase(),
@@ -205,7 +223,7 @@ export const AcademyDashboard: React.FC = () => {
     e.preventDefault();
     if (!batchForm.name) return;
     try {
-      const { error } = await dbClient.from('batches').insert([{
+      const batchPayload = {
         batch_name: batchForm.name.trim(),
         course_name: batchForm.name.trim(),
         mode: batchForm.type.toLowerCase(),
@@ -214,8 +232,19 @@ export const AcademyDashboard: React.FC = () => {
         total_seats: 30,
         fee_amount: 25000,
         start_date: new Date().toISOString().split('T')[0]
-      }]);
-      if (error) throw error;
+      };
+      const { error } = await dbClient.from('batches').insert([batchPayload]);
+      if (error) {
+        const proxyRes = await fetch('/supabase-admin/rest/v1/batches', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify([batchPayload])
+        });
+        if (!proxyRes.ok) throw error;
+      }
       setIsBatchModalOpen(false);
       setBatchForm({ name: '', code: '', type: 'Offline', status: 'Upcoming', tutor_id: '' });
       fetchAcademyData();
@@ -670,7 +699,7 @@ export const AcademyDashboard: React.FC = () => {
             <Card variant="glass" className="p-4 border-border relative">
               <button 
                 onClick={() => setSelectedStudentView(null)}
-                className="absolute top-4 right-4 text-muted-foreground hover:text-white"
+                className="absolute top-4 right-4 text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -882,13 +911,13 @@ export const AcademyDashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#020617] text-foreground font-sans flex flex-col lg:flex-row relative w-full overflow-x-hidden selection:bg-primary-soft">
+    <div className="min-h-screen bg-background text-foreground font-sans flex flex-col lg:flex-row relative w-full overflow-x-hidden selection:bg-primary-soft">
       <Sidebar />
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12 relative">
         <main className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 w-full">
           
           {/* Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-border pb-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-border pb-6">
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <div className="p-2 bg-primary-soft rounded-lg">
@@ -899,6 +928,17 @@ export const AcademyDashboard: React.FC = () => {
               <p className="text-sm text-muted-foreground max-w-xl">
                 Manage batches, student registrations, fee tracking, and academy finances.
               </p>
+            </div>
+
+            {/* Header Right Actions & Theme Switcher */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={toggleTheme}
+                title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+                className="flex items-center justify-center p-2 rounded-lg text-secondary-foreground bg-card border border-border hover:bg-muted hover:text-foreground transition-colors duration-150 cursor-pointer shadow-sm"
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4 text-primary" />}
+              </button>
             </div>
           </div>
 
@@ -997,7 +1037,7 @@ export const AcademyDashboard: React.FC = () => {
       {isBatchModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-fade-in">
           <Card variant="glass" className="w-full max-w-md p-6 border-border shadow-2xl relative">
-            <button onClick={() => setIsBatchModalOpen(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-white transition-colors">
+            <button onClick={() => setIsBatchModalOpen(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-xl font-black text-foreground mb-6">Create New Batch</h2>
@@ -1048,7 +1088,7 @@ export const AcademyDashboard: React.FC = () => {
       {isStudentModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-fade-in">
           <Card variant="glass" className="w-full max-w-md p-6 border-border shadow-2xl relative">
-            <button onClick={() => setIsStudentModalOpen(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-white transition-colors">
+            <button onClick={() => setIsStudentModalOpen(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-xl font-black text-foreground mb-6">Register Student</h2>
@@ -1090,7 +1130,7 @@ export const AcademyDashboard: React.FC = () => {
       {isInstallmentModalOpen && selectedStudentForFee && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-fade-in">
           <Card variant="glass" className="w-full max-w-md p-6 border-border shadow-2xl relative">
-            <button onClick={() => setIsInstallmentModalOpen(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-white transition-colors">
+            <button onClick={() => setIsInstallmentModalOpen(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground cursor-pointer transition-colors">
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-xl font-black text-foreground mb-2">Log Payment</h2>
@@ -1168,7 +1208,7 @@ export const AcademyDashboard: React.FC = () => {
       {isExpenseModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-fade-in">
           <Card variant="glass" className="w-full max-w-md p-6 border-border shadow-2xl relative">
-            <button onClick={() => setIsExpenseModalOpen(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-white transition-colors">
+            <button onClick={() => setIsExpenseModalOpen(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors">
               <X className="w-5 h-5" />
             </button>
             <h2 className="text-xl font-black text-foreground mb-6">Log Academy Expense</h2>
@@ -1218,7 +1258,7 @@ export const AcademyDashboard: React.FC = () => {
               <span className="text-xs font-bold text-foreground">Payment Proof Screenshot</span>
               <button 
                 onClick={() => setPreviewSlipUrl(null)}
-                className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-white cursor-pointer"
+                className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>

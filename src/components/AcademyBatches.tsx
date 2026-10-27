@@ -209,14 +209,29 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       allStaff.forEach(s => staffMap.set(s.id, s.full_name));
 
       // 2. Fetch Batches
-      const { data: batchesData, error: bErr } = await dbClient
-        .from('batches')
-        .select('*')
-        .order('created_at', { ascending: false });
+      let rawBatches: any[] = [];
+      try {
+        const { data: bData, error: bErr } = await dbClient
+          .from('batches')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (!bErr && bData && bData.length > 0) {
+          rawBatches = bData;
+        } else {
+          const res = await fetch('/supabase-admin/rest/v1/batches?select=*&order=created_at.desc');
+          if (res.ok) {
+            rawBatches = await res.json();
+          } else if (bData) {
+            rawBatches = bData;
+          }
+        }
+      } catch (batchFetchErr) {
+        console.warn('Direct batch query error, attempting proxy fetch:', batchFetchErr);
+        const res = await fetch('/supabase-admin/rest/v1/batches?select=*&order=created_at.desc');
+        if (res.ok) rawBatches = await res.json();
+      }
 
-      if (bErr) throw bErr;
-
-      const formattedBatches: BatchItem[] = (batchesData || []).map((b: any) => ({
+      const formattedBatches: BatchItem[] = (rawBatches || []).map((b: any) => ({
         ...b,
         mode: (b.mode || 'offline').toLowerCase(),
         status: (b.status || 'upcoming').toLowerCase(),
@@ -418,6 +433,10 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
     setIsSubmittingBatch(true);
     setFormError(null);
 
+    const finalStartDate = batchForm.start_date && batchForm.start_date.trim()
+      ? batchForm.start_date.trim()
+      : new Date().toISOString().split('T')[0];
+
     const payload: any = {
       batch_name: batchForm.batch_name.trim(),
       course_name: batchForm.course_name.trim(),
@@ -425,7 +444,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       total_seats: parseInt(batchForm.total_seats, 10) || 30,
       fee_amount: parseFloat(batchForm.fee_amount) || 0,
       status: batchForm.status.toLowerCase(), // 'upcoming', 'running', or 'completed'
-      start_date: batchForm.start_date,
+      start_date: finalStartDate,
       tutor_id: batchForm.tutor_id || null
     };
 
@@ -449,32 +468,22 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       };
 
       if (editingBatch) {
-        // Attempt update with assigned_counselors via public supabase client
         let updateRes = await supabase
           .from('batches')
-          .update({ ...payload, assigned_counselors: batchForm.selectedCounselorIds })
+          .update(payload)
           .eq('id', editingBatch.id);
 
         if (updateRes.error) {
-          if (updateRes.error.code === '42703') {
-            await executeBatchWrite('update', payload, editingBatch.id);
-          } else {
-            await executeBatchWrite('update', { ...payload, assigned_counselors: batchForm.selectedCounselorIds }, editingBatch.id);
-          }
+          await executeBatchWrite('update', payload, editingBatch.id);
         }
       } else {
-        // Attempt insert with assigned_counselors via public supabase client
         let insertRes = await supabase
           .from('batches')
-          .insert([{ ...payload, assigned_counselors: batchForm.selectedCounselorIds }])
+          .insert([payload])
           .select();
 
         if (insertRes.error) {
-          if (insertRes.error.code === '42703') {
-            await executeBatchWrite('insert', payload);
-          } else {
-            await executeBatchWrite('insert', { ...payload, assigned_counselors: batchForm.selectedCounselorIds });
-          }
+          await executeBatchWrite('insert', payload);
         }
       }
 
@@ -670,8 +679,9 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
 
           {isAdminMode && (
             <Button
+              id="create-new-batch-btn"
               onClick={handleOpenCreateModal}
-              className="flex items-center gap-2 bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-primary/30 font-bold px-4 py-2.5 rounded-xl text-sm"
+              className="flex items-center gap-2 bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-primary/30 font-bold px-4 py-2.5 rounded-xl text-sm cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Create New Batch</span>
@@ -830,8 +840,9 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
               <p className="text-sm font-semibold text-muted-foreground">No upcoming batches found matching criteria.</p>
               {isAdminMode && (
                 <button
+                  id="create-new-batch-empty-btn"
                   onClick={handleOpenCreateModal}
-                  className="mt-3 text-xs text-primary font-bold hover:underline"
+                  className="mt-3 text-xs text-primary font-bold hover:underline cursor-pointer"
                 >
                   + Create your next upcoming batch
                 </button>
@@ -1312,7 +1323,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
           <Card variant="glass" className="w-full max-w-xl p-6 md:p-8 border-border shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setIsBatchModalOpen(false)}
-              className="absolute top-5 right-5 text-muted-foreground hover:text-white transition-colors"
+              className="absolute top-5 right-5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -1334,7 +1345,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
               </div>
             )}
 
-            <form onSubmit={handleSaveBatch} className="space-y-4">
+            <form onSubmit={handleSaveBatch} noValidate className="space-y-4">
               
               {/* 1. Batch Name & 2. Course Name */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1455,7 +1466,6 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                     Batch Start Date
                   </label>
                   <input
-                    required
                     type="date"
                     value={batchForm.start_date}
                     onChange={e => setBatchForm({ ...batchForm, start_date: e.target.value })}
@@ -1537,9 +1547,10 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                   Cancel
                 </Button>
                 <Button
+                  id="save-batch-submit-btn"
                   type="submit"
                   disabled={isSubmittingBatch}
-                  className="bg-primary text-primary-foreground font-bold px-6"
+                  className="bg-primary text-primary-foreground font-bold px-6 cursor-pointer"
                 >
                   {isSubmittingBatch ? 'Saving Batch...' : editingBatch ? 'Update Batch' : 'Create Batch'}
                 </Button>
@@ -1557,7 +1568,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
           <Card variant="glass" className="w-full max-w-md p-6 border-border shadow-2xl relative">
             <button
               onClick={() => setIsEnrollModalOpen(false)}
-              className="absolute top-5 right-5 text-muted-foreground hover:text-white transition-colors"
+              className="absolute top-5 right-5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>

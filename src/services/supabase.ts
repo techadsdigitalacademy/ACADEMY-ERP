@@ -1,10 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://oxlcmtytydtudsdjsixh.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_2ojRmy5ZwCsaGn9chslteg_JDFzr6ot';
+const rawUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseUrl = rawUrl && !rawUrl.includes('oxlcmtytydtudsdjsixh')
+  ? rawUrl
+  : 'https://ixirytvbygcwfmdctgoz.supabase.co';
 
-// In frontend browser environments, always use the public anon client.
-// Service keys must not be used with createClient in browser to avoid security violations.
+// In frontend browser environments, always strictly use the public publishable anon key.
+// If VITE_SUPABASE_ANON_KEY is missing, contains 'secret', or starts with 'sb_secret_',
+// safeguard by falling back to the public publishable key so createClient NEVER throws
+// 'Forbidden use of secret API key in browser'.
+const rawAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabaseAnonKey = (rawAnonKey && !rawAnonKey.startsWith('sb_secret_') && !rawAnonKey.includes('secret'))
+  ? rawAnonKey
+  : 'sb_publishable_YmLsCb-ZxwtLVE66vz4wJQ__V6CW-xH';
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export const supabaseAdmin: any = null;

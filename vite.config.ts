@@ -20,7 +20,8 @@ export default defineConfig(({ mode }) => {
           rewrite: (path: string) => path.replace(/^\/supabase-admin/, ''),
           headers: {
             'apikey': serviceKey,
-            'Authorization': `Bearer ${serviceKey}`
+            'Authorization': `Bearer ${serviceKey}`,
+            'User-Agent': 'TechAds-Server-Proxy/1.0'
           }
         }
       }
