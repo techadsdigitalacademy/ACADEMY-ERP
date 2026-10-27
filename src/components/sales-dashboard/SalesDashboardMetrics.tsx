@@ -76,10 +76,10 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
           {/* 1. Academy Overview Main Cards Row (Total Revenue, Active Students, Total Batches) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 sm:gap-4">
             
-            {/* Card 1: Academy Revenue (Replaces Agency Sales) */}
+            {/* Card 1: Master Revenue (Replaces Agency Sales) */}
             <Card variant="glass" glowColor="indigo" className="p-4 sm:p-5 flex flex-col justify-between border-primary/20 bg-primary-soft/30 hover:border-primary/40 transition-all">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Academy Revenue</span>
+                <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Master Revenue</span>
                 <div className="p-2 rounded-lg bg-primary-soft text-primary border border-primary/20">
                   <GraduationCap className="w-4 h-4" />
                 </div>

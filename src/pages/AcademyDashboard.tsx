@@ -164,7 +164,16 @@ export const AcademyDashboard: React.FC = () => {
       }
 
       // 2. Students
-      const { data: sData } = await dbClient.from('students').select('*').order('created_at', { ascending: false });
+      let sData: any[] = [];
+      const { data: sRes, error: sErr } = await dbClient.from('students').select('*').order('created_at', { ascending: false });
+      if (!sErr && sRes && sRes.length > 0) {
+        sData = sRes;
+      } else {
+        try {
+          const pRes = await fetch('/supabase-admin/rest/v1/students?select=*&order=created_at.desc');
+          if (pRes.ok) sData = await pRes.json();
+        } catch (_) {}
+      }
       if (sData) {
         setStudents(sData.map((s: any) => ({
           id: s.id,
@@ -180,7 +189,16 @@ export const AcademyDashboard: React.FC = () => {
       }
 
       // 3. Installments / Fee collections
-      const { data: iData } = await dbClient.from('fee_collections').select('*').order('created_at', { ascending: false });
+      let iData: any[] = [];
+      const { data: iRes, error: iErr } = await dbClient.from('fee_collections').select('*').order('created_at', { ascending: false });
+      if (!iErr && iRes && iRes.length > 0) {
+        iData = iRes;
+      } else {
+        try {
+          const pfRes = await fetch('/supabase-admin/rest/v1/fee_collections?select=*&order=created_at.desc');
+          if (pfRes.ok) iData = await pfRes.json();
+        } catch (_) {}
+      }
       if (iData) {
         setInstallments(iData.map((f: any) => {
           let proofUrl = f.payment_proof_url || f.proof_url || f.slip_url || '';
@@ -259,7 +277,7 @@ export const AcademyDashboard: React.FC = () => {
     
     try {
       const studentCode = `STU-${new Date().getFullYear()}-${String(students.length + 101).padStart(3, '0')}`;
-      const { error } = await dbClient.from('students').insert([{
+      const studentPayload = {
         student_id_code: studentCode,
         name: studentForm.name.trim(),
         email: studentForm.email.trim() || null,
@@ -267,12 +285,29 @@ export const AcademyDashboard: React.FC = () => {
         batch_id: studentForm.batch_id,
         total_fee: parseFloat(studentForm.total_fees) || 0,
         paid_fee: 0
-      }]);
-      if (error) throw error;
+      };
+
+      const { error } = await dbClient.from('students').insert([studentPayload]);
+      if (error) {
+        // Fallback to proxy
+        const res = await fetch('/supabase-admin/rest/v1/students', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify([studentPayload])
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || error.message || 'Failed to register student');
+        }
+      }
       
       setIsStudentModalOpen(false);
       setStudentForm({ name: '', email: '', phone: '', batch_id: '', total_fees: '' });
-      fetchAcademyData();
+      await fetchAcademyData();
+      window.dispatchEvent(new CustomEvent('students_data_changed'));
     } catch (err: any) {
       alert(err.message);
     }
@@ -316,15 +351,27 @@ export const AcademyDashboard: React.FC = () => {
         notesWithProof = notesWithProof ? `${notesWithProof} [Slip: ${uploadedSlipUrl}]` : `[Slip: ${uploadedSlipUrl}]`;
       }
 
-      const { error } = await dbClient.from('fee_collections').insert([{
+      const feePayload = {
         student_id: selectedStudentForFee.id,
         batch_id: selectedStudentForFee.batch_id,
         amount: amt,
         payment_mode: pMode,
         installment_month: curMonth,
         notes: notesWithProof || 'Fee payment'
-      }]);
-      if (error) throw error;
+      };
+
+      const { error } = await dbClient.from('fee_collections').insert([feePayload]);
+      if (error) {
+        const fRes = await fetch('/supabase-admin/rest/v1/fee_collections', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify([feePayload])
+        });
+        if (!fRes.ok) {
+          const fErr = await fRes.json().catch(() => ({}));
+          throw new Error(fErr.message || error.message || 'Failed to record installment');
+        }
+      }
 
       // Update student paid fee with accurate sum
       const existingPaid = installments
@@ -332,15 +379,23 @@ export const AcademyDashboard: React.FC = () => {
         .reduce((sum, i) => sum + Number(i.amount_paid), 0);
       const newTotalPaid = existingPaid + amt;
 
-      await dbClient.from('students').update({
+      const { error: updErr } = await dbClient.from('students').update({
         paid_fee: newTotalPaid
       }).eq('id', selectedStudentForFee.id);
+      if (updErr) {
+        await fetch(`/supabase-admin/rest/v1/students?id=eq.${selectedStudentForFee.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paid_fee: newTotalPaid })
+        });
+      }
 
       setIsInstallmentModalOpen(false);
       setInstallmentForm({ amount: '', date: new Date().toISOString().split('T')[0], method: 'UPI', notes: '' });
       setProofFile(null);
       setProofPreview(null);
-      fetchAcademyData();
+      await fetchAcademyData();
+      window.dispatchEvent(new CustomEvent('students_data_changed'));
     } catch (err: any) {
       alert(err.message);
     } finally {

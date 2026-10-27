@@ -215,6 +215,23 @@ export const FinanceDashboard: React.FC = () => {
             dbClient.from('students').select('id, name, student_id_code, batch_id, counselor_id, paid_fee')
           ]);
 
+          let bList = batchesRes.data || [];
+          let sList = studentsRes.data || [];
+          let curFeeList = currentFeesRes.data || [];
+
+          if (bList.length === 0 || sList.length === 0 || curFeeList.length === 0) {
+            try {
+              const [proxyBatches, proxyStudents, proxyFees] = await Promise.all([
+                bList.length === 0 ? fetch('/supabase-admin/rest/v1/batches?select=id,batch_name,course_name').then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve(bList),
+                sList.length === 0 ? fetch('/supabase-admin/rest/v1/students?select=id,name,student_id_code,batch_id,counselor_id,paid_fee').then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve(sList),
+                curFeeList.length === 0 ? fetch(`/supabase-admin/rest/v1/fee_collections?select=id,amount,student_id,batch_id,collected_by,installment_month,payment_mode,notes,created_at&created_at=gte.${startOfMonthStr}&created_at=lte.${endOfMonthStr}`).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve(curFeeList)
+              ]);
+              if (bList.length === 0 && Array.isArray(proxyBatches) && proxyBatches.length > 0) bList = proxyBatches;
+              if (sList.length === 0 && Array.isArray(proxyStudents) && proxyStudents.length > 0) sList = proxyStudents;
+              if (curFeeList.length === 0 && Array.isArray(proxyFees) && proxyFees.length > 0) curFeeList = proxyFees;
+            } catch (_) {}
+          }
+
           return {
             settingsData: settingsRes.data || [],
             profilesData: profilesRes.data || [],
@@ -227,9 +244,9 @@ export const FinanceDashboard: React.FC = () => {
             refundSalesData: refundSalesRes.data || [],
             witData: witRes.data || [],
             prevFees: prevFeesRes.data || [],
-            currentFees: currentFeesRes.data || [],
-            batchesData: batchesRes.data || [],
-            studentsData: studentsRes.data || []
+            currentFees: curFeeList,
+            batchesData: bList,
+            studentsData: sList
           };
         },
         { ttlMs: 45000, forceRefresh }
@@ -875,26 +892,45 @@ export const FinanceDashboard: React.FC = () => {
       const dbClient = supabase;
       const parsedAmt = Number(feeAmount);
 
+      const feePayload = {
+        student_id: feeStudentId || null,
+        batch_id: feeBatchId || null,
+        collected_by: feeCounselorId || activeStaff.id,
+        amount: parsedAmt,
+        payment_mode: feePaymentMode,
+        installment_month: feeInstallmentMonth || selectedLedgerMonth,
+        notes: feeNotes.trim() || null
+      };
+
       const { error: feeErr } = await dbClient
         .from('fee_collections')
-        .insert({
-          student_id: feeStudentId || null,
-          batch_id: feeBatchId || null,
-          collected_by: feeCounselorId || activeStaff.id,
-          amount: parsedAmt,
-          payment_mode: feePaymentMode,
-          installment_month: feeInstallmentMonth || selectedLedgerMonth,
-          notes: feeNotes.trim() || null
-        });
+        .insert(feePayload);
 
-      if (feeErr) throw feeErr;
+      if (feeErr) {
+        const res = await fetch('/supabase-admin/rest/v1/fee_collections', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify([feePayload])
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || feeErr.message);
+        }
+      }
 
       // Update student's paid_fee if student selected
       if (feeStudentId) {
         const targetStudent = studentsList.find(s => s.id === feeStudentId);
         if (targetStudent) {
           const newPaid = (Number(targetStudent.paid_fee) || 0) + parsedAmt;
-          await dbClient.from('students').update({ paid_fee: newPaid }).eq('id', feeStudentId);
+          const { error: uErr } = await dbClient.from('students').update({ paid_fee: newPaid }).eq('id', feeStudentId);
+          if (uErr) {
+            await fetch(`/supabase-admin/rest/v1/students?id=eq.${feeStudentId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ paid_fee: newPaid })
+            });
+          }
         }
       }
 

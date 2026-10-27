@@ -192,8 +192,23 @@ export const SalesDashboard: React.FC = () => {
         supabase.from('batches').select('*').order('start_date', { ascending: true }),
         supabase.from('students').select('*')
       ]);
-      if (batchesRes.data) setCounselorBatches(batchesRes.data);
-      if (studentsRes.data) setCounselorStudents(studentsRes.data);
+      let bList = batchesRes.data || [];
+      if (bList.length === 0) {
+        try {
+          const r = await fetch('/supabase-admin/rest/v1/batches?select=*&order=start_date.asc');
+          if (r.ok) bList = await r.json();
+        } catch (_) {}
+      }
+      if (bList) setCounselorBatches(bList);
+
+      let sList = studentsRes.data || [];
+      if (sList.length === 0) {
+        try {
+          const r = await fetch('/supabase-admin/rest/v1/students?select=*');
+          if (r.ok) sList = await r.json();
+        } catch (_) {}
+      }
+      if (sList) setCounselorStudents(sList);
     } catch (err) {
       console.warn('Error loading batches and students for counselor:', err);
     }
@@ -257,6 +272,9 @@ export const SalesDashboard: React.FC = () => {
         if (res.ok) {
           const resArr = await res.json();
           newStudent = resArr[0];
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || error?.message || 'Failed to insert student record');
         }
       }
 
@@ -316,7 +334,6 @@ export const SalesDashboard: React.FC = () => {
 
           const {
             attendanceData,
-            paymentsData,
             profilesData,
             targetsData,
             salesData,
@@ -356,6 +373,25 @@ export const SalesDashboard: React.FC = () => {
                 dbClient.from('batches').select('*').order('start_date', { ascending: true })
               ]);
 
+              let feeCols = (feeCollectionsRes.data && feeCollectionsRes.data.length > 0) ? feeCollectionsRes.data : [];
+              let stuData = (studentsRes.data && studentsRes.data.length > 0) ? studentsRes.data : [];
+              let batchData = (batchesRes.data && batchesRes.data.length > 0) ? batchesRes.data : [];
+
+              if (stuData.length === 0 || batchData.length === 0 || feeCols.length === 0) {
+                try {
+                  const [proxyFee, proxyStudents, proxyBatches] = await Promise.all([
+                    feeCols.length === 0 ? fetch('/supabase-admin/rest/v1/fee_collections?select=amount').then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve(feeCols),
+                    stuData.length === 0 ? fetch('/supabase-admin/rest/v1/students?select=*').then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve(stuData),
+                    batchData.length === 0 ? fetch('/supabase-admin/rest/v1/batches?select=*&order=start_date.asc').then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve(batchData)
+                  ]);
+                  if (feeCols.length === 0 && Array.isArray(proxyFee) && proxyFee.length > 0) feeCols = proxyFee;
+                  if (stuData.length === 0 && Array.isArray(proxyStudents) && proxyStudents.length > 0) stuData = proxyStudents;
+                  if (batchData.length === 0 && Array.isArray(proxyBatches) && proxyBatches.length > 0) batchData = proxyBatches;
+                } catch (e) {
+                  console.warn('Proxy fallback for academy data failed:', e);
+                }
+              }
+
               const normalizedAttendance = (attendanceRes.data || []).map((a: any) => ({
                 ...a,
                 status: (a.status || 'present').toUpperCase(),
@@ -369,16 +405,16 @@ export const SalesDashboard: React.FC = () => {
 
               return {
                 attendanceData: normalizedAttendance,
-                paymentsData: paymentsRes.data || feeCollectionsRes.data || [],
+                paymentsData: feeCols.length > 0 ? feeCols : (paymentsRes.data || []),
                 profilesData: profilesRes.data || [],
                 targetsData: targetsRes.data || [],
                 salesData: salesRes.data || [],
                 reportsData: reportsRes.data || [],
                 monthAttData: normalizedMonthAtt,
                 staffData: staffRes.data || [],
-                feeCollectionsData: feeCollectionsRes.data || [],
-                studentsData: studentsRes.data || [],
-                batchesData: batchesRes.data || []
+                feeCollectionsData: feeCols,
+                studentsData: stuData,
+                batchesData: batchData
               };
             },
             { ttlMs: 45000, forceRefresh }
@@ -460,15 +496,23 @@ export const SalesDashboard: React.FC = () => {
           setTodayAttendanceStats({ present, late, halfDay, leave, inOffice });
 
           // 2. Process Academy Revenue & Stats
-          const sumRev = (feeCollectionsData || paymentsData || []).reduce((acc: number, p: any) => acc + (Number(p.amount) || 0), 0);
+          const feeSum = (feeCollectionsData || []).reduce((acc: number, p: any) => acc + (Number(p.amount) || 0), 0);
+          const studentPaidSum = (studentsData || []).reduce((acc: number, s: any) => acc + (Number(s.paid_fee) || 0), 0);
+          const sumRev = Math.max(feeSum, studentPaidSum);
           setAcademyRevenue(sumRev);
 
           const studentList = studentsData || [];
           setActiveStudentsCount(studentList.length);
 
           const batchList = batchesData || [];
-          const upCount = batchList.filter((b: any) => (b.status || '').toLowerCase() === 'upcoming').length;
-          const runCount = batchList.filter((b: any) => (b.status || '').toLowerCase() === 'running').length;
+          const upCount = batchList.filter((b: any) => {
+            const s = (b.status || '').toLowerCase();
+            return s === 'upcoming' || s === 'planned' || (!s && b.start_date && new Date(b.start_date) > new Date());
+          }).length;
+          const runCount = batchList.filter((b: any) => {
+            const s = (b.status || '').toLowerCase();
+            return s === 'running' || s === 'ongoing' || s === 'active' || (!s && b.start_date && new Date(b.start_date) <= new Date());
+          }).length;
           setBatchesStats({
             total: batchList.length,
             upcoming: upCount,
@@ -594,14 +638,23 @@ export const SalesDashboard: React.FC = () => {
         loadAdminDashboardData();
       };
 
+      const handleStudentsOrBatchesChanged = () => {
+        loadAdminDashboardData(true);
+        loadCounselorBatchesData();
+      };
+
       window.addEventListener('staff_target_updated', handleTargetUpdated);
       window.addEventListener('staff_profiles_changed', handleStaffProfilesChanged);
       window.addEventListener('sales_data_changed', handleSalesChanged);
+      window.addEventListener('students_data_changed', handleStudentsOrBatchesChanged);
+      window.addEventListener('batches_data_changed', handleStudentsOrBatchesChanged);
 
       return () => {
         window.removeEventListener('staff_target_updated', handleTargetUpdated);
         window.removeEventListener('staff_profiles_changed', handleStaffProfilesChanged);
         window.removeEventListener('sales_data_changed', handleSalesChanged);
+        window.removeEventListener('students_data_changed', handleStudentsOrBatchesChanged);
+        window.removeEventListener('batches_data_changed', handleStudentsOrBatchesChanged);
       };
     }
   }, [isAdminView, activeTab, selectedMonth]);

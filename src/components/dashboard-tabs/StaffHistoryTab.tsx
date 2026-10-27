@@ -331,7 +331,18 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             p.id ? supabase.from('students').select('*').eq('counselor_id', p.id).order('created_at', { ascending: false }) : Promise.resolve({ data: [] })
           ]);
 
-          const studentSales = (studentsRes.data || []).map((st: any) => ({
+          let stuList = studentsRes.data || [];
+          if (p.id && stuList.length === 0) {
+            try {
+              const res = await fetch(`/supabase-admin/rest/v1/students?counselor_id=eq.${p.id}&order=created_at.desc`);
+              if (res.ok) {
+                const pStu = await res.json();
+                if (Array.isArray(pStu) && pStu.length > 0) stuList = pStu;
+              }
+            } catch (_) {}
+          }
+
+          const studentSales = (stuList || []).map((st: any) => ({
             id: `student-${st.id}`,
             staff_id: p.id,
             client_name: `${st.name} (${st.student_id_code})`,

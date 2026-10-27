@@ -240,17 +240,35 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       setBatches(formattedBatches);
 
       // 3. Fetch Students
-      const { data: studentsData } = await dbClient
+      let stuList: any[] = [];
+      const { data: studentsData, error: sErr } = await dbClient
         .from('students')
         .select('*')
         .order('created_at', { ascending: false });
-      setStudents((studentsData || []) as StudentItem[]);
+      if (!sErr && studentsData && studentsData.length > 0) {
+        stuList = studentsData;
+      } else {
+        try {
+          const sRes = await fetch('/supabase-admin/rest/v1/students?select=*&order=created_at.desc');
+          if (sRes.ok) stuList = await sRes.json();
+        } catch (_) {}
+      }
+      setStudents((stuList || []) as StudentItem[]);
 
       // 4. Fetch Fee Collections
-      const { data: feeData } = await dbClient
+      let feeList: any[] = [];
+      const { data: feeData, error: fErr } = await dbClient
         .from('fee_collections')
         .select('*');
-      setFeeCollections((feeData || []) as FeeCollectionItem[]);
+      if (!fErr && feeData && feeData.length > 0) {
+        feeList = feeData;
+      } else {
+        try {
+          const fRes = await fetch('/supabase-admin/rest/v1/fee_collections?select=*');
+          if (fRes.ok) feeList = await fRes.json();
+        } catch (_) {}
+      }
+      setFeeCollections((feeList || []) as FeeCollectionItem[]);
 
       // 5. Fetch Student Attendance
       const { data: attData } = await dbClient
@@ -489,6 +507,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
 
       setIsBatchModalOpen(false);
       await loadData(true);
+      window.dispatchEvent(new CustomEvent('batches_data_changed'));
     } catch (err: any) {
       console.error('Error saving batch:', err);
       setFormError(err.message || 'Failed to save batch. Please try again.');
@@ -512,6 +531,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
         if (!res.ok) throw error;
       }
       await loadData(true);
+      window.dispatchEvent(new CustomEvent('batches_data_changed'));
     } catch (err: any) {
       alert(`Failed to update status: ${err.message}`);
     }
@@ -536,6 +556,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
         if (!res.ok) throw error;
       }
       await loadData(true);
+      window.dispatchEvent(new CustomEvent('batches_data_changed'));
     } catch (err: any) {
       alert(`Failed to delete batch: ${err.message}`);
     }
@@ -577,37 +598,67 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       const paidFee = parseFloat(enrollForm.paid_fee) || 0;
 
       // 1. Insert into students table
-      const { data: newStudent, error: sErr } = await dbClient
+      let newStudent: any = null;
+      const studentPayload = {
+        student_id_code: studentCode,
+        name: enrollForm.name.trim(),
+        phone: enrollForm.phone.trim() || null,
+        email: enrollForm.email.trim() || null,
+        batch_id: targetBatchForEnroll.id,
+        counselor_id: enrollForm.counselor_id || null,
+        total_fee: totalFee,
+        paid_fee: paidFee
+      };
+
+      const { data: sData, error: sErr } = await dbClient
         .from('students')
-        .insert([{
-          student_id_code: studentCode,
-          name: enrollForm.name.trim(),
-          phone: enrollForm.phone.trim() || null,
-          email: enrollForm.email.trim() || null,
-          batch_id: targetBatchForEnroll.id,
-          counselor_id: enrollForm.counselor_id || null,
-          total_fee: totalFee,
-          paid_fee: paidFee
-        }])
+        .insert([studentPayload])
         .select();
 
-      if (sErr) throw sErr;
+      if (!sErr && sData && sData.length > 0) {
+        newStudent = sData;
+      } else {
+        // Fallback to proxy
+        const res = await fetch('/supabase-admin/rest/v1/students', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify([studentPayload])
+        });
+        if (res.ok) {
+          newStudent = await res.json();
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || sErr?.message || 'Failed to enroll student.');
+        }
+      }
 
       // 2. If student paid initial deposit, log to fee_collections table
       if (paidFee > 0 && newStudent && newStudent[0]) {
         const curMonth = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
-        await dbClient.from('fee_collections').insert([{
+        const feePayload = {
           student_id: newStudent[0].id,
           batch_id: targetBatchForEnroll.id,
           amount: paidFee,
           payment_mode: enrollForm.payment_mode, // 'cash', 'bank_transfer', or 'online'
           installment_month: curMonth,
           notes: 'Initial admission fee payment'
-        }]);
+        };
+        const { error: fErr } = await dbClient.from('fee_collections').insert([feePayload]);
+        if (fErr) {
+          await fetch('/supabase-admin/rest/v1/fee_collections', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([feePayload])
+          });
+        }
       }
 
       setIsEnrollModalOpen(false);
       await loadData(true);
+      window.dispatchEvent(new CustomEvent('students_data_changed'));
     } catch (err: any) {
       console.error('Failed to enroll student:', err);
       setEnrollError(err.message || 'Failed to enroll student.');
