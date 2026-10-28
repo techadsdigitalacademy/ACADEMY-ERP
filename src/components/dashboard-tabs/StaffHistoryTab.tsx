@@ -4,6 +4,7 @@ import { Card } from '../Card';
 import { Badge } from '../Badge';
 import { Button } from '../Button';
 import { SalesHistoryLog } from '../SalesHistoryLog';
+import { CounselorMonthlyReportView } from '../CounselorMonthlyReportView';
 import { AttendanceDashboard } from '../AttendanceDashboard';
 import { EditSaleModal } from '../EditSaleModal';
 import { ExpenseHistoryTab } from './ExpenseHistoryTab';
@@ -815,8 +816,22 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
           <>
             {/* SALES LOG SUB-TAB */}
             {profileDetailTab === 'sales' && (
-              <div className="space-y-4">
-                <SalesHistoryLog
+              isCounselorRole ? (
+                <div className="space-y-4">
+                  <CounselorMonthlyReportView
+                    counselorId={selectedProfile?.id}
+                    isAdminView={true}
+                    activeStaff={selectedProfile}
+                    onViewSlip={(slip) => setPreviewSlipUrl(slip)}
+                  />
+                  <SelfieLightboxModal
+                    enlargedSelfie={previewSlipUrl}
+                    onClose={() => setPreviewSlipUrl(null)}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <SalesHistoryLog
                   sales={profileSales}
                   targetAmount={profileTarget}
                   isAdmin={true}
@@ -917,6 +932,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                   onClose={() => setPreviewSlipUrl(null)}
                 />
               </div>
+              )
             )}
 
             {/* ATTENDANCE SUB-TAB */}

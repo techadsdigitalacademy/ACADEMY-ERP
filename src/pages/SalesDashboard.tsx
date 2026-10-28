@@ -6,6 +6,7 @@ import { DailyWorkLoggingTab } from '../components/dashboard-tabs/DailyWorkLoggi
 import { ExpenseHistoryTab } from '../components/dashboard-tabs/ExpenseHistoryTab';
 import { LeadsTab } from '../components/dashboard-tabs/LeadsTab';
 import { SalesHistoryLog } from '../components/SalesHistoryLog';
+import { CounselorMonthlyReportView } from '../components/CounselorMonthlyReportView';
 import { useApp, invalidateTables } from '../context/AppContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
@@ -2084,7 +2085,19 @@ export const SalesDashboard: React.FC = () => {
           )}
 
           {activeTab === 'history' && (
-            isOwner ? (
+            isCounselor ? (
+              <div className="space-y-6 pt-2">
+                <CounselorMonthlyReportView
+                  counselorId={activeStaff?.id}
+                  isAdminView={false}
+                  activeStaff={activeStaff}
+                  students={counselorStudents}
+                  batches={counselorBatches}
+                  onAddPayment={() => handleOpenAdmissionModal()}
+                  onViewSlip={(slip) => handleViewSlip(slip)}
+                />
+              </div>
+            ) : isOwner ? (
               <div className="space-y-6 pt-2">
                 <SalesHistoryLog 
                   sales={ownerMonthSales} 

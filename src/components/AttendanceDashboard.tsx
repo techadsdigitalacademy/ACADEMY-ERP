@@ -124,15 +124,8 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       const dbStatus = editAttStatus.toLowerCase();
       if (editingAttendance.isVirtual) {
         // Insert a new attendance row for that date
-        const { error } = await supabase
-          .from('staff_attendance')
-          .insert({
-            staff_id: staffId,
-            attendance_date: editingAttendance.date,
-            status: dbStatus
-          });
-        if (error) {
-          await fetch('/supabase-admin/rest/v1/staff_attendance', {
+        try {
+          let proxyRes = await fetch('/supabase-admin/rest/v1/attendance', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify([{
@@ -141,21 +134,67 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
               status: dbStatus
             }])
           });
+          if (!proxyRes.ok) {
+            proxyRes = await fetch('/supabase-admin/rest/v1/staff_attendance', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify([{
+                staff_id: staffId,
+                attendance_date: editingAttendance.date,
+                status: dbStatus
+              }])
+            });
+          }
+          if (!proxyRes.ok) {
+            const { error } = await supabase
+              .from('attendance')
+              .insert({
+                staff_id: staffId,
+                attendance_date: editingAttendance.date,
+                status: dbStatus
+              });
+            if (error) {
+              await supabase
+                .from('staff_attendance')
+                .insert({
+                  staff_id: staffId,
+                  attendance_date: editingAttendance.date,
+                  status: dbStatus
+                });
+            }
+          }
+        } catch (e) {
+          console.warn('Attendance insert error:', e);
         }
       } else {
         // Update the existing row
-        const { error } = await supabase
-          .from('staff_attendance')
-          .update({ 
-            status: dbStatus
-          })
-          .eq('id', editingAttendance.id);
-        if (error) {
-          await fetch(`/supabase-admin/rest/v1/staff_attendance?id=eq.${editingAttendance.id}`, {
+        try {
+          let proxyPatch = await fetch(`/supabase-admin/rest/v1/attendance?id=eq.${editingAttendance.id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: dbStatus })
           });
+          if (!proxyPatch.ok) {
+            proxyPatch = await fetch(`/supabase-admin/rest/v1/staff_attendance?id=eq.${editingAttendance.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: dbStatus })
+            });
+          }
+          if (!proxyPatch.ok) {
+            const { error } = await supabase
+              .from('attendance')
+              .update({ status: dbStatus })
+              .eq('id', editingAttendance.id);
+            if (error) {
+              await supabase
+                .from('staff_attendance')
+                .update({ status: dbStatus })
+                .eq('id', editingAttendance.id);
+            }
+          }
+        } catch (e) {
+          console.warn('Attendance patch error:', e);
         }
       }
 

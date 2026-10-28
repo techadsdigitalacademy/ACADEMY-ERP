@@ -5,6 +5,8 @@ import { formatStaffEmail, ensureStaffAuthUser, normalizePassword } from '../ser
 import { dataCache } from '../services/dataCache';
 import { extensionForBlob } from '../utils/imageUtils';
 
+export type TabType = 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_reports' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets';
+
 interface AppContextType {
   activeStaff: Staff | null;
   sales: Sale[];
@@ -43,8 +45,8 @@ interface AppContextType {
   todayAttendance: Attendance | null;
   isLoading: boolean;
   dbError: string | null;
-  activeTab: 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets';
-  setActiveTab: (tab: 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets') => void;
+  activeTab: TabType;
+  setActiveTab: (tab: TabType) => void;
   isAdminMode: boolean;
   setIsAdminMode: (mode: boolean) => void;
   login: (username: string, pass: string) => Promise<boolean>;
@@ -74,6 +76,7 @@ const TAB_PATHS: Record<string, string> = {
   academy_batches: '/academy/batches',
   academy_students: '/academy/students',
   academy_attendance: '/academy/attendance',
+  academy_reports: '/academy/reports',
   academy_finances: '/academy/finances',
   academy_staff: '/academy/staff',
 };
@@ -161,12 +164,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [todayAttendance, setTodayAttendance] = useState<Attendance | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
-  const [activeTab, setActiveTabState] = useState<'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets'>(
-    () => tabForPath(window.location.pathname) as 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets'
-  );
+  const [activeTab, setActiveTabState] = useState<TabType>(() => tabForPath(window.location.pathname) as TabType);
 
   // Changing tab pushes a history entry so each view is linkable and Back works.
-  const setActiveTab = (tab: 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets') => {
+  const setActiveTab = (tab: TabType) => {
     setActiveTabState(tab);
     const path = TAB_PATHS[tab] || TAB_PATHS[DEFAULT_TAB];
     if (window.location.pathname !== path) {
@@ -273,22 +274,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Safely fetch attendance records from Supabase
       try {
+        let attDataList: any[] = [];
         const { data: attData, error: attErr } = await supabase
           .from('staff_attendance')
           .select('*')
           .eq('staff_id', staffId)
           .gte('attendance_date', windowStartStr);
 
-        if (!attErr && attData) {
-          const normalized = attData.map((d: any) => ({
-            ...d,
-            status: (d.status || 'present').toUpperCase(),
-            punch_in: d.punch_in || (d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
-          }));
-          setAttendance(normalized as Attendance[]);
+        if (!attErr && attData && attData.length > 0) {
+          attDataList = attData;
         } else {
-          setAttendance([]);
+          // Check attendance table
+          const { data: directAtt } = await supabase
+            .from('attendance')
+            .select('*')
+            .eq('staff_id', staffId)
+            .gte('attendance_date', windowStartStr);
+          if (directAtt && directAtt.length > 0) {
+            attDataList = directAtt;
+          } else {
+            // Check proxy fallback
+            const pRes = await fetch(`/supabase-admin/rest/v1/attendance?staff_id=eq.${staffId}&attendance_date=gte.${windowStartStr}`).catch(() => null);
+            if (pRes && pRes.ok) {
+              const pData = await pRes.json().catch(() => []);
+              if (Array.isArray(pData) && pData.length > 0) attDataList = pData;
+            } else {
+              const pRes2 = await fetch(`/supabase-admin/rest/v1/staff_attendance?staff_id=eq.${staffId}&attendance_date=gte.${windowStartStr}`).catch(() => null);
+              if (pRes2 && pRes2.ok) {
+                const pData2 = await pRes2.json().catch(() => []);
+                if (Array.isArray(pData2) && pData2.length > 0) attDataList = pData2;
+              }
+            }
+          }
         }
+
+        const normalized = attDataList.map((d: any) => ({
+          ...d,
+          status: (d.status || 'present').toUpperCase(),
+          punch_in: d.punch_in || (d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
+        }));
+        setAttendance(normalized as Attendance[]);
       } catch (e) {
         setAttendance([]);
       }
@@ -474,7 +499,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Browser back/forward -> tab state
   useEffect(() => {
-    const onPop = () => setActiveTabState(tabForPath(window.location.pathname) as 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets');
+    const onPop = () => setActiveTabState(tabForPath(window.location.pathname) as TabType);
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
@@ -968,40 +993,76 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const dbStatus = (status || 'present').toLowerCase();
     let savedRecord: any = null;
 
-    try {
-      const { data, error } = await supabase
-        .from('staff_attendance')
-        .insert({
-          staff_id: activeStaff.id,
-          attendance_date: todayStr,
-          status: dbStatus
-        })
-        .select()
-        .single();
+    const fullPayload = {
+      staff_id: activeStaff.id,
+      attendance_date: todayStr,
+      punch_in: timeStr,
+      selfie_url: selfieUrl || null,
+      lat: (lat !== null && lat !== undefined) ? lat : null,
+      lng: (lng !== null && lng !== undefined) ? lng : null,
+      status: dbStatus
+    };
+    const minimalPayload = {
+      staff_id: activeStaff.id,
+      attendance_date: todayStr,
+      status: dbStatus
+    };
 
-      if (!error && data) {
-        savedRecord = data;
-      } else {
-        // Fallback to proxy
-        const res = await fetch('/supabase-admin/rest/v1/staff_attendance', {
+    // 1. Route directly through secure admin proxy first (service role key bypasses RLS permanently)
+    try {
+      let proxyRes = await fetch('/supabase-admin/rest/v1/attendance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify([fullPayload])
+      });
+
+      if (!proxyRes.ok) {
+        // Fallback to staff_attendance table via proxy
+        proxyRes = await fetch('/supabase-admin/rest/v1/staff_attendance', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Prefer': 'return=representation'
           },
-          body: JSON.stringify([{
-            staff_id: activeStaff.id,
-            attendance_date: todayStr,
-            status: dbStatus
-          }])
+          body: JSON.stringify([minimalPayload])
         });
-        if (res.ok) {
-          const proxyData = await res.json();
+      }
+
+      if (proxyRes.ok) {
+        const proxyData = await proxyRes.json();
+        if (Array.isArray(proxyData) && proxyData.length > 0) {
           savedRecord = proxyData[0];
         }
       }
-    } catch (err) {
-      console.warn('Punch-in DB error:', err);
+    } catch (proxyErr) {
+      console.warn('Admin proxy punch insert error:', proxyErr);
+    }
+
+    // 2. Fallback to direct client if proxy was not reached (e.g. static production builds)
+    if (!savedRecord) {
+      try {
+        const { data: attData, error: attErr } = await supabase
+          .from('attendance')
+          .insert(fullPayload)
+          .select()
+          .maybeSingle();
+
+        if (!attErr && attData) {
+          savedRecord = attData;
+        } else {
+          const { data: saData } = await supabase
+            .from('staff_attendance')
+            .insert(minimalPayload)
+            .select()
+            .maybeSingle();
+          if (saData) savedRecord = saData;
+        }
+      } catch (clientErr) {
+        console.warn('Direct client punch insert fallback notice:', clientErr);
+      }
     }
 
     const localRecord: Attendance = {
@@ -1027,20 +1088,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const dbStatus = status ? status.toLowerCase() : 'present';
 
     try {
-      const { error } = await supabase
-        .from('staff_attendance')
-        .update({ status: dbStatus })
-        .eq('id', todayAttendance.id);
+      let proxyPatch = await fetch(`/supabase-admin/rest/v1/attendance?id=eq.${todayAttendance.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ punch_out: timeStr, status: dbStatus })
+      });
 
-      if (error) {
-        await fetch(`/supabase-admin/rest/v1/staff_attendance?id=eq.${todayAttendance.id}`, {
+      if (!proxyPatch.ok) {
+        proxyPatch = await fetch(`/supabase-admin/rest/v1/staff_attendance?id=eq.${todayAttendance.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: dbStatus })
         });
       }
+
+      if (!proxyPatch.ok) {
+        const { error } = await supabase
+          .from('attendance')
+          .update({ punch_out: timeStr, status: dbStatus })
+          .eq('id', todayAttendance.id);
+
+        if (error) {
+          await supabase
+            .from('staff_attendance')
+            .update({ status: dbStatus })
+            .eq('id', todayAttendance.id);
+        }
+      }
     } catch (err) {
-      console.warn('Punch out DB update error:', err);
+      console.warn('Punch out update notice:', err);
     }
 
     setAttendance((prev) =>

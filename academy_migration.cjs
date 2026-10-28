@@ -10,11 +10,11 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function run() {
   const client = new Client({ connectionString });
-  
+
   try {
     await client.connect();
     console.log('Connected to DB.');
-    
+
     // 1. Add transaction_slip_url to academy_installments
     await client.query(`
       ALTER TABLE academy_installments
@@ -25,7 +25,7 @@ async function run() {
     // 3. Create storage bucket for academy_slips
     const { data: buckets, error: bucketError } = await supabase.storage.listBuckets();
     if (bucketError) throw bucketError;
-    
+
     if (!buckets.some(b => b.name === 'academy_slips')) {
       const { error: createError } = await supabase.storage.createBucket('academy_slips', {
         public: true,

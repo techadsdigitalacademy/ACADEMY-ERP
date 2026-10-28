@@ -8,11 +8,13 @@ import { supabase } from '../services/supabase';
 import { formatCurrency } from '../services/mockData';
 import { AcademyBatches } from '../components/AcademyBatches';
 import { compressSlipFile, extensionForBlob } from '../utils/imageUtils';
+import { StudentAttendancePortal } from '../components/StudentAttendancePortal';
+import { CounselorMonthlyReportView } from '../components/CounselorMonthlyReportView';
 import { 
   Users, BookOpen, UserPlus, GraduationCap, DollarSign,
   Wallet, Search, X,
   ArrowUpRight, Layers, UserCheck,
-  Eye, UploadCloud, Check, Sun, Moon
+  Eye, UploadCloud, Sun, Moon, TrendingUp
 } from 'lucide-react';
 
 interface AcademyBatch {
@@ -67,6 +69,11 @@ export const AcademyDashboard: React.FC = () => {
   const { activeStaff, activeTab, setActiveTab, isAdminMode, theme, toggleTheme } = useApp();
   const dbClient = supabase;
 
+  // Role permissions
+  const isCounselor = (activeStaff?.designation || '').toLowerCase().includes('counselor');
+  const isOwner = (activeStaff?.designation || '').toLowerCase().includes('owner');
+  const canManageStudents = isAdminMode || isCounselor || isOwner;
+
   
   const [isLoading, setIsLoading] = useState(true);
 
@@ -82,7 +89,16 @@ export const AcademyDashboard: React.FC = () => {
   const [batchForm, setBatchForm] = useState({ name: '', code: '', type: 'Offline', status: 'Upcoming', tutor_id: '' });
 
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
-  const [studentForm, setStudentForm] = useState({ name: '', email: '', phone: '', batch_id: '', total_fees: '' });
+  const [studentForm, setStudentForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    batch_id: '',
+    total_fees: '',
+    counselor_id: '',
+    initial_payment: '',
+    payment_mode: 'UPI'
+  });
 
   const [isInstallmentModalOpen, setIsInstallmentModalOpen] = useState(false);
   const [selectedStudentForFee, setSelectedStudentForFee] = useState<AcademyStudent | null>(null);
@@ -96,8 +112,7 @@ export const AcademyDashboard: React.FC = () => {
   const [expenseForm, setExpenseForm] = useState({ category: 'Tutor Salary', amount: '', date: new Date().toISOString().split('T')[0], description: '' });
 
   // Attendance specific
-  const [attBatchId, setAttBatchId] = useState('');
-  const [attDate, setAttDate] = useState(new Date().toISOString().split('T')[0]);
+  // (Attendance managed via StudentAttendancePortal)
 
   // View States
   const [searchQuery, setSearchQuery] = useState('');
@@ -277,19 +292,26 @@ export const AcademyDashboard: React.FC = () => {
     
     try {
       const studentCode = `STU-${new Date().getFullYear()}-${String(students.length + 101).padStart(3, '0')}`;
-      const studentPayload = {
+      const enrollingCounselorId = studentForm.counselor_id || (isCounselor ? activeStaff?.id : null);
+      const initialAmt = parseFloat(studentForm.initial_payment) || 0;
+
+      const studentPayload: any = {
         student_id_code: studentCode,
         name: studentForm.name.trim(),
         email: studentForm.email.trim() || null,
         phone: studentForm.phone.trim() || null,
         batch_id: studentForm.batch_id,
         total_fee: parseFloat(studentForm.total_fees) || 0,
-        paid_fee: 0
+        paid_fee: initialAmt,
+        counselor_id: enrollingCounselorId,
+        enrollment_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
       };
 
-      const { error } = await dbClient.from('students').insert([studentPayload]);
-      if (error) {
-        // Fallback to proxy
+      let newStudent: any = null;
+      const { data, error } = await dbClient.from('students').insert([studentPayload]).select().single();
+      if (!error && data) {
+        newStudent = data;
+      } else {
         const res = await fetch('/supabase-admin/rest/v1/students', {
           method: 'POST',
           headers: {
@@ -300,12 +322,43 @@ export const AcademyDashboard: React.FC = () => {
         });
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || error.message || 'Failed to register student');
+          throw new Error(errData.message || error?.message || 'Failed to register student');
+        }
+        const resArr = await res.json();
+        newStudent = resArr[0];
+      }
+
+      if (initialAmt > 0 && newStudent?.id) {
+        const feePayload = {
+          student_id: newStudent.id,
+          batch_id: studentForm.batch_id,
+          amount: initialAmt,
+          payment_mode: (studentForm.payment_mode || 'UPI').toLowerCase(),
+          installment_month: new Date().toLocaleString('default', { month: 'long', year: 'numeric' }),
+          notes: 'Initial Admission / Registration Fee',
+          collected_by: activeStaff?.id || enrollingCounselorId || null
+        };
+        const { error: fErr } = await dbClient.from('fee_collections').insert([feePayload]);
+        if (fErr) {
+          await fetch('/supabase-admin/rest/v1/fee_collections', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([feePayload])
+          });
         }
       }
       
       setIsStudentModalOpen(false);
-      setStudentForm({ name: '', email: '', phone: '', batch_id: '', total_fees: '' });
+      setStudentForm({
+        name: '',
+        email: '',
+        phone: '',
+        batch_id: '',
+        total_fees: '',
+        counselor_id: isCounselor ? (activeStaff?.id || '') : '',
+        initial_payment: '',
+        payment_mode: 'UPI'
+      });
       await fetchAcademyData();
       window.dispatchEvent(new CustomEvent('students_data_changed'));
     } catch (err: any) {
@@ -419,54 +472,6 @@ export const AcademyDashboard: React.FC = () => {
       fetchAcademyData();
     } catch (err: any) {
       alert(err.message);
-    }
-  };
-
-  const handleToggleAttendance = async (studentId: string, currentStatus: string | undefined) => {
-    if (!activeStaff) return;
-    const newStatus = currentStatus === 'Present' ? 'Absent' : 'Present';
-    try {
-      const existing = attendances.find(a => a.student_id === studentId && a.attendance_date === attDate);
-      if (existing) {
-        await dbClient.from('student_attendance').update({ status: newStatus.toLowerCase(), marked_by: activeStaff.id }).eq('id', existing.id);
-      } else {
-        await dbClient.from('student_attendance').insert([{
-          batch_id: attBatchId,
-          student_id: studentId,
-          attendance_date: attDate,
-          status: newStatus.toLowerCase(),
-          marked_by: activeStaff.id
-        }]);
-      }
-      fetchAcademyAttendance();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleMarkAllAttendance = async (status: 'Present' | 'Absent') => {
-    if (!activeStaff || !attBatchId) return;
-    const selectedBatchStudents = students?.filter(s => s.batch_id === attBatchId);
-    if (!selectedBatchStudents || selectedBatchStudents.length === 0) return;
-
-    try {
-      for (const s of selectedBatchStudents) {
-        const existing = attendances.find(a => a.student_id === s.id && a.attendance_date === attDate);
-        if (existing) {
-          await dbClient.from('student_attendance').update({ status: status.toLowerCase(), marked_by: activeStaff.id }).eq('id', existing.id);
-        } else {
-          await dbClient.from('student_attendance').insert([{
-            batch_id: attBatchId,
-            student_id: s.id,
-            attendance_date: attDate,
-            status: status.toLowerCase(),
-            marked_by: activeStaff.id
-          }]);
-        }
-      }
-      fetchAcademyAttendance();
-    } catch (err) {
-      console.error(err);
     }
   };
 
@@ -704,8 +709,14 @@ export const AcademyDashboard: React.FC = () => {
                   className="w-full bg-muted-2 border border-border rounded-lg pl-9 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
                 />
               </div>
-              {isAdminMode && (
-                <Button onClick={() => setIsStudentModalOpen(true)} className="flex items-center gap-2 whitespace-nowrap">
+              {canManageStudents && (
+                <Button onClick={() => {
+                  setStudentForm(prev => ({
+                    ...prev,
+                    counselor_id: isCounselor ? (activeStaff?.id || '') : prev.counselor_id
+                  }));
+                  setIsStudentModalOpen(true);
+                }} className="flex items-center gap-2 whitespace-nowrap">
                   <UserPlus className="w-4 h-4" /> Register Student
                 </Button>
               )}
@@ -778,7 +789,7 @@ export const AcademyDashboard: React.FC = () => {
               <div className="mt-4 pt-4 border-t border-border">
                 <div className="flex justify-between items-center mb-3">
                   <h4 className="text-sm font-bold text-secondary-foreground">Installments</h4>
-                  {isAdminMode && (
+                  {canManageStudents && (
                     <button 
                       onClick={() => { setSelectedStudentForFee(selectedStudentView); setIsInstallmentModalOpen(true); }}
                       className="text-xs text-primary hover:text-primary font-bold"
@@ -817,139 +828,6 @@ export const AcademyDashboard: React.FC = () => {
               </div>
             </Card>
           </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderAttendance = () => {
-    const selectedBatchStudents = students?.filter(s => s.batch_id === attBatchId) || [];
-    const currentDayLogs = attendances.filter(a => a.attendance_date === attDate && selectedBatchStudents.some(s => s.id === a.student_id));
-    const presentCount = currentDayLogs.filter(a => a.status === 'Present').length;
-    const absentCount = currentDayLogs.filter(a => a.status === 'Absent').length;
-    const unmarkedCount = selectedBatchStudents.length - currentDayLogs.length;
-    const attendanceRate = selectedBatchStudents.length > 0 ? Math.round((presentCount / selectedBatchStudents.length) * 100) : 0;
-
-    return (
-      <div className="space-y-4 animate-fade-in">
-        <div>
-          <h3 className="text-lg font-bold text-foreground">Student Attendance Portal</h3>
-          <p className="text-sm text-muted-foreground">Mark daily batch-wise student attendance for academy batches.</p>
-        </div>
-
-        <Card variant="glass" className="p-4 border-border">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Select Batch</label>
-              <select 
-                value={attBatchId}
-                onChange={e => setAttBatchId(e.target.value)}
-                className="w-full bg-muted-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50"
-              >
-                <option value="">-- Choose Batch --</option>
-                {batches?.map(b => <option key={b.id} value={b.id}>{b.batch_name} ({b.batch_code})</option>)}
-              </select>
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Date</label>
-              <input 
-                type="date"
-                value={attDate}
-                onChange={e => setAttDate(e.target.value)}
-                className="w-full bg-muted-2 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50"
-              />
-            </div>
-          </div>
-        </Card>
-
-        {attBatchId && selectedBatchStudents.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-muted-2 rounded-xl border border-border">
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-xs font-bold text-foreground">
-                Batch Roster ({selectedBatchStudents.length})
-              </span>
-              <span className="text-xs font-bold text-success bg-success-soft px-2.5 py-0.5 rounded-full border border-success/20">
-                {presentCount} Present
-              </span>
-              <span className="text-xs font-bold text-danger bg-danger-soft px-2.5 py-0.5 rounded-full border border-danger/20">
-                {absentCount} Absent
-              </span>
-              {unmarkedCount > 0 && (
-                <span className="text-xs font-bold text-muted-foreground bg-muted px-2.5 py-0.5 rounded-full border border-border">
-                  {unmarkedCount} Unmarked
-                </span>
-              )}
-              <span className="text-xs font-extrabold text-primary ml-1">
-                {attendanceRate}% Rate
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => handleMarkAllAttendance('Present')}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold text-success bg-success-soft hover:bg-success/20 border border-success/30 flex items-center gap-1 transition-colors cursor-pointer"
-              >
-                <Check className="w-3.5 h-3.5" /> Mark All Present
-              </button>
-              <button
-                type="button"
-                onClick={() => handleMarkAllAttendance('Absent')}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold text-danger bg-danger-soft hover:bg-danger/20 border border-danger/30 flex items-center gap-1 transition-colors cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" /> Mark All Absent
-              </button>
-            </div>
-          </div>
-        )}
-
-        {attBatchId && (
-          <Card variant="glass" className="overflow-hidden border-border">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-muted-2 border-b border-border text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Student</th>
-                    <th className="px-4 py-3 font-semibold text-center">Status</th>
-                    <th className="px-4 py-3 font-semibold text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {selectedBatchStudents?.map(s => {
-                    const att = attendances.find(a => a.student_id === s.id && a.attendance_date === attDate);
-                    const isPresent = att?.status === 'Present';
-                    return (
-                      <tr key={s.id} className="hover:bg-muted transition-colors">
-                        <td className="px-4 py-3">
-                          <p className="font-medium text-foreground">{s.student_name}</p>
-                          <p className="text-xs text-muted-foreground font-mono">{s.registration_number}</p>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          {att ? (
-                            <Badge variant={isPresent ? 'success' : 'error'}>{att.status}</Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">Not marked</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <button 
-                            onClick={() => handleToggleAttendance(s.id, att?.status)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${isPresent ? 'bg-danger-soft text-danger hover:bg-danger-soft' : 'bg-success-soft text-success hover:bg-success-soft'}`}
-                          >
-                            Mark {isPresent ? 'Absent' : 'Present'}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {selectedBatchStudents.length === 0 && (
-                    <tr>
-                      <td colSpan={3} className="px-4 py-8 text-center text-muted-foreground text-sm">No students in this batch.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </Card>
         )}
       </div>
     );
@@ -1004,7 +882,7 @@ export const AcademyDashboard: React.FC = () => {
             <button
               onClick={() => setActiveTab('academy_overview')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'academy_overview' || !['academy_batches', 'academy_students', 'academy_attendance'].includes(activeTab)
+                activeTab === 'academy_overview' || !['academy_batches', 'academy_students', 'academy_attendance', 'academy_reports'].includes(activeTab)
                   ? 'bg-primary text-primary-foreground shadow-md'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
@@ -1058,26 +936,69 @@ export const AcademyDashboard: React.FC = () => {
               <UserCheck className="w-4 h-4" />
               <span>Attendance</span>
             </button>
+
+            <button
+              onClick={() => setActiveTab('academy_reports')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeTab === 'academy_reports'
+                  ? 'bg-primary text-primary-foreground shadow-md'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
+            >
+              <TrendingUp className="w-4 h-4" />
+              <span>Counselor Reports</span>
+            </button>
           </div>
 
           {/* Render Active Sub-Section (Default: Overview) */}
           <div className="mt-6">
             {activeTab === 'academy_batches' ? (
               <AcademyBatches
-                onNavigateToStudent={(batchId) => {
+                onNavigateToStudent={(_batchId) => {
                   setActiveTab('academy_students');
-                  if (batchId) setAttBatchId(batchId);
+                  
                 }}
-                onNavigateToAttendance={(batchId) => {
+                onNavigateToAttendance={(_batchId) => {
                   setActiveTab('academy_attendance');
-                  if (batchId) setAttBatchId(batchId);
+                  
                 }}
                 onNavigateToFinances={() => setActiveTab('finance')}
               />
             ) : activeTab === 'academy_students' ? (
               renderStudents()
             ) : activeTab === 'academy_attendance' ? (
-              renderAttendance()
+              <StudentAttendancePortal
+                activeStaff={activeStaff}
+                isAdminMode={isAdminMode}
+                batches={batches}
+                students={students}
+                attendances={attendances}
+                staffList={staffList}
+                onAttendanceChanged={async () => {
+                  await fetchAcademyAttendance();
+                }}
+              />
+            ) : activeTab === 'academy_reports' ? (
+              <CounselorMonthlyReportView
+                counselorId={isCounselor ? activeStaff?.id : 'all'}
+                isAdminView={isAdminMode || isOwner}
+                activeStaff={activeStaff}
+                students={students}
+                batches={batches}
+                installments={installments}
+                staffList={staffList}
+                onAddPayment={(stu) => {
+                  const matching = students.find(s => s.id === stu.id) || stu;
+                  setSelectedStudentForFee(matching);
+                  setIsInstallmentModalOpen(true);
+                }}
+                onViewStudent={(stu) => {
+                  const matching = students.find(s => s.id === stu.id) || stu;
+                  setSelectedStudentView(matching);
+                  setActiveTab('academy_students');
+                }}
+                onViewSlip={(slip) => setPreviewSlipUrl(slip)}
+              />
             ) : (
               renderOverview()
             )}

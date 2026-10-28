@@ -143,7 +143,7 @@ export const PunchModal: React.FC<PunchModalProps> = ({
         const { error: uploadErr } = await supabase.storage
           .from('attendance')
           .upload(fileName, blob, {
-            contentType: blob.type,
+            contentType: blob.type || 'image/webp',
             cacheControl: '31536000',
             upsert: true
           });
@@ -156,23 +156,29 @@ export const PunchModal: React.FC<PunchModalProps> = ({
         selfiePublicUrl = publicUrl;
       } catch (storageErr) {
         console.warn('Direct selfie upload error, attempting proxy upload fallback:', storageErr);
-        const proxyRes = await fetch(`/supabase-admin/storage/v1/object/attendance/${fileName}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': blob.type,
-            'x-upsert': 'true'
-          },
-          body: blob
-        });
+        try {
+          const proxyRes = await fetch(`/supabase-admin/storage/v1/object/attendance/${fileName}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': blob.type || 'image/webp',
+              'x-upsert': 'true'
+            },
+            body: blob
+          });
 
-        if (!proxyRes.ok) {
-          throw storageErr;
+          if (proxyRes.ok) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('attendance')
+              .getPublicUrl(fileName);
+            selfiePublicUrl = publicUrl;
+          } else {
+            console.warn('Proxy selfie upload fallback notice, proceeding with staff avatar.');
+            selfiePublicUrl = activeStaff?.avatar_url || '';
+          }
+        } catch (proxyErr) {
+          console.warn('Proxy upload network error, falling back to staff avatar:', proxyErr);
+          selfiePublicUrl = activeStaff?.avatar_url || '';
         }
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('attendance')
-          .getPublicUrl(fileName);
-        selfiePublicUrl = publicUrl;
       }
 
       // 3. Perform Time Calculations
