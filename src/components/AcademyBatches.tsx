@@ -7,6 +7,7 @@ import { Button } from './Button';
 import { supabase } from '../services/supabase';
 import { formatCurrency } from '../services/mockData';
 import {
+  RotateCcw,
   Layers,
   Users,
   Calendar,
@@ -1176,6 +1177,19 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                       <div className="flex items-center gap-1.5">
                         {isAdminMode && (
                           <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm(`Move batch "${batch.batch_name}" back to Upcoming?`)) {
+                                  handleUpdateBatchStatus(batch.id, 'upcoming');
+                                }
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 border border-amber-500/30 flex items-center gap-1 transition-all cursor-pointer"
+                              title="Revert Batch back to Upcoming status"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Revert</span>
+                            </button>
                             <button
                               onClick={() => handleUpdateBatchStatus(batch.id, 'completed')}
                               className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 border border-purple-500/30 flex items-center gap-1 transition-all"

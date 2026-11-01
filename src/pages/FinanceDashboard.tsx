@@ -194,8 +194,7 @@ export const FinanceDashboard: React.FC = () => {
             dbExpRes,
             refundSalesRes,
             witRes,
-            prevFeesRes,
-            currentFeesRes,
+            feeCollectionsRes,
             batchesRes,
             studentsRes
           ] = await Promise.all([
@@ -209,26 +208,48 @@ export const FinanceDashboard: React.FC = () => {
             supabase.from('expenses').select('*').or(`and(expense_date.gte.${startOfMonthDateStr},expense_date.lte.${endOfMonthDateStr}),expense_date.is.null`),
             supabase.from('sales').select(`${SALES_COLUMNS}, staff(full_name)`).eq('payment_type', 'Refund').or(`and(created_at.gte.${startOfMonthStr},created_at.lte.${endOfMonthStr}),created_at.is.null`),
             supabase.from('partner_withdrawals').select('*').gte('withdrawal_date', startOfMonthDateStr).lte('withdrawal_date', endOfMonthDateStr),
-            dbClient.from('fee_collections').select('amount').lt('created_at', startOfMonthStr),
-            dbClient.from('fee_collections').select('id, amount, student_id, batch_id, collected_by, installment_month, payment_mode, notes, created_at').gte('created_at', startOfMonthStr).lte('created_at', endOfMonthStr),
+            dbClient.from('fee_collections').select('*'),
             dbClient.from('batches').select('id, batch_name, course_name'),
-            dbClient.from('students').select('id, name, student_id_code, batch_id, counselor_id, paid_fee')
+            dbClient.from('students').select('id, name, student_id_code, batch_id, counselor_id, paid_fee, enrollment_date, created_at')
           ]);
 
-          let bList = batchesRes.data || [];
-          let sList = studentsRes.data || [];
-          let curFeeList = currentFeesRes.data || [];
+          // Fetch all fee collections via admin proxy for guaranteed live data
+          let allFeeList: any[] = [];
+          try {
+            const pRes = await fetch('/supabase-admin/rest/v1/fee_collections?select=*&order=created_at.desc');
+            if (pRes.ok) allFeeList = await pRes.json();
+          } catch (_) {}
+          if (!allFeeList || allFeeList.length === 0) {
+            allFeeList = (feeCollectionsRes.data || []) as any[];
+          }
 
-          if (bList.length === 0 || sList.length === 0 || curFeeList.length === 0) {
+          const curMonthName = new Date(year, monthIdx - 1).toLocaleString('default', { month: 'long' }).toLowerCase();
+          const curFeeList = (allFeeList || []).filter((f: any) => {
+            const dStr = f.payment_date || (f.created_at ? f.created_at.substring(0, 10) : '');
+            if (dStr && dStr >= startOfMonthDateStr && dStr <= endOfMonthDateStr) return true;
+            const instMonth = (f.installment_month || '').toLowerCase();
+            if (instMonth.includes(curMonthName) && (instMonth.includes(String(year)) || !instMonth.match(/\d{4}/))) return true;
+            return false;
+          });
+
+          const prevFeesList = (allFeeList || []).filter((f: any) => {
+            const dStr = f.payment_date || (f.created_at ? f.created_at.substring(0, 10) : '');
+            return dStr && dStr < startOfMonthDateStr;
+          });
+
+          let bList = batchesRes.data || [];
+          if (!bList || bList.length === 0) {
             try {
-              const [proxyBatches, proxyStudents, proxyFees] = await Promise.all([
-                bList.length === 0 ? fetch('/supabase-admin/rest/v1/batches?select=id,batch_name,course_name').then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve(bList),
-                sList.length === 0 ? fetch('/supabase-admin/rest/v1/students?select=id,name,student_id_code,batch_id,counselor_id,paid_fee').then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve(sList),
-                curFeeList.length === 0 ? fetch(`/supabase-admin/rest/v1/fee_collections?select=id,amount,student_id,batch_id,collected_by,installment_month,payment_mode,notes,created_at&created_at=gte.${startOfMonthStr}&created_at=lte.${endOfMonthStr}`).then(r => r.ok ? r.json() : []).catch(() => []) : Promise.resolve(curFeeList)
-              ]);
-              if (bList.length === 0 && Array.isArray(proxyBatches) && proxyBatches.length > 0) bList = proxyBatches;
-              if (sList.length === 0 && Array.isArray(proxyStudents) && proxyStudents.length > 0) sList = proxyStudents;
-              if (curFeeList.length === 0 && Array.isArray(proxyFees) && proxyFees.length > 0) curFeeList = proxyFees;
+              const bRes = await fetch('/supabase-admin/rest/v1/batches?select=id,batch_name,course_name');
+              if (bRes.ok) bList = await bRes.json();
+            } catch (_) {}
+          }
+
+          let sList = studentsRes.data || [];
+          if (!sList || sList.length === 0) {
+            try {
+              const sRes = await fetch('/supabase-admin/rest/v1/students?select=id,name,student_id_code,batch_id,counselor_id,paid_fee,enrollment_date,created_at');
+              if (sRes.ok) sList = await sRes.json();
             } catch (_) {}
           }
 
@@ -243,7 +264,7 @@ export const FinanceDashboard: React.FC = () => {
             dbExpData: dbExpRes.data || [],
             refundSalesData: refundSalesRes.data || [],
             witData: witRes.data || [],
-            prevFees: prevFeesRes.data || [],
+            prevFees: prevFeesList,
             currentFees: curFeeList,
             batchesData: bList,
             studentsData: sList
@@ -587,6 +608,84 @@ export const FinanceDashboard: React.FC = () => {
         }
       });
 
+      // Also process initial admission deposits paid by students enrolled this month
+      (bundle.studentsData || []).forEach((st: any) => {
+        const deposit = Number(st.paid_fee) || 0;
+        if (deposit <= 0) return;
+
+        const enrollDate = st.enrollment_date || (st.created_at ? st.created_at.substring(0, 10) : '');
+        const inMonth = enrollDate >= startOfMonthDateStr && enrollDate <= endOfMonthDateStr;
+        if (!inMonth) return;
+
+        // Avoid double counting if already logged in fee_collections
+        const hasExistingFee = (bundle.currentFees || []).some((f: any) => String(f.student_id) === String(st.id));
+        if (hasExistingFee) return;
+
+        const bId = st.batch_id;
+        const batchName = bId ? (batchMap.get(String(bId)) || 'Academy Batch') : 'Academy';
+        const collectorCandidate = st.counselor_id;
+
+        let matchedKey: string | null = null;
+        let matchedName: string | null = null;
+        let matchedDesig: string = 'Academy Counselor';
+
+        if (collectorCandidate) {
+          const candIdStr = String(collectorCandidate);
+          if (staffIncomesMap[candIdStr]) {
+            matchedKey = candIdStr;
+            matchedName = staffIncomesMap[candIdStr].fullName;
+            matchedDesig = staffIncomesMap[candIdStr].designation;
+          } else if (staffIdToNameMap.has(candIdStr)) {
+            matchedKey = candIdStr;
+            matchedName = staffIdToNameMap.get(candIdStr)!;
+            matchedDesig = staffIdToDesigMap.get(candIdStr) || 'Academy Counselor';
+          }
+        }
+
+        if (!matchedKey && collectorCandidate) {
+          const lowerCand = String(collectorCandidate).toLowerCase();
+          for (const [idKey, item] of Object.entries(staffIncomesMap)) {
+            if (item.fullName.toLowerCase() === lowerCand || idKey.toLowerCase() === lowerCand) {
+              matchedKey = idKey;
+              matchedName = item.fullName;
+              matchedDesig = item.designation;
+              break;
+            }
+          }
+        }
+
+        if (matchedKey && matchedName) {
+          if (!staffIncomesMap[matchedKey]) {
+            staffIncomesMap[matchedKey] = {
+              staffId: matchedKey,
+              fullName: matchedName,
+              designation: matchedDesig,
+              total: 0,
+              count: 0,
+              batches: new Set<string>()
+            };
+          }
+          staffIncomesMap[matchedKey].total += deposit;
+          staffIncomesMap[matchedKey].count += 1;
+          if (batchName) staffIncomesMap[matchedKey].batches.add(batchName);
+        } else {
+          const key = 'academy_tuition_fees';
+          if (!staffIncomesMap[key]) {
+            staffIncomesMap[key] = {
+              staffId: key,
+              fullName: 'Academy Tuition Collections',
+              designation: 'Academy Fee Collections',
+              total: 0,
+              count: 0,
+              batches: new Set<string>()
+            };
+          }
+          staffIncomesMap[key].total += deposit;
+          staffIncomesMap[key].count += 1;
+          if (batchName) staffIncomesMap[key].batches.add(batchName);
+        }
+      });
+
       const staffIncomesArray = Object.values(staffIncomesMap)
         .filter(item => {
           if (item.staffId === 'academy_tuition_fees') return item.count > 0 && parseSafeNumber(item.total) > 0;
@@ -765,18 +864,22 @@ export const FinanceDashboard: React.FC = () => {
   useEffect(() => {
     loadFinanceData();
 
-    const handleDataChanged = () => {
+    const handleDataChangedWithRefresh = () => {
       loadFinanceData();
     };
 
-    window.addEventListener('sales_data_changed', handleDataChanged);
-    window.addEventListener('company_expenses_changed', handleDataChanged);
-    window.addEventListener('staff_profiles_changed', handleDataChanged);
+    window.addEventListener('sales_data_changed', handleDataChangedWithRefresh);
+    window.addEventListener('company_expenses_changed', handleDataChangedWithRefresh);
+    window.addEventListener('staff_profiles_changed', handleDataChangedWithRefresh);
+    window.addEventListener('students_data_changed', handleDataChangedWithRefresh);
+    window.addEventListener('batches_data_changed', handleDataChangedWithRefresh);
 
     return () => {
-      window.removeEventListener('sales_data_changed', handleDataChanged);
-      window.removeEventListener('company_expenses_changed', handleDataChanged);
-      window.removeEventListener('staff_profiles_changed', handleDataChanged);
+      window.removeEventListener('sales_data_changed', handleDataChangedWithRefresh);
+      window.removeEventListener('company_expenses_changed', handleDataChangedWithRefresh);
+      window.removeEventListener('staff_profiles_changed', handleDataChangedWithRefresh);
+      window.removeEventListener('students_data_changed', handleDataChangedWithRefresh);
+      window.removeEventListener('batches_data_changed', handleDataChangedWithRefresh);
     };
   }, [selectedLedgerMonth]);
 

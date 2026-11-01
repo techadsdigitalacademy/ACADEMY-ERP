@@ -15,7 +15,7 @@ import {
   Users, BookOpen, UserPlus, GraduationCap, DollarSign,
   Wallet, Search, X,
   ArrowUpRight, Layers, UserCheck,
-  Eye, UploadCloud, Sun, Moon, TrendingUp
+  Eye, UploadCloud, Sun, Moon, TrendingUp, RotateCcw
 } from 'lucide-react';
 
 interface AcademyBatch {
@@ -983,23 +983,43 @@ export const AcademyDashboard: React.FC = () => {
 
                   <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                     {isAdminMode && isRunning && (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          if (!confirm(`Mark batch "${batch.batch_name}" as Completed?`)) return;
-                          await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batch.id}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ status: 'completed' })
-                          });
-                          await fetchAcademyData();
-                          window.dispatchEvent(new CustomEvent('batches_data_changed'));
-                        }}
-                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/40 transition-colors cursor-pointer"
-                        title="Mark batch as Completed"
-                      >
-                        Complete Batch
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm(`Move batch "${batch.batch_name}" back to Upcoming?`)) return;
+                            await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batch.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'upcoming' })
+                            });
+                            await fetchAcademyData();
+                            window.dispatchEvent(new CustomEvent('batches_data_changed'));
+                          }}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/40 transition-colors cursor-pointer flex items-center gap-1"
+                          title="Revert batch back to Upcoming"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          <span>Revert</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!confirm(`Mark batch "${batch.batch_name}" as Completed?`)) return;
+                            await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batch.id}`, {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'completed' })
+                            });
+                            await fetchAcademyData();
+                            window.dispatchEvent(new CustomEvent('batches_data_changed'));
+                          }}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/40 transition-colors cursor-pointer"
+                          title="Mark batch as Completed"
+                        >
+                          Complete Batch
+                        </button>
+                      </div>
                     )}
                     {isAdminMode && isUpcoming && (
                       <button
@@ -1067,7 +1087,14 @@ export const AcademyDashboard: React.FC = () => {
                           >
                             <td className="px-4 py-3 font-mono text-xs text-primary font-bold">{s.registration_number}</td>
                             <td className="px-4 py-3 font-bold text-foreground">
-                              {s.student_name}
+                              <div className="flex items-center gap-2">
+                                <span>{s.student_name}</span>
+                                {s.status === 'Discontinued' && (
+                                  <Badge variant="error" className="text-[9.5px] py-0 px-1.5 font-bold uppercase tracking-wider">
+                                    Discontinued
+                                  </Badge>
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-3 text-muted-foreground">
                               {s.phone || s.email || '-'}
@@ -1087,8 +1114,16 @@ export const AcademyDashboard: React.FC = () => {
                             <td className="px-4 py-3 text-right font-bold text-emerald-400">
                               {formatCurrency(paid)}
                             </td>
-                            <td className="px-4 py-3 text-right font-bold text-rose-400">
-                              {formatCurrency(balance)}
+                            <td className="px-4 py-3 text-right font-bold">
+                              {s.status === 'Discontinued' ? (
+                                <span className="text-muted-foreground text-[11px] font-semibold italic">
+                                  Waived (Discontinued)
+                                </span>
+                              ) : (
+                                <span className="text-rose-400">
+                                  {formatCurrency(balance)}
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-center">
                               <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -1156,13 +1191,30 @@ export const AcademyDashboard: React.FC = () => {
                         return (
                           <tr key={s.id} onClick={() => setSelectedStudentView(s)} className="hover:bg-muted/60 cursor-pointer">
                             <td className="px-4 py-3 font-mono text-primary font-bold">{s.registration_number}</td>
-                            <td className="px-4 py-3 font-bold text-foreground">{s.student_name}</td>
+                            <td className="px-4 py-3 font-bold text-foreground">
+                              <div className="flex items-center gap-2">
+                                <span>{s.student_name}</span>
+                                {s.status === 'Discontinued' && (
+                                  <Badge variant="error" className="text-[9.5px] py-0 px-1.5 font-bold uppercase tracking-wider">
+                                    Discontinued
+                                  </Badge>
+                                )}
+                              </div>
+                            </td>
                             <td className="px-4 py-3 text-muted-foreground">{s.phone || '-'}</td>
                             <td className="px-4 py-3">
                               {s.counselor_name ? <Badge variant="indigo">{s.counselor_name}</Badge> : '-'}
                             </td>
                             <td className="px-4 py-3 text-right font-medium">{formatCurrency(s.total_fees)}</td>
-                            <td className="px-4 py-3 text-right font-bold text-rose-400">{formatCurrency(balance)}</td>
+                            <td className="px-4 py-3 text-right font-bold">
+                              {s.status === 'Discontinued' ? (
+                                <span className="text-muted-foreground text-[11px] font-semibold italic">
+                                  Waived (Discontinued)
+                                </span>
+                              ) : (
+                                <span className="text-rose-400">{formatCurrency(balance)}</span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-center">
                               <button
                                 type="button"
@@ -1258,8 +1310,11 @@ export const AcademyDashboard: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-[10px] uppercase font-bold text-muted-foreground">Balance Due</p>
-                  <p className="text-sm font-bold text-danger">
-                    {formatCurrency(selectedStudentView.total_fees - installments?.filter(i => i.student_id === selectedStudentView.id).reduce((sum, i) => sum + Number(i.amount_paid), 0))}
+                  <p className={`text-sm font-bold ${selectedStudentView.status === 'Discontinued' ? 'text-muted-foreground' : 'text-danger'}`}>
+                    {selectedStudentView.status === 'Discontinued'
+                      ? '₹0 (Discontinued)'
+                      : formatCurrency(Math.max(0, selectedStudentView.total_fees - installments?.filter(i => i.student_id === selectedStudentView.id).reduce((sum, i) => sum + Number(i.amount_paid), 0)))
+                    }
                   </p>
                 </div>
               </div>
