@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
+import { enrichAttendanceRecords } from '../utils/attendanceStorage';
 import { Card } from './Card';
 import { Button } from './Button';
 import { Badge } from './Badge';
@@ -57,7 +58,8 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
         .gte('attendance_date', monthStart)
         .lte('attendance_date', monthEnd);
       if (error) throw error;
-      const normalized = (data || []).map((d: any) => ({
+      const enriched = await enrichAttendanceRecords(data || []);
+      const normalized = enriched.map((d: any) => ({
         ...d,
         status: (d.status || 'present').toUpperCase(),
         punch_in: d.punch_in || (d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')

@@ -11,11 +11,14 @@ import { compressSlipFile, extensionForBlob } from '../utils/imageUtils';
 import { StudentAttendancePortal } from '../components/StudentAttendancePortal';
 import { UnifiedEnrollmentModal } from '../components/UnifiedEnrollmentModal';
 import { CounselorMonthlyReportView } from '../components/CounselorMonthlyReportView';
+import { CourseTimelineTracker } from '../components/CourseTimelineTracker';
+import { AcademyImportModal } from '../components/AcademyImportModal';
 import { 
   Users, BookOpen, UserPlus, GraduationCap, DollarSign,
   Wallet, Search, X,
   ArrowUpRight, Layers, UserCheck,
-  Eye, UploadCloud, Sun, Moon, TrendingUp, RotateCcw
+  Eye, UploadCloud, Sun, Moon, TrendingUp, RotateCcw,
+  Database, Trash2, PlayCircle
 } from 'lucide-react';
 
 interface AcademyBatch {
@@ -30,6 +33,7 @@ interface AcademyBatch {
   fee_amount?: number;
   course_name?: string;
   mode?: string;
+  start_date?: string;
   tutor?: { full_name: string };
 }
 
@@ -124,6 +128,17 @@ export const AcademyDashboard: React.FC = () => {
   // Unified Enrollment Modal state
   const [isUnifiedEnrollOpen, setIsUnifiedEnrollOpen] = useState(false);
   const [targetBatchForEnroll, setTargetBatchForEnroll] = useState<any | null>(null);
+
+  // Start Batch Manual Date Picker state
+  const [activatingBatch, setActivatingBatch] = useState<AcademyBatch | null>(null);
+  const [manualStartDate, setManualStartDate] = useState(new Date().toISOString().slice(0, 10));
+
+  // Historical Import Modal state
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  // Student Hub Layout & Filter
+  const [studentViewLayout, setStudentViewLayout] = useState<'batch' | 'flat'>('batch');
+  const [studentStatusFilter, setStudentStatusFilter] = useState<'all' | 'active' | 'completed' | 'discontinued'>('all');
 
   // Admin Edit Student state
   const [isEditStudentModalOpen, setIsEditStudentModalOpen] = useState(false);
@@ -328,6 +343,8 @@ export const AcademyDashboard: React.FC = () => {
       }
       await fetchAcademyData();
       window.dispatchEvent(new CustomEvent('students_data_changed'));
+      window.dispatchEvent(new CustomEvent('batches_data_changed'));
+      window.dispatchEvent(new CustomEvent('sales_data_changed'));
       setSelectedStudentView(prev => prev ? { ...prev, status: willDiscontinue ? 'Discontinued' : 'Active' } : null);
     } catch (err: any) {
       alert(err.message);
@@ -339,15 +356,58 @@ export const AcademyDashboard: React.FC = () => {
       return;
     }
     try {
-      await fetch(`/supabase-admin/rest/v1/fee_collections?student_id=eq.${student.id}`, { method: 'DELETE' });
+      await fetch(`/supabase-admin/rest/v1/fee_collections?student_id=eq.${student.id}`, { method: 'DELETE' }).catch(() => {});
+      await fetch(`/supabase-admin/rest/v1/student_attendance?student_id=eq.${student.id}`, { method: 'DELETE' }).catch(() => {});
       const res = await fetch(`/supabase-admin/rest/v1/students?id=eq.${student.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete student from database');
       setSelectedStudentView(null);
       await fetchAcademyData();
       window.dispatchEvent(new CustomEvent('students_data_changed'));
+      window.dispatchEvent(new CustomEvent('batches_data_changed'));
+      window.dispatchEvent(new CustomEvent('sales_data_changed'));
       alert(`Student "${student.student_name}" deleted successfully.`);
     } catch (err: any) {
       alert(err.message);
+    }
+  };
+
+  const handleDeleteBatch = async (batchId: string, batchName: string) => {
+    const studentCount = students.filter(s => s.batch_id === batchId).length;
+    const confirmMsg = studentCount > 0
+      ? `This batch "${batchName}" has ${studentCount} students enrolled. Deleting it will permanently delete the batch and all associated dummy student & fee records. Proceed?`
+      : `Are you sure you want to permanently delete batch "${batchName}"?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      await fetch(`/supabase-admin/rest/v1/fee_collections?batch_id=eq.${batchId}`, { method: 'DELETE' }).catch(() => {});
+      await fetch(`/supabase-admin/rest/v1/student_attendance?batch_id=eq.${batchId}`, { method: 'DELETE' }).catch(() => {});
+      await fetch(`/supabase-admin/rest/v1/students?batch_id=eq.${batchId}`, { method: 'DELETE' }).catch(() => {});
+      const res = await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batchId}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete batch from database');
+
+      await fetchAcademyData();
+      window.dispatchEvent(new CustomEvent('batches_data_changed'));
+      window.dispatchEvent(new CustomEvent('students_data_changed'));
+      window.dispatchEvent(new CustomEvent('sales_data_changed'));
+      alert(`Batch "${batchName}" deleted successfully.`);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleStartBatchWithDate = async (batchId: string, startDate: string) => {
+    try {
+      await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batchId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'running', start_date: startDate })
+      });
+      setActivatingBatch(null);
+      await fetchAcademyData();
+      window.dispatchEvent(new CustomEvent('batches_data_changed'));
+    } catch (err: any) {
+      alert(`Failed to start batch: ${err.message}`);
     }
   };
 
@@ -385,6 +445,8 @@ export const AcademyDashboard: React.FC = () => {
       setIsEditStudentModalOpen(false);
       await fetchAcademyData();
       window.dispatchEvent(new CustomEvent('students_data_changed'));
+      window.dispatchEvent(new CustomEvent('batches_data_changed'));
+      window.dispatchEvent(new CustomEvent('sales_data_changed'));
       setSelectedStudentView(prev => prev ? {
         ...prev,
         student_name: payload.name,
@@ -509,6 +571,8 @@ export const AcademyDashboard: React.FC = () => {
       });
       await fetchAcademyData();
       window.dispatchEvent(new CustomEvent('students_data_changed'));
+      window.dispatchEvent(new CustomEvent('batches_data_changed'));
+      window.dispatchEvent(new CustomEvent('sales_data_changed'));
     } catch (err: any) {
       alert(err.message);
     }
@@ -555,6 +619,7 @@ export const AcademyDashboard: React.FC = () => {
       const feePayload = {
         student_id: selectedStudentForFee.id,
         batch_id: selectedStudentForFee.batch_id,
+        collected_by: activeStaff?.id || selectedStudentForFee.counselor_id || null,
         amount: amt,
         payment_mode: pMode,
         installment_month: curMonth,
@@ -597,6 +662,8 @@ export const AcademyDashboard: React.FC = () => {
       setProofPreview(null);
       await fetchAcademyData();
       window.dispatchEvent(new CustomEvent('students_data_changed'));
+      window.dispatchEvent(new CustomEvent('batches_data_changed'));
+      window.dispatchEvent(new CustomEvent('sales_data_changed'));
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -838,12 +905,18 @@ export const AcademyDashboard: React.FC = () => {
 
   const renderStudents = () => {
     const q = searchQuery.toLowerCase().trim();
-    const filtered = students?.filter(s =>
-      !q ||
-      s.student_name.toLowerCase().includes(q) ||
-      s.registration_number.toLowerCase().includes(q) ||
-      (s.phone && s.phone.includes(q))
-    ) || [];
+    const filtered = students?.filter(s => {
+      if (studentStatusFilter === 'active' && (s.status === 'Discontinued' || s.status === 'Completed')) return false;
+      if (studentStatusFilter === 'completed' && s.status !== 'Completed') return false;
+      if (studentStatusFilter === 'discontinued' && s.status !== 'Discontinued') return false;
+
+      if (!q) return true;
+      return (
+        s.student_name.toLowerCase().includes(q) ||
+        s.registration_number.toLowerCase().includes(q) ||
+        (s.phone && s.phone.includes(q))
+      );
+    }) || [];
 
     // Group students by their assigned Batch
     const batchesWithStudents = batches.map(b => {
@@ -897,8 +970,8 @@ export const AcademyDashboard: React.FC = () => {
                 Organized by Academy Batches &bull; Track registrations, installments, and fee collections
               </p>
             </div>
-            <div className="flex items-center gap-2.5 w-full sm:w-auto">
-              <div className="relative flex-1 sm:w-64">
+            <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+              <div className="relative flex-1 sm:w-52">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
@@ -909,20 +982,212 @@ export const AcademyDashboard: React.FC = () => {
                 />
               </div>
 
-              {/* Requirement 2: Centralized enrollment via Upcoming Batches */}
+              {/* View Layout Switcher: By Batch vs All Roster */}
+              <div className="flex items-center p-1 rounded-xl bg-muted border border-border text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setStudentViewLayout('batch')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    studentViewLayout === 'batch' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="Group students by Academy Batches"
+                >
+                  By Batch
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStudentViewLayout('flat')}
+                  className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                    studentViewLayout === 'flat' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title="View full flat student roster"
+                >
+                  All Roster
+                </button>
+              </div>
+
+              {/* Requirement 3: Restored direct Quick Admission */}
               <Button
-                onClick={() => setActiveTab('academy_batches')}
-                className="flex items-center gap-2 whitespace-nowrap text-xs font-bold bg-primary text-primary-foreground shadow-md rounded-xl"
-                title="Enroll students directly through upcoming batches"
+                onClick={() => {
+                  setTargetBatchForEnroll(null);
+                  setIsUnifiedEnrollOpen(true);
+                }}
+                className="flex items-center gap-1.5 whitespace-nowrap text-xs font-bold bg-primary text-primary-foreground shadow-md rounded-xl cursor-pointer"
+                title="Register a new student"
               >
                 <UserPlus className="w-4 h-4" />
-                <span>Enroll via Batches</span>
+                <span>+ Register Student</span>
               </Button>
+
+              {/* Historical Data Migration */}
+              {isAdminMode && (
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="flex items-center gap-1.5 whitespace-nowrap text-xs font-bold border-border text-foreground hover:bg-muted rounded-xl cursor-pointer"
+                  title="Import historical student records from CSV or past database"
+                >
+                  <Database className="w-4 h-4 text-purple-400" />
+                  <span className="hidden md:inline">Import Past Data</span>
+                </Button>
+              )}
             </div>
           </div>
 
-          {/* Batches Sections */}
-          <div className="space-y-6">
+          {/* Status Filter Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setStudentStatusFilter('all')}
+              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                studentStatusFilter === 'all'
+                  ? 'bg-primary/15 text-primary border-primary/30 shadow-sm font-black'
+                  : 'bg-card border-border text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              All Students ({students.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStudentStatusFilter('active')}
+              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                studentStatusFilter === 'active'
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 shadow-sm font-black'
+                  : 'bg-card border-border text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Active ({students.filter(s => s.status !== 'Discontinued' && s.status !== 'Completed').length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStudentStatusFilter('completed')}
+              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                studentStatusFilter === 'completed'
+                  ? 'bg-purple-500/20 text-purple-400 border-purple-500/30 shadow-sm font-black'
+                  : 'bg-card border-border text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Completed ({students.filter(s => s.status === 'Completed').length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStudentStatusFilter('discontinued')}
+              className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                studentStatusFilter === 'discontinued'
+                  ? 'bg-rose-500/20 text-rose-400 border-rose-500/30 shadow-sm font-black'
+                  : 'bg-card border-border text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Discontinued ({students.filter(s => s.status === 'Discontinued').length})
+            </button>
+          </div>
+
+          {/* Batches Sections or Flat Roster View */}
+          {studentViewLayout === 'flat' ? (
+            <Card variant="glass" className="overflow-hidden border border-border shadow-md">
+              <div className="p-4 bg-muted-2 border-b border-border flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-foreground">All Enrolled Students ({filtered.length})</h4>
+                  <p className="text-xs text-muted-foreground">Comprehensive student directory across all batches</p>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs whitespace-nowrap">
+                  <thead className="bg-muted/40 border-b border-border text-muted-foreground font-bold uppercase tracking-wider">
+                    <tr>
+                      <th className="px-4 py-2.5">Reg. No</th>
+                      <th className="px-4 py-2.5">Student Name</th>
+                      <th className="px-4 py-2.5">Assigned Batch</th>
+                      <th className="px-4 py-2.5">Contact</th>
+                      <th className="px-4 py-2.5">Counselor</th>
+                      <th className="px-4 py-2.5 text-right">Package</th>
+                      <th className="px-4 py-2.5 text-right">Paid</th>
+                      <th className="px-4 py-2.5 text-right">Balance</th>
+                      <th className="px-4 py-2.5 text-center">Status</th>
+                      <th className="px-4 py-2.5 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filtered.map(s => {
+                      const batch = batches.find(b => b.id === s.batch_id);
+                      const studentInstallments = installments?.filter(i => i.student_id === s.id) || [];
+                      const paid = studentInstallments.reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
+                      const balance = Math.max(0, s.total_fees - paid);
+
+                      return (
+                        <tr key={s.id} onClick={() => setSelectedStudentView(s)} className="hover:bg-muted/60 cursor-pointer">
+                          <td className="px-4 py-3 font-mono text-primary font-bold">{s.registration_number}</td>
+                          <td className="px-4 py-3 font-bold text-foreground">{s.student_name}</td>
+                          <td className="px-4 py-3">
+                            <span className="px-2 py-0.5 rounded bg-muted border border-border text-[11px] font-semibold">
+                              {batch ? batch.batch_name : 'Direct / Unassigned'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">{s.phone || s.email || '-'}</td>
+                          <td className="px-4 py-3">
+                            {s.counselor_name ? <Badge variant="indigo">{s.counselor_name}</Badge> : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium">{formatCurrency(s.total_fees)}</td>
+                          <td className="px-4 py-3 text-right font-bold text-emerald-400">{formatCurrency(paid)}</td>
+                          <td className="px-4 py-3 text-right font-bold">
+                            {s.status === 'Discontinued' ? (
+                              <span className="text-muted-foreground text-[11px] font-semibold italic">Waived (Discontinued)</span>
+                            ) : (
+                              <span className="text-rose-400">{formatCurrency(balance)}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <Badge variant={s.status === 'Discontinued' ? 'error' : s.status === 'Completed' ? 'purple' : 'success'} className="text-[10px] font-bold">
+                              {s.status || 'Active'}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedStudentView(s)}
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-muted hover:bg-muted-2 text-foreground border border-border cursor-pointer"
+                              >
+                                Details
+                              </button>
+                              {canManageStudents && (
+                                <button
+                                  type="button"
+                                  onClick={() => { setSelectedStudentForFee(s); setIsInstallmentModalOpen(true); }}
+                                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 transition-colors cursor-pointer"
+                                  title="Add payment installment"
+                                >
+                                  + Pay
+                                </button>
+                              )}
+                              {isAdminMode && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteStudent(s)}
+                                  className="p-1 rounded-lg text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                  title="Permanently delete dummy student"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filtered.length === 0 && (
+                      <tr>
+                        <td colSpan={10} className="px-4 py-8 text-center text-muted-foreground text-xs">
+                          No students found matching current filter or search query.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : (
+            <div className="space-y-6">
             {visibleBatches.map(({ batch, students: bStudents, isUpcoming, isRunning, totalEnrolled, totalCapacity, totalBatchPaid, totalBatchDue }) => (
               <Card
                 key={batch.id}
@@ -1024,36 +1289,46 @@ export const AcademyDashboard: React.FC = () => {
                     {isAdminMode && isUpcoming && (
                       <button
                         type="button"
-                        onClick={async () => {
-                          await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batch.id}`, {
-                            method: 'PATCH',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ status: 'running' })
-                          });
-                          await fetchAcademyData();
-                          window.dispatchEvent(new CustomEvent('batches_data_changed'));
+                        onClick={() => {
+                          setActivatingBatch(batch);
+                          setManualStartDate(new Date().toISOString().slice(0, 10));
                         }}
                         className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-black transition-colors cursor-pointer"
-                        title="Start Classes (Move to Active Batches)"
+                        title="Start Classes (Move to Active Batches with manual start date)"
                       >
                         Start Batch
                       </button>
                     )}
-                    {isUpcoming && (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setTargetBatchForEnroll(batch);
-                          setIsUnifiedEnrollOpen(true);
-                        }}
-                        className="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-black flex items-center gap-1 shadow-sm rounded-lg"
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setTargetBatchForEnroll(batch);
+                        setIsUnifiedEnrollOpen(true);
+                      }}
+                      className="text-xs font-bold bg-primary text-primary-foreground flex items-center gap-1 shadow-sm rounded-lg cursor-pointer"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>+ Enroll</span>
+                    </Button>
+                    {isAdminMode && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteBatch(batch.id, batch.batch_name)}
+                        className="p-1.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                        title="Delete Batch and associated test records"
                       >
-                        <UserPlus className="w-3.5 h-3.5" />
-                        <span>Enroll to Batch</span>
-                      </Button>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     )}
                   </div>
                 </div>
+
+                {/* Course Timeline & Remaining Days Tracker on Active Classes */}
+                {isRunning && (
+                  <div className="p-3 border-b border-border/40 bg-muted/10">
+                    <CourseTimelineTracker startDate={batch.start_date || batch.created_at} />
+                  </div>
+                )}
 
                 {/* Students Table for this Batch */}
                 <div className="overflow-x-auto">
@@ -1144,6 +1419,16 @@ export const AcademyDashboard: React.FC = () => {
                                     + Pay
                                   </button>
                                 )}
+                                {isAdminMode && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteStudent(s)}
+                                    className="p-1 rounded-lg text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                    title="Permanently delete dummy student"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1216,13 +1501,35 @@ export const AcademyDashboard: React.FC = () => {
                               )}
                             </td>
                             <td className="px-4 py-3 text-center">
-                              <button
-                                type="button"
-                                onClick={() => setSelectedStudentView(s)}
-                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-muted hover:bg-muted-2 text-foreground border border-border"
-                              >
-                                Details
-                              </button>
+                              <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedStudentView(s)}
+                                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-muted hover:bg-muted-2 text-foreground border border-border cursor-pointer"
+                                >
+                                  Details
+                                </button>
+                                {canManageStudents && (
+                                  <button
+                                    type="button"
+                                    onClick={() => { setSelectedStudentForFee(s); setIsInstallmentModalOpen(true); }}
+                                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 transition-colors cursor-pointer"
+                                    title="Add payment installment"
+                                  >
+                                    + Pay
+                                  </button>
+                                )}
+                                {isAdminMode && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteStudent(s)}
+                                    className="p-1 rounded-lg text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                    title="Permanently delete dummy student"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1238,7 +1545,8 @@ export const AcademyDashboard: React.FC = () => {
                 No students or batches found matching "{searchQuery}".
               </div>
             )}
-          </div>
+            </div>
+          )}
         </div>
 
         {selectedStudentView && (
@@ -1912,6 +2220,78 @@ export const AcademyDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* START BATCH MODAL WITH MANUAL START DATE PICKER */}
+      {activatingBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
+          <Card variant="glass" className="w-full max-w-md p-6 border border-border shadow-2xl rounded-2xl bg-card space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400">
+                  <PlayCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Activate Batch & Start Course</h3>
+                  <p className="text-xs text-muted-foreground">{activatingBatch.batch_name} ({activatingBatch.course_name})</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActivatingBatch(null)}
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1.5">
+                  Course Start Date (Class Commencement):
+                </label>
+                <input
+                  type="date"
+                  value={manualStartDate}
+                  onChange={(e) => setManualStartDate(e.target.value)}
+                  className="w-full bg-muted-2 border border-border rounded-xl px-3.5 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  You can choose today's date or backdate if classes commenced previously. A 3-month (90-day) course timeline progress tracker will automatically activate.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-border flex items-center justify-end gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setActivatingBatch(null)}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleStartBatchWithDate(activatingBatch.id, manualStartDate)}
+                className="text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-black shadow-md rounded-xl"
+              >
+                Start Classes Now
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* HISTORICAL DATA MIGRATION & STUDENT BULK IMPORT MODAL */}
+      <AcademyImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        existingBatches={batches}
+        staffList={staffList}
+        onImportComplete={async () => {
+          await fetchAcademyData();
+        }}
+      />
 
     </div>
   );

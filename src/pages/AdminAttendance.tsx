@@ -6,6 +6,7 @@ import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { supabase, STAFF_PROFILE_COLUMNS } from '../services/supabase';
 import { dataCache } from '../services/dataCache';
+import { enrichAttendanceRecords } from '../utils/attendanceStorage';
 import { MetricCardsSkeleton, TableSkeleton } from '../components/Skeleton';
 import type { Staff, Attendance } from '../types';
 import { 
@@ -225,7 +226,8 @@ export const AdminAttendance: React.FC = () => {
             console.warn("Could not load drill logs from staff_attendance:", error);
             return [];
           }
-          return (data || []).map((d: any) => ({
+          const enriched = await enrichAttendanceRecords(data || []);
+          return enriched.map((d: any) => ({
             ...d,
             status: (d.status || 'present').toUpperCase(),
             punch_in: d.punch_in || (d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
@@ -581,7 +583,8 @@ export const AdminAttendance: React.FC = () => {
 
           let attRecords: any[] = [];
           if (attRes.data) {
-            attRecords = attRes.data.map((a: any) => ({
+            const enriched = await enrichAttendanceRecords(attRes.data);
+            attRecords = enriched.map((a: any) => ({
               ...a,
               status: (a.status || 'present').toUpperCase(),
               punch_in: a.punch_in || (a.created_at ? new Date(a.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')

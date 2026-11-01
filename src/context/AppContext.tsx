@@ -179,6 +179,15 @@ const saveStoredPunch = (staffId: string, dateStr: string, data: Partial<LocalPu
     const existing = getStoredPunch(staffId, dateStr) || {};
     const updated = { ...existing, ...data };
     localStorage.setItem(`staff_punch_${staffId}_${dateStr}`, JSON.stringify(updated));
+
+    // Asynchronously backup punch metadata to Supabase Storage attendance bucket
+    supabase.storage
+      .from('attendance')
+      .upload(`${staffId}/${dateStr}.json`, JSON.stringify(updated), {
+        contentType: 'application/json',
+        upsert: true
+      })
+      .catch(() => {});
   } catch {}
 };
 

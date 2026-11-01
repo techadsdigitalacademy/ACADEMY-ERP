@@ -25,8 +25,11 @@ import {
   Edit2,
   Trash2,
   X,
-  RefreshCw
+  RefreshCw,
+  Database
 } from 'lucide-react';
+import { CourseTimelineTracker } from './CourseTimelineTracker';
+import { AcademyImportModal } from './AcademyImportModal';
 
 export interface BatchItem {
   id: string;
@@ -131,6 +134,13 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
   // Modal: Quick Enroll Student
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
   const [targetBatchForEnroll, setTargetBatchForEnroll] = useState<BatchItem | null>(null);
+
+  // Modal: Start Batch (Manual Start Date selection)
+  const [activatingBatch, setActivatingBatch] = useState<BatchItem | null>(null);
+  const [manualStartDate, setManualStartDate] = useState(new Date().toISOString().slice(0, 10));
+
+  // Modal: Historical Data Migration / Import
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   
   // Fetch all live data from Supabase
@@ -512,10 +522,14 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
     }
   };
 
-  const handleUpdateBatchStatus = async (batchId: string, newStatus: 'upcoming' | 'running' | 'completed') => {
+  const handleUpdateBatchStatus = async (batchId: string, newStatus: 'upcoming' | 'running' | 'completed', customStartDate?: string) => {
     try {
+      const updatePayload: any = { status: newStatus };
+      if (customStartDate) {
+        updatePayload.start_date = customStartDate;
+      }
       // Immediate optimistic update so batch moves between sections instantly
-      setBatches(prev => prev.map(b => b.id === batchId ? { ...b, status: newStatus } : b));
+      setBatches(prev => prev.map(b => b.id === batchId ? { ...b, ...updatePayload } : b));
 
       const res = await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batchId}`, {
         method: 'PATCH',
@@ -523,19 +537,20 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
           'Content-Type': 'application/json',
           'Prefer': 'return=representation'
         },
-        body: JSON.stringify({ status: newStatus })
+        body: JSON.stringify(updatePayload)
       });
 
       if (!res.ok) {
         const { error } = await supabase
           .from('batches')
-          .update({ status: newStatus })
+          .update(updatePayload)
           .eq('id', batchId);
         if (error) throw error;
       }
 
       await loadData(true);
       window.dispatchEvent(new CustomEvent('batches_data_changed'));
+      setActivatingBatch(null);
 
       if (newStatus === 'running') {
         const targetB = batches.find(b => b.id === batchId);
@@ -552,15 +567,19 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
 
   const handleDeleteBatch = async (batchId: string, batchName: string) => {
     const stats = batchStatsMap.get(batchId);
-    if (stats && stats.filledSeats > 0) {
-      if (!confirm(`Warning: This batch has ${stats.filledSeats} enrolled students. Deleting it may impact students' records. Are you sure you want to delete "${batchName}"?`)) {
-        return;
-      }
-    } else {
-      if (!confirm(`Are you sure you want to delete batch "${batchName}"?`)) return;
-    }
+    const hasStudents = stats && stats.filledSeats > 0;
+    const confirmMsg = hasStudents
+      ? `This batch "${batchName}" has ${stats.filledSeats} students enrolled. Deleting it will permanently delete the batch and all associated dummy student/fee records. Proceed?`
+      : `Are you sure you want to permanently delete batch "${batchName}"?`;
+
+    if (!confirm(confirmMsg)) return;
 
     try {
+      // Cascade delete fee collections, attendance, and students for this dummy batch
+      await fetch(`/supabase-admin/rest/v1/fee_collections?batch_id=eq.${batchId}`, { method: 'DELETE' }).catch(() => {});
+      await fetch(`/supabase-admin/rest/v1/student_attendance?batch_id=eq.${batchId}`, { method: 'DELETE' }).catch(() => {});
+      await fetch(`/supabase-admin/rest/v1/students?batch_id=eq.${batchId}`, { method: 'DELETE' }).catch(() => {});
+
       const res = await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batchId}`, {
         method: 'DELETE'
       });
@@ -570,6 +589,8 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       }
       await loadData(true);
       window.dispatchEvent(new CustomEvent('batches_data_changed'));
+      window.dispatchEvent(new CustomEvent('students_data_changed'));
+      window.dispatchEvent(new CustomEvent('sales_data_changed'));
     } catch (err: any) {
       alert(`Failed to delete batch: ${err.message}`);
     }
@@ -643,14 +664,25 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
           </Button>
 
           {isAdminMode && (
-            <Button
-              id="create-new-batch-btn"
-              onClick={handleOpenCreateModal}
-              className="flex items-center gap-2 bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-primary/30 font-bold px-4 py-2.5 rounded-xl text-sm cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Create New Batch</span>
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => setIsImportModalOpen(true)}
+                className="flex items-center gap-1.5 border-border text-foreground hover:bg-muted font-bold px-3 py-2.5 rounded-xl text-xs cursor-pointer"
+                title="Import past student records & historical batches"
+              >
+                <Database className="w-4 h-4 text-purple-400" />
+                <span>Import Past Data</span>
+              </Button>
+              <Button
+                id="create-new-batch-btn"
+                onClick={handleOpenCreateModal}
+                className="flex items-center gap-2 bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-primary/30 font-bold px-4 py-2.5 rounded-xl text-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create New Batch</span>
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -958,8 +990,11 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                         {isAdminMode && (
                           <>
                             <button
-                              onClick={() => handleUpdateBatchStatus(batch.id, 'running')}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 flex items-center gap-1 transition-all"
+                              onClick={() => {
+                                setActivatingBatch(batch);
+                                setManualStartDate(new Date().toISOString().slice(0, 10));
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 flex items-center gap-1 transition-all cursor-pointer"
                               title="Start Classes (Change status to Running)"
                             >
                               <PlayCircle className="w-3.5 h-3.5" />
@@ -1144,6 +1179,9 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                         </div>
 
                       </div>
+
+                      {/* Course Timeline & Remaining Days Tracking */}
+                      <CourseTimelineTracker startDate={batch.start_date || (batch as any).created_at} className="mt-3 mb-1" />
                     </div>
 
                     {/* Bottom Action Footer for Running Batches */}
@@ -1553,6 +1591,82 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
         activeStaff={activeStaff}
         isAdminMode={isAdminMode}
         onSuccess={() => loadData(true)}
+      />
+
+      {/* ========================================================================= */}
+      {/* 9. START BATCH ACTIVATION MODAL (MANUAL START DATE & TIMELINE)           */}
+      {/* ========================================================================= */}
+      {activatingBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
+          <Card variant="glass" className="w-full max-w-md p-6 border border-border shadow-2xl rounded-2xl bg-card space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400">
+                  <PlayCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Activate Batch & Start Course</h3>
+                  <p className="text-xs text-muted-foreground">{activatingBatch.batch_name} ({activatingBatch.course_name})</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActivatingBatch(null)}
+                className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-bold text-foreground block mb-1.5">
+                  Course Start Date (Class Commencement):
+                </label>
+                <input
+                  type="date"
+                  value={manualStartDate}
+                  onChange={(e) => setManualStartDate(e.target.value)}
+                  className="w-full bg-muted-2 border border-border rounded-xl px-3.5 py-2.5 text-xs text-foreground focus:outline-none focus:border-primary"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  You can choose today's date or backdate if classes commenced earlier. A 3-month (90-day) course timeline progress tracker will be displayed on the active batch card.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-border flex items-center justify-end gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setActivatingBatch(null)}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleUpdateBatchStatus(activatingBatch.id, 'running', manualStartDate)}
+                className="text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-black shadow-md rounded-xl"
+              >
+                Start Classes Now
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 10. HISTORICAL DATA MIGRATION & STUDENT BULK IMPORT MODAL                */}
+      {/* ========================================================================= */}
+      <AcademyImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        existingBatches={batches}
+        staffList={staffList}
+        onImportComplete={async () => {
+          await loadData(true);
+        }}
       />
 
     </div>

@@ -865,7 +865,8 @@ export const FinanceDashboard: React.FC = () => {
     loadFinanceData();
 
     const handleDataChangedWithRefresh = () => {
-      loadFinanceData();
+      dataCache.invalidate('finance_*');
+      loadFinanceData(true);
     };
 
     window.addEventListener('sales_data_changed', handleDataChangedWithRefresh);
