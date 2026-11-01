@@ -7,6 +7,7 @@ import { ExpenseHistoryTab } from '../components/dashboard-tabs/ExpenseHistoryTa
 import { LeadsTab } from '../components/dashboard-tabs/LeadsTab';
 import { SalesHistoryLog } from '../components/SalesHistoryLog';
 import { CounselorMonthlyReportView } from '../components/CounselorMonthlyReportView';
+import { UnifiedEnrollmentModal } from '../components/UnifiedEnrollmentModal';
 import { useApp, invalidateTables } from '../context/AppContext';
 import { Card } from '../components/Card';
 import { Button } from '../components/Button';
@@ -175,18 +176,8 @@ export const SalesDashboard: React.FC = () => {
   const [counselorStudents, setCounselorStudents] = useState<any[]>([]);
   const [isAdmissionModalOpen, setIsAdmissionModalOpen] = useState(false);
   const [targetBatchForAdmission, setTargetBatchForAdmission] = useState<any | null>(null);
-  const [admissionForm, setAdmissionForm] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    batch_id: '',
-    total_fee: '',
-    paid_fee: '',
-    payment_mode: 'GPay',
-    notes: ''
-  });
-  const [isSubmittingAdmission, setIsSubmittingAdmission] = useState(false);
 
+  
   const loadCounselorBatchesData = async () => {
     try {
       const [batchesRes, studentsRes] = await Promise.all([
@@ -209,7 +200,15 @@ export const SalesDashboard: React.FC = () => {
           if (r.ok) sList = await r.json();
         } catch (_) {}
       }
-      if (sList) setCounselorStudents(sList);
+      if (sList) {
+        const staffMap = new Map<string, string>();
+        staffProfiles.forEach((st: any) => staffMap.set(st.id, st.full_name));
+        const formatted = sList.map((s: any) => ({
+          ...s,
+          counselor_name: s.counselor_id ? staffMap.get(s.counselor_id) || (s.counselor_id === activeStaff?.id ? activeStaff?.full_name : 'Assigned Counselor') : 'Direct / Admin'
+        }));
+        setCounselorStudents(formatted);
+      }
     } catch (err) {
       console.warn('Error loading batches and students for counselor:', err);
     }
@@ -222,95 +221,7 @@ export const SalesDashboard: React.FC = () => {
   const handleOpenAdmissionModal = (batch?: any) => {
     const selected = batch || counselorBatches[0] || null;
     setTargetBatchForAdmission(selected);
-    setAdmissionForm({
-      name: '',
-      phone: '',
-      email: '',
-      batch_id: selected?.id || '',
-      total_fee: selected?.fee_amount ? String(selected.fee_amount) : '',
-      paid_fee: selected?.fee_amount ? String(selected.fee_amount) : '',
-      payment_mode: 'GPay',
-      notes: ''
-    });
     setIsAdmissionModalOpen(true);
-  };
-
-  const handleSaveAdmission = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!admissionForm.name.trim() || !admissionForm.phone.trim() || !admissionForm.batch_id) {
-      alert('Student Name, Phone Number, and Batch selection are required.');
-      return;
-    }
-
-    setIsSubmittingAdmission(true);
-    try {
-      const studentCode = `STD-${Date.now().toString().slice(-5)}`;
-      const studentPayload: any = {
-        student_id_code: studentCode,
-        name: admissionForm.name.trim(),
-        phone: admissionForm.phone.trim(),
-        email: admissionForm.email.trim() || null,
-        batch_id: admissionForm.batch_id,
-        counselor_id: activeStaff?.id || null,
-        enrollment_date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }),
-        total_fee: parseFloat(admissionForm.total_fee) || 0,
-        paid_fee: parseFloat(admissionForm.paid_fee) || 0
-      };
-
-      let newStudent: any = null;
-      const { data, error } = await supabase.from('students').insert([studentPayload]).select().single();
-      if (!error && data) {
-        newStudent = data;
-      } else {
-        const res = await fetch('/supabase-admin/rest/v1/students', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify([studentPayload])
-        });
-        if (res.ok) {
-          const resArr = await res.json();
-          newStudent = resArr[0];
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || error?.message || 'Failed to insert student record');
-        }
-      }
-
-      const paidAmt = parseFloat(admissionForm.paid_fee) || 0;
-      if (paidAmt > 0 && newStudent?.id) {
-        const feePayload = {
-          student_id: newStudent.id,
-          batch_id: admissionForm.batch_id,
-          collected_by: activeStaff?.id || null,
-          amount: paidAmt,
-          payment_mode: admissionForm.payment_mode,
-          installment_month: new Date().toISOString().slice(0, 7),
-          notes: admissionForm.notes || 'Initial Admission Fee'
-        };
-
-        const { error: fErr } = await supabase.from('fee_collections').insert([feePayload]);
-        if (fErr) {
-          await fetch('/supabase-admin/rest/v1/fee_collections', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify([feePayload])
-          });
-        }
-      }
-
-      alert(`Student "${admissionForm.name}" enrolled successfully! Seat availability updated.`);
-      setIsAdmissionModalOpen(false);
-      await loadCounselorBatchesData();
-      window.dispatchEvent(new CustomEvent('students_data_changed'));
-    } catch (err: any) {
-      console.error('Admission error:', err);
-      alert('Failed to admit student: ' + err.message);
-    } finally {
-      setIsSubmittingAdmission(false);
-    }
   };
 
   // Set default view on load
@@ -2091,9 +2002,13 @@ export const SalesDashboard: React.FC = () => {
                   counselorId={activeStaff?.id}
                   isAdminView={false}
                   activeStaff={activeStaff}
+                  selectedMonth={selectedMonth}
                   students={counselorStudents}
                   batches={counselorBatches}
-                  onAddPayment={() => handleOpenAdmissionModal()}
+                  onAddPayment={(s) => {
+                    const matchedBatch = counselorBatches.find(b => b.id === s?.batch_id);
+                    handleOpenAdmissionModal(matchedBatch);
+                  }}
                   onViewSlip={(slip) => handleViewSlip(slip)}
                 />
               </div>
@@ -2247,217 +2162,20 @@ export const SalesDashboard: React.FC = () => {
         />
       )}
 
-      {/* QUICK ADMISSION / STUDENT ENROLLMENT MODAL (FOR COUNSELORS) */}
-      {isAdmissionModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-card/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-lg p-5 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-primary text-primary-foreground">
-                  <UserPlus className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-foreground">Academy Student Admission</h3>
-                  <p className="text-xs text-muted-foreground font-semibold">
-                    {targetBatchForAdmission?.batch_name 
-                      ? `Enrolling in ${targetBatchForAdmission.course_name || targetBatchForAdmission.batch_name}` 
-                      : 'Admit student & assign to upcoming course batch'}
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setIsAdmissionModalOpen(false)}
-                className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveAdmission} className="space-y-3.5">
-              {/* Batch Select */}
-              <div>
-                <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
-                  Select Batch *
-                </label>
-                <select
-                  value={admissionForm.batch_id}
-                  onChange={(e) => {
-                    const selId = e.target.value;
-                    const matchedBatch = counselorBatches.find(b => b.id === selId);
-                    setAdmissionForm(prev => ({
-                      ...prev,
-                      batch_id: selId,
-                      total_fee: matchedBatch?.fee_amount ? String(matchedBatch.fee_amount) : prev.total_fee,
-                      paid_fee: matchedBatch?.fee_amount ? String(matchedBatch.fee_amount) : prev.paid_fee
-                    }));
-                  }}
-                  className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
-                  required
-                >
-                  <option value="">-- Choose a Batch --</option>
-                  {counselorBatches.map(b => {
-                    const bStus = counselorStudents.filter(s => s.batch_id === b.id);
-                    const filled = bStus.length;
-                    const total = Number(b.total_seats) || 30;
-                    const bal = Math.max(0, total - filled);
-                    return (
-                      <option key={b.id} value={b.id}>
-                        {b.course_name || b.batch_name} ({b.batch_name}) &bull; {bal} seats left
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              {/* Student Name */}
-              <div>
-                <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
-                  Student Full Name *
-                </label>
-                <input
-                  type="text"
-                  value={admissionForm.name}
-                  onChange={(e) => setAdmissionForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="e.g. Rahul Sharma"
-                  className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
-                  required
-                />
-              </div>
-
-              {/* Phone and Email */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
-                    Phone Number *
-                  </label>
-                  <input
-                    type="tel"
-                    value={admissionForm.phone}
-                    onChange={(e) => setAdmissionForm(prev => ({ ...prev, phone: e.target.value }))}
-                    placeholder="+91 9876543210"
-                    className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    value={admissionForm.email}
-                    onChange={(e) => setAdmissionForm(prev => ({ ...prev, email: e.target.value }))}
-                    placeholder="student@example.com"
-                    className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
-                  />
-                </div>
-              </div>
-
-              {/* Fee and Initial Paid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
-                    Total Course Fee (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    value={admissionForm.total_fee}
-                    onChange={(e) => setAdmissionForm(prev => ({ ...prev, total_fee: e.target.value }))}
-                    placeholder="35000"
-                    className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-bold text-foreground focus:outline-none focus:border-primary"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-success uppercase block mb-1">
-                    Initial Amount Paid (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    value={admissionForm.paid_fee}
-                    onChange={(e) => setAdmissionForm(prev => ({ ...prev, paid_fee: e.target.value }))}
-                    placeholder="10000"
-                    className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-bold text-success focus:outline-none focus:border-success"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Payment Mode */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
-                    Payment Mode
-                  </label>
-                  <select
-                    value={admissionForm.payment_mode}
-                    onChange={(e) => setAdmissionForm(prev => ({ ...prev, payment_mode: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
-                  >
-                    <option value="GPay">GPay (Google Pay)</option>
-                    <option value="PhonePe">PhonePe</option>
-                    <option value="Bank Transfer">Bank Transfer / IMPS</option>
-                    <option value="Cash">Cash</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
-                    Admissions Counselor
-                  </label>
-                  <input
-                    type="text"
-                    value={activeStaff?.full_name || 'Counselor'}
-                    disabled
-                    className="w-full px-3 py-2 rounded-lg bg-muted-2 border border-border text-xs font-bold text-muted-foreground cursor-not-allowed"
-                  />
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="text-[11px] font-bold text-muted-foreground uppercase block mb-1">
-                  Notes / Remarks
-                </label>
-                <input
-                  type="text"
-                  value={admissionForm.notes}
-                  onChange={(e) => setAdmissionForm(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Optional admission remarks or installment details"
-                  className="w-full px-3 py-2 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-primary"
-                />
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
-                <button
-                  type="button"
-                  onClick={() => setIsAdmissionModalOpen(false)}
-                  className="px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground text-xs font-bold transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmittingAdmission}
-                  className="px-5 py-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-md hover:shadow-lg transition-all disabled:opacity-50 cursor-pointer"
-                >
-                  {isSubmittingAdmission ? (
-                    <>
-                      <div className="w-3.5 h-3.5 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
-                      <span>Enrolling...</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-3.5 h-3.5" />
-                      <span>Confirm & Enroll Student</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* UNIFIED QUICK ADMISSION / STUDENT ENROLLMENT MODAL */}
+      <UnifiedEnrollmentModal
+        isOpen={isAdmissionModalOpen}
+        onClose={() => setIsAdmissionModalOpen(false)}
+        targetBatch={targetBatchForAdmission}
+        allBatches={counselorBatches}
+        counselorsList={staffProfiles.filter((s: any) => (s.designation || '').toLowerCase().includes('counselor'))}
+        staffList={staffProfiles}
+        activeStaff={activeStaff}
+        isAdminMode={isAdminMode}
+        onSuccess={() => {
+          loadCounselorBatchesData();
+        }}
+      />
     </div>
   );
 };

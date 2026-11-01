@@ -11,7 +11,9 @@ import {
   Award,
   GraduationCap,
   CalendarDays,
-  Table as TableIcon
+  Table as TableIcon,
+  Lock,
+  ShieldAlert
 } from 'lucide-react';
 
 export interface StudentAttendancePortalProps {
@@ -106,7 +108,7 @@ export const StudentAttendancePortal: React.FC<StudentAttendancePortalProps> = (
   
   // Role checks
   const isOwner = (activeStaff?.designation || '').toLowerCase().includes('owner');
-    const isTutor = (activeStaff?.designation || '').toLowerCase().includes('tutor');
+  const isTutor = (activeStaff?.designation || '').toLowerCase().includes('tutor');
   const isCounselor = (activeStaff?.designation || '').toLowerCase().includes('counselor');
   
   // Filter batches assigned to active tutor
@@ -116,12 +118,23 @@ export const StudentAttendancePortal: React.FC<StudentAttendancePortalProps> = (
     return assigned.length > 0 ? assigned : effectiveBatches;
   }, [isTutor, effectiveBatches, activeStaff?.id]);
 
+
+
   // Selected Batch ID state (defaults to tutor's assigned batch if available, else first batch)
   const defaultBatchId = useMemo(() => {
     return (tutorBatches[0]?.id || effectiveBatches[0]?.id || '');
   }, [tutorBatches, effectiveBatches]);
 
   const [selectedBatchId, setSelectedBatchId] = useState<string>(defaultBatchId);
+
+  // Strict Permission Check: Only the assigned Academic Tutor can mark daily attendance for this batch
+  const canMarkAttendance = useMemo(() => {
+    if (!isTutor || !activeStaff?.id) return false;
+    // Check if the current selected batch is explicitly assigned to this tutor
+    const batch = effectiveBatches.find(b => b.id === selectedBatchId);
+    if (batch?.tutor_id === activeStaff.id) return true;
+    return tutorBatches.some(b => b.id === selectedBatchId);
+  }, [isTutor, activeStaff?.id, effectiveBatches, selectedBatchId, tutorBatches]);
 
   useEffect(() => {
     if (!selectedBatchId && defaultBatchId) {
@@ -236,6 +249,10 @@ export const StudentAttendancePortal: React.FC<StudentAttendancePortalProps> = (
   // Toggle individual student attendance
   const handleToggleAttendance = async (studentId: string, currentStatus?: string) => {
     if (!activeStaff || !selectedBatchId) return;
+    if (!canMarkAttendance) {
+      alert('Permission Denied: Daily student attendance marking is strictly restricted to assigned Academic Tutors.');
+      return;
+    }
     const newStatus = (currentStatus || '').toLowerCase() === 'present' ? 'absent' : 'present';
     setIsUpdating(true);
 
@@ -299,6 +316,10 @@ export const StudentAttendancePortal: React.FC<StudentAttendancePortalProps> = (
   // Mark all students Present or Absent
   const handleMarkAll = async (status: 'present' | 'absent') => {
     if (!activeStaff || !selectedBatchId || batchStudents.length === 0) return;
+    if (!canMarkAttendance) {
+      alert('Permission Denied: Daily student attendance marking is strictly restricted to assigned Academic Tutors.');
+      return;
+    }
     setIsUpdating(true);
 
     try {
@@ -476,6 +497,21 @@ export const StudentAttendancePortal: React.FC<StudentAttendancePortalProps> = (
       {/* 3. DAILY MARKING VIEW */}
       {viewMode === 'daily' && (
         <div className="space-y-4">
+          {/* View-Only Mode Banner for Admin and Counselors */}
+          {selectedBatchId && !canMarkAttendance && (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-indigo-500/10 border border-indigo-500/25 rounded-2xl text-xs animate-fade-in">
+              <div className="flex items-center gap-2.5 text-indigo-300 font-semibold">
+                <ShieldAlert className="w-4 h-4 text-indigo-400 shrink-0" />
+                <span>
+                  <strong>View-Only Register:</strong> Daily student attendance marking is strictly restricted to the assigned Academic Tutor ({currentBatch?.tutor_name || 'Tutor'}). Admins and Counselors have read-only inspection access.
+                </span>
+              </div>
+              <Badge variant="indigo" className="text-[10px] font-bold flex items-center gap-1 shrink-0">
+                <Lock className="w-3 h-3" /> View Mode
+              </Badge>
+            </div>
+          )}
+
           {/* Quick Roster Status & Bulk Actions */}
           {selectedBatchId && batchStudents.length > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-card rounded-2xl border border-border">
@@ -501,22 +537,31 @@ export const StudentAttendancePortal: React.FC<StudentAttendancePortalProps> = (
 
               {/* Bulk Mark Buttons */}
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={isUpdating}
-                  onClick={() => handleMarkAll('present')}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-success bg-success-soft hover:bg-success/20 border border-success/30 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <Check className="w-3.5 h-3.5" /> Mark All Present
-                </button>
-                <button
-                  type="button"
-                  disabled={isUpdating}
-                  onClick={() => handleMarkAll('absent')}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-danger bg-danger-soft hover:bg-danger/20 border border-danger/30 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
-                >
-                  <X className="w-3.5 h-3.5" /> Mark All Absent
-                </button>
+                {canMarkAttendance ? (
+                  <>
+                    <button
+                      type="button"
+                      disabled={isUpdating}
+                      onClick={() => handleMarkAll('present')}
+                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-success bg-success-soft hover:bg-success/20 border border-success/30 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <Check className="w-3.5 h-3.5" /> Mark All Present
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isUpdating}
+                      onClick={() => handleMarkAll('absent')}
+                      className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-danger bg-danger-soft hover:bg-danger/20 border border-danger/30 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      <X className="w-3.5 h-3.5" /> Mark All Absent
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-[11px] font-bold text-muted-foreground flex items-center gap-1 px-3 py-1.5 rounded-xl bg-muted border border-border">
+                    <Lock className="w-3.5 h-3.5 text-muted-foreground" />
+                    Marking Restricted to Assigned Tutor
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -567,17 +612,24 @@ export const StudentAttendancePortal: React.FC<StudentAttendancePortalProps> = (
                             )}
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <button
-                              disabled={isUpdating}
-                              onClick={() => handleToggleAttendance(s.id, att?.status)}
-                              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                isPresent
-                                  ? 'bg-danger-soft text-danger hover:bg-danger/20 border border-danger/20'
-                                  : 'bg-success-soft text-success hover:bg-success/20 border border-success/20'
-                              }`}
-                            >
-                              Mark {isPresent ? 'Absent' : 'Present'}
-                            </button>
+                            {canMarkAttendance ? (
+                              <button
+                                disabled={isUpdating}
+                                onClick={() => handleToggleAttendance(s.id, att?.status)}
+                                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                  isPresent
+                                    ? 'bg-danger-soft text-danger hover:bg-danger/20 border border-danger/20'
+                                    : 'bg-success-soft text-success hover:bg-success/20 border border-success/20'
+                                }`}
+                              >
+                                Mark {isPresent ? 'Absent' : 'Present'}
+                              </button>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-muted-foreground bg-muted/60 border border-border">
+                                <Lock className="w-3 h-3 text-muted-foreground/70" />
+                                <span>{isPresent ? 'Marked Present' : isAbsent ? 'Marked Absent' : 'Unmarked'}</span>
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );

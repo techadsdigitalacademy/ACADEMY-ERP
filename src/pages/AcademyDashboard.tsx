@@ -9,6 +9,7 @@ import { formatCurrency } from '../services/mockData';
 import { AcademyBatches } from '../components/AcademyBatches';
 import { compressSlipFile, extensionForBlob } from '../utils/imageUtils';
 import { StudentAttendancePortal } from '../components/StudentAttendancePortal';
+import { UnifiedEnrollmentModal } from '../components/UnifiedEnrollmentModal';
 import { CounselorMonthlyReportView } from '../components/CounselorMonthlyReportView';
 import { 
   Users, BookOpen, UserPlus, GraduationCap, DollarSign,
@@ -34,6 +35,8 @@ interface AcademyBatch {
 
 interface AcademyStudent {
   id: string;
+  counselor_name?: string;
+  counselor_id?: string;
   registration_number: string;
   student_name: string;
   email: string;
@@ -118,9 +121,35 @@ export const AcademyDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudentView, setSelectedStudentView] = useState<AcademyStudent | null>(null);
 
+  // Unified Enrollment Modal state
+  const [isUnifiedEnrollOpen, setIsUnifiedEnrollOpen] = useState(false);
+  const [targetBatchForEnroll, setTargetBatchForEnroll] = useState<any | null>(null);
+
+  // Admin Edit Student state
+  const [isEditStudentModalOpen, setIsEditStudentModalOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<AcademyStudent | null>(null);
+  const [editStudentForm, setEditStudentForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    total_fees: '',
+    batch_id: '',
+    counselor_id: ''
+  });
+
   useEffect(() => {
     fetchAcademyData();
     fetchStaff();
+
+    const handleDataChanged = () => {
+      fetchAcademyData();
+    };
+    window.addEventListener('batches_data_changed', handleDataChanged);
+    window.addEventListener('students_data_changed', handleDataChanged);
+    return () => {
+      window.removeEventListener('batches_data_changed', handleDataChanged);
+      window.removeEventListener('students_data_changed', handleDataChanged);
+    };
   }, [activeStaff]);
 
   const fetchStaff = async () => {
@@ -179,6 +208,23 @@ export const AcademyDashboard: React.FC = () => {
       }
 
       // 2. Students
+      let staffDataList: any[] = [];
+      try {
+        const { data: stData } = await dbClient.from('staff_profiles').select('id, full_name, designation').order('full_name');
+        if (stData && stData.length > 0) staffDataList = stData;
+        else {
+          const stRes = await fetch('/supabase-admin/rest/v1/staff_profiles?select=id,full_name,designation');
+          if (stRes.ok) staffDataList = await stRes.json();
+        }
+      } catch (_) {}
+      if (staffDataList.length > 0) setStaffList(staffDataList);
+
+      const staffMap = new Map<string, string>();
+      staffDataList.forEach((st: any) => staffMap.set(st.id, st.full_name));
+
+      const batchesMap = new Map<string, any>();
+      bDataList.forEach((b: any) => batchesMap.set(b.id, b));
+
       let sData: any[] = [];
       const { data: sRes, error: sErr } = await dbClient.from('students').select('*').order('created_at', { ascending: false });
       if (!sErr && sRes && sRes.length > 0) {
@@ -190,17 +236,27 @@ export const AcademyDashboard: React.FC = () => {
         } catch (_) {}
       }
       if (sData) {
-        setStudents(sData.map((s: any) => ({
-          id: s.id,
-          registration_number: s.student_id_code || `STU-${s.id.slice(0, 4)}`,
-          student_name: s.name,
-          email: s.email || '',
-          phone: s.phone || '',
-          batch_id: s.batch_id,
-          total_fees: Number(s.total_fee) || 0,
-          status: 'Active',
-          created_at: s.created_at
-        })));
+        setStudents(sData.map((s: any) => {
+          const isDiscontinued = s.student_id_code?.includes('[DISCONTINUED]') || localStorage.getItem(`student_status_${s.id}`) === 'discontinued';
+          const cleanCode = s.student_id_code?.replace(/\s*\[DISCONTINUED\]/g, '') || `STU-${s.id.slice(0, 4)}`;
+          const assignedBatch = batchesMap.get(s.batch_id);
+          const counselorName = s.counselor_id ? staffMap.get(s.counselor_id) || 'Assigned Counselor' : 'Direct / Admin';
+
+          return {
+            id: s.id,
+            registration_number: cleanCode,
+            student_name: s.name,
+            email: s.email || '',
+            phone: s.phone || '',
+            batch_id: s.batch_id,
+            batch: assignedBatch,
+            counselor_id: s.counselor_id,
+            counselor_name: counselorName,
+            total_fees: Number(s.total_fee) || 0,
+            status: isDiscontinued ? 'Discontinued' : 'Active',
+            created_at: s.created_at
+          };
+        }));
       }
 
       // 3. Installments / Fee collections
@@ -251,6 +307,98 @@ export const AcademyDashboard: React.FC = () => {
   };
 
   // --- ACTIONS ---
+
+  const handleToggleStudentStatus = async (student: AcademyStudent) => {
+    const willDiscontinue = student.status !== 'Discontinued';
+    const newCode = willDiscontinue
+      ? `${student.registration_number} [DISCONTINUED]`
+      : student.registration_number.replace(/\s*\[DISCONTINUED\]/g, '');
+
+    try {
+      const res = await fetch(`/supabase-admin/rest/v1/students?id=eq.${student.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id_code: newCode })
+      });
+      if (!res.ok) throw new Error('Failed to update student status');
+      if (willDiscontinue) {
+        localStorage.setItem(`student_status_${student.id}`, 'discontinued');
+      } else {
+        localStorage.removeItem(`student_status_${student.id}`);
+      }
+      await fetchAcademyData();
+      window.dispatchEvent(new CustomEvent('students_data_changed'));
+      setSelectedStudentView(prev => prev ? { ...prev, status: willDiscontinue ? 'Discontinued' : 'Active' } : null);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteStudent = async (student: AcademyStudent) => {
+    if (!confirm(`Are you sure you want to permanently delete student "${student.student_name}" (${student.registration_number})? All payment and admission records will be permanently removed.`)) {
+      return;
+    }
+    try {
+      await fetch(`/supabase-admin/rest/v1/fee_collections?student_id=eq.${student.id}`, { method: 'DELETE' });
+      const res = await fetch(`/supabase-admin/rest/v1/students?id=eq.${student.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Failed to delete student from database');
+      setSelectedStudentView(null);
+      await fetchAcademyData();
+      window.dispatchEvent(new CustomEvent('students_data_changed'));
+      alert(`Student "${student.student_name}" deleted successfully.`);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleOpenEditStudentModal = (student: AcademyStudent) => {
+    setEditingStudent(student);
+    setEditStudentForm({
+      name: student.student_name,
+      phone: student.phone || '',
+      email: student.email || '',
+      total_fees: String(student.total_fees || ''),
+      batch_id: student.batch_id || '',
+      counselor_id: student.counselor_id || ''
+    });
+    setIsEditStudentModalOpen(true);
+  };
+
+  const handleSaveEditStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    try {
+      const payload = {
+        name: editStudentForm.name.trim(),
+        phone: editStudentForm.phone.trim(),
+        email: editStudentForm.email.trim() || null,
+        total_fee: parseFloat(editStudentForm.total_fees) || 0,
+        batch_id: editStudentForm.batch_id || editingStudent.batch_id,
+        counselor_id: editStudentForm.counselor_id || null
+      };
+      const res = await fetch(`/supabase-admin/rest/v1/students?id=eq.${editingStudent.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('Failed to update student details');
+      setIsEditStudentModalOpen(false);
+      await fetchAcademyData();
+      window.dispatchEvent(new CustomEvent('students_data_changed'));
+      setSelectedStudentView(prev => prev ? {
+        ...prev,
+        student_name: payload.name,
+        phone: payload.phone,
+        email: payload.email || '',
+        total_fees: payload.total_fee,
+        batch_id: payload.batch_id,
+        counselor_id: payload.counselor_id || undefined,
+        counselor_name: staffList.find(s => s.id === payload.counselor_id)?.full_name || 'Direct / Admin'
+      } : null);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
 
   const handleCreateBatch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -506,11 +654,12 @@ export const AcademyDashboard: React.FC = () => {
               <span>Manage Batches</span>
             </button>
             <button
-              onClick={() => setIsStudentModalOpen(true)}
+              onClick={() => setActiveTab('academy_batches')}
               className="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+              title="Enroll students directly through upcoming batches"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>Register Student</span>
+              <span>Enroll Student</span>
             </button>
             <button
               onClick={() => setActiveTab('academy_attendance')}
@@ -688,76 +837,356 @@ export const AcademyDashboard: React.FC = () => {
 
 
   const renderStudents = () => {
-    const filtered = students?.filter(s => s.student_name.toLowerCase().includes(searchQuery.toLowerCase()) || s.registration_number.toLowerCase().includes(searchQuery.toLowerCase()));
+    const q = searchQuery.toLowerCase().trim();
+    const filtered = students?.filter(s =>
+      !q ||
+      s.student_name.toLowerCase().includes(q) ||
+      s.registration_number.toLowerCase().includes(q) ||
+      (s.phone && s.phone.includes(q))
+    ) || [];
+
+    // Group students by their assigned Batch
+    const batchesWithStudents = batches.map(b => {
+      const bStudents = filtered.filter(s => s.batch_id === b.id);
+      const isUpcoming = (b.status || '').toLowerCase() === 'upcoming';
+      const isRunning = (b.status || '').toLowerCase() === 'running';
+      const totalEnrolled = bStudents.length;
+      const totalCapacity = b.total_seats || 30;
+      const totalBatchFees = bStudents.reduce((sum, s) => sum + (Number(s.total_fees) || 0), 0);
+      const totalBatchPaid = bStudents.reduce((sum, s) => {
+        const studentInstallments = installments?.filter(i => i.student_id === s.id) || [];
+        return sum + studentInstallments.reduce((isum, i) => isum + Number(i.amount_paid || 0), 0);
+      }, 0);
+      const totalBatchDue = Math.max(0, totalBatchFees - totalBatchPaid);
+
+      return {
+        batch: b,
+        students: bStudents,
+        isUpcoming,
+        isRunning,
+        totalEnrolled,
+        totalCapacity,
+        totalBatchFees,
+        totalBatchPaid,
+        totalBatchDue
+      };
+    });
+
+    // Unassigned students (if any exist without a batch)
+    const unassignedStudents = filtered.filter(s => !batches.some(b => b.id === s.batch_id));
+
+    // Visible batches when searching
+    const visibleBatches = batchesWithStudents.filter(item => {
+      if (!q) return true;
+      if (item.students.length > 0) return true;
+      return item.batch.batch_name.toLowerCase().includes(q) || (item.batch.course_name && item.batch.course_name.toLowerCase().includes(q));
+    });
 
     return (
-      <div className="space-y-4 animate-fade-in flex h-full">
-        <div className={`flex-1 space-y-4 ${selectedStudentView ? 'hidden md:block md:w-2/3' : 'w-full'}`}>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="space-y-6 animate-fade-in flex flex-col lg:flex-row h-full">
+        {/* Main Students List Grouped by Batches */}
+        <div className={`flex-1 space-y-6 ${selectedStudentView ? 'w-full lg:w-2/3' : 'w-full'}`}>
+          {/* Top Header Card */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card/60 p-4 rounded-2xl border border-border">
             <div>
-              <h3 className="text-lg font-bold text-foreground">Student Hub</h3>
-              <p className="text-sm text-muted-foreground">Manage registrations and fee tracking.</p>
+              <h3 className="text-lg font-black text-foreground flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" />
+                <span>Student Hub</span>
+              </h3>
+              <p className="text-xs text-muted-foreground font-medium">
+                Organized by Academy Batches &bull; Track registrations, installments, and fee collections
+              </p>
             </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-2.5 w-full sm:w-auto">
               <div className="relative flex-1 sm:w-64">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="Search students..."
+                  placeholder="Search student, reg no, phone..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-muted-2 border border-border rounded-lg pl-9 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                  className="w-full bg-muted-2 border border-border rounded-xl pl-9 pr-4 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
                 />
               </div>
-              {canManageStudents && (
-                <Button onClick={() => {
-                  setStudentForm(prev => ({
-                    ...prev,
-                    counselor_id: isCounselor ? (activeStaff?.id || '') : prev.counselor_id
-                  }));
-                  setIsStudentModalOpen(true);
-                }} className="flex items-center gap-2 whitespace-nowrap">
-                  <UserPlus className="w-4 h-4" /> Register Student
-                </Button>
-              )}
+
+              {/* Requirement 2: Centralized enrollment via Upcoming Batches */}
+              <Button
+                onClick={() => setActiveTab('academy_batches')}
+                className="flex items-center gap-2 whitespace-nowrap text-xs font-bold bg-primary text-primary-foreground shadow-md rounded-xl"
+                title="Enroll students directly through upcoming batches"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Enroll via Batches</span>
+              </Button>
             </div>
           </div>
 
-          <Card variant="glass" className="overflow-hidden border-border">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-muted-2 border-b border-border text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold">Reg. No</th>
-                    <th className="px-4 py-3 font-semibold">Student Name</th>
-                    <th className="px-4 py-3 font-semibold">Batch</th>
-                    <th className="px-4 py-3 font-semibold text-right">Total Fees</th>
-                    <th className="px-4 py-3 font-semibold text-right">Balance</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filtered?.map(s => {
-                    const studentInstallments = installments?.filter(i => i.student_id === s.id);
-                    const paid = studentInstallments.reduce((sum, i) => sum + Number(i.amount_paid), 0);
-                    const balance = s.total_fees - paid;
-                    return (
-                      <tr 
-                        key={s.id} 
-                        onClick={() => setSelectedStudentView(s)}
-                        className="hover:bg-muted cursor-pointer transition-colors"
+          {/* Batches Sections */}
+          <div className="space-y-6">
+            {visibleBatches.map(({ batch, students: bStudents, isUpcoming, isRunning, totalEnrolled, totalCapacity, totalBatchPaid, totalBatchDue }) => (
+              <Card
+                key={batch.id}
+                variant="glass"
+                className={`overflow-hidden border transition-all duration-300 shadow-md ${
+                  isRunning
+                    ? 'border-emerald-500/30 bg-emerald-500/[0.02]'
+                    : isUpcoming
+                    ? 'border-amber-500/30 bg-amber-500/[0.02]'
+                    : 'border-border'
+                }`}
+              >
+                {/* Batch Header Bar */}
+                <div className={`p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                  isRunning
+                    ? 'bg-emerald-500/10 border-emerald-500/20'
+                    : isUpcoming
+                    ? 'bg-amber-500/10 border-amber-500/20'
+                    : 'bg-muted-2 border-border'
+                }`}>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-black text-foreground">
+                        {batch.batch_name}
+                      </span>
+                      <Badge
+                        variant={isRunning ? 'success' : isUpcoming ? 'warning' : 'info'}
+                        className="text-[10px] font-bold uppercase"
                       >
-                        <td className="px-4 py-3 font-mono text-xs text-primary">{s.registration_number}</td>
-                        <td className="px-4 py-3 font-medium text-foreground">{s.student_name}</td>
-                        <td className="px-4 py-3 text-secondary-foreground">{s.batch?.batch_name || '-'}</td>
-                        <td className="px-4 py-3 text-right text-secondary-foreground">{formatCurrency(s.total_fees)}</td>
-                        <td className="px-4 py-3 text-right font-bold text-danger">{formatCurrency(balance)}</td>
+                        {isRunning ? '● Active Class' : isUpcoming ? 'Upcoming' : batch.status}
+                      </Badge>
+                      <Badge
+                        variant={batch.batch_type === 'Online' ? 'purple' : 'info'}
+                        className="text-[10px] font-bold uppercase"
+                      >
+                        {batch.batch_type || 'Offline'}
+                      </Badge>
+                      {batch.course_name && (
+                        <span className="text-[11px] text-muted-foreground font-semibold">
+                          &bull; {batch.course_name}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground font-medium flex-wrap">
+                      <span>Roster: <strong className="text-foreground">{totalEnrolled}</strong> / {totalCapacity} seats filled</span>
+                      <span>&bull;</span>
+                      <span>Package: <strong className="text-foreground">{formatCurrency(batch.fee_amount || 25000)}</strong></span>
+                      <span>&bull;</span>
+                      <span className="text-emerald-400 font-bold">Collected: {formatCurrency(totalBatchPaid)}</span>
+                      {totalBatchDue > 0 && (
+                        <>
+                          <span>&bull;</span>
+                          <span className="text-rose-400 font-bold">Due: {formatCurrency(totalBatchDue)}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    {isAdminMode && isRunning && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!confirm(`Mark batch "${batch.batch_name}" as Completed?`)) return;
+                          await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batch.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ status: 'completed' })
+                          });
+                          await fetchAcademyData();
+                          window.dispatchEvent(new CustomEvent('batches_data_changed'));
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/40 transition-colors cursor-pointer"
+                        title="Mark batch as Completed"
+                      >
+                        Complete Batch
+                      </button>
+                    )}
+                    {isAdminMode && isUpcoming && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batch.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ status: 'running' })
+                          });
+                          await fetchAcademyData();
+                          window.dispatchEvent(new CustomEvent('batches_data_changed'));
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-black transition-colors cursor-pointer"
+                        title="Start Classes (Move to Active Batches)"
+                      >
+                        Start Batch
+                      </button>
+                    )}
+                    {isUpcoming && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setTargetBatchForEnroll(batch);
+                          setIsUnifiedEnrollOpen(true);
+                        }}
+                        className="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-black flex items-center gap-1 shadow-sm rounded-lg"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                        <span>Enroll to Batch</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Students Table for this Batch */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead className="bg-muted/40 border-b border-border text-muted-foreground font-bold uppercase tracking-wider">
+                      <tr>
+                        <th className="px-4 py-2.5">Reg. No</th>
+                        <th className="px-4 py-2.5">Student Name</th>
+                        <th className="px-4 py-2.5">Contact</th>
+                        <th className="px-4 py-2.5">Enrolling Counselor</th>
+                        <th className="px-4 py-2.5 text-right">Package</th>
+                        <th className="px-4 py-2.5 text-right">Paid</th>
+                        <th className="px-4 py-2.5 text-right">Balance</th>
+                        <th className="px-4 py-2.5 text-center">Action</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {bStudents.map(s => {
+                        const studentInstallments = installments?.filter(i => i.student_id === s.id) || [];
+                        const paid = studentInstallments.reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
+                        const balance = Math.max(0, s.total_fees - paid);
+                        const isSelected = selectedStudentView?.id === s.id;
+
+                        return (
+                          <tr
+                            key={s.id}
+                            onClick={() => setSelectedStudentView(s)}
+                            className={`hover:bg-muted/60 cursor-pointer transition-colors ${
+                              isSelected ? 'bg-primary-soft/30 border-l-4 border-l-primary' : ''
+                            }`}
+                          >
+                            <td className="px-4 py-3 font-mono text-xs text-primary font-bold">{s.registration_number}</td>
+                            <td className="px-4 py-3 font-bold text-foreground">
+                              {s.student_name}
+                            </td>
+                            <td className="px-4 py-3 text-muted-foreground">
+                              {s.phone || s.email || '-'}
+                            </td>
+                            <td className="px-4 py-3">
+                              {s.counselor_name ? (
+                                <Badge variant="indigo" className="text-[10px] font-bold">
+                                  {s.counselor_name}
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-[11px] italic">Direct / Admin</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right font-medium text-foreground">
+                              {formatCurrency(s.total_fees)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-emerald-400">
+                              {formatCurrency(paid)}
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-rose-400">
+                              {formatCurrency(balance)}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedStudentView(s)}
+                                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-muted hover:bg-muted-2 text-foreground border border-border transition-colors cursor-pointer"
+                                >
+                                  Details
+                                </button>
+                                {canManageStudents && (
+                                  <button
+                                    type="button"
+                                    onClick={() => { setSelectedStudentForFee(s); setIsInstallmentModalOpen(true); }}
+                                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 transition-colors cursor-pointer"
+                                    title="Add payment installment"
+                                  >
+                                    + Pay
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {bStudents.length === 0 && (
+                        <tr>
+                          <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground text-xs">
+                            No students enrolled in this batch yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            ))}
+
+            {/* Unassigned Students Section (if any) */}
+            {unassignedStudents.length > 0 && (
+              <Card variant="glass" className="overflow-hidden border border-border">
+                <div className="p-4 bg-muted-2 border-b border-border">
+                  <h4 className="text-sm font-bold text-foreground">Direct / Unassigned Students</h4>
+                  <p className="text-xs text-muted-foreground">{unassignedStudents.length} students without an assigned batch</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs whitespace-nowrap">
+                    <thead className="bg-muted/40 border-b border-border text-muted-foreground font-bold uppercase tracking-wider">
+                      <tr>
+                        <th className="px-4 py-2.5">Reg. No</th>
+                        <th className="px-4 py-2.5">Student Name</th>
+                        <th className="px-4 py-2.5">Contact</th>
+                        <th className="px-4 py-2.5">Enrolling Counselor</th>
+                        <th className="px-4 py-2.5 text-right">Package</th>
+                        <th className="px-4 py-2.5 text-right">Balance</th>
+                        <th className="px-4 py-2.5 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {unassignedStudents.map(s => {
+                        const studentInstallments = installments?.filter(i => i.student_id === s.id) || [];
+                        const paid = studentInstallments.reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
+                        const balance = Math.max(0, s.total_fees - paid);
+
+                        return (
+                          <tr key={s.id} onClick={() => setSelectedStudentView(s)} className="hover:bg-muted/60 cursor-pointer">
+                            <td className="px-4 py-3 font-mono text-primary font-bold">{s.registration_number}</td>
+                            <td className="px-4 py-3 font-bold text-foreground">{s.student_name}</td>
+                            <td className="px-4 py-3 text-muted-foreground">{s.phone || '-'}</td>
+                            <td className="px-4 py-3">
+                              {s.counselor_name ? <Badge variant="indigo">{s.counselor_name}</Badge> : '-'}
+                            </td>
+                            <td className="px-4 py-3 text-right font-medium">{formatCurrency(s.total_fees)}</td>
+                            <td className="px-4 py-3 text-right font-bold text-rose-400">{formatCurrency(balance)}</td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedStudentView(s)}
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-muted hover:bg-muted-2 text-foreground border border-border"
+                              >
+                                Details
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            )}
+
+            {visibleBatches.length === 0 && unassignedStudents.length === 0 && (
+              <div className="p-12 text-center text-muted-foreground text-sm bg-card rounded-2xl border border-dashed border-border">
+                No students or batches found matching "{searchQuery}".
+              </div>
+            )}
+          </div>
         </div>
 
         {selectedStudentView && (
@@ -770,8 +1199,57 @@ export const AcademyDashboard: React.FC = () => {
                 <X className="w-4 h-4" />
               </button>
               
-              <h3 className="text-lg font-bold text-foreground pr-6">{selectedStudentView.student_name}</h3>
-              <p className="text-sm font-mono text-primary mt-1">{selectedStudentView.registration_number}</p>
+              <div className="flex items-start justify-between pr-6">
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">{selectedStudentView.student_name}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs font-mono text-primary font-bold">{selectedStudentView.registration_number}</span>
+                    <Badge variant={selectedStudentView.status === 'Discontinued' ? 'error' : 'success'} className="text-[10px] font-bold">
+                      {selectedStudentView.status || 'Active'}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Counselor Attribution in Panel */}
+              <div className="mt-3 p-2.5 rounded-lg bg-muted-2 border border-border flex items-center justify-between text-xs">
+                <span className="text-muted-foreground font-semibold">Enrolling Counselor:</span>
+                <span className="font-bold text-primary">{selectedStudentView.counselor_name || 'Direct / Admin'}</span>
+              </div>
+
+              {/* Admin Student Actions */}
+              {isAdminMode && (
+                <div className="mt-3 p-3 rounded-xl bg-card border border-border space-y-2">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Admin Management</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditStudentModal(selectedStudentView)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 transition-colors cursor-pointer"
+                    >
+                      Edit Details
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleStudentStatus(selectedStudentView)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer border ${
+                        selectedStudentView.status === 'Discontinued'
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20'
+                          : 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+                      }`}
+                    >
+                      {selectedStudentView.status === 'Discontinued' ? 'Reactivate' : 'Mark Discontinued'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteStudent(selectedStudentView)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/30 transition-colors cursor-pointer"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              )}
               
               <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 gap-4">
                 <div>
@@ -1008,6 +1486,130 @@ export const AcademyDashboard: React.FC = () => {
       </div>
 
       {/* --- MODALS --- */}
+      {/* UNIFIED ENROLLMENT MODAL */}
+      <UnifiedEnrollmentModal
+        isOpen={isUnifiedEnrollOpen}
+        onClose={() => setIsUnifiedEnrollOpen(false)}
+        targetBatch={targetBatchForEnroll}
+        allBatches={batches}
+        counselorsList={staffList.filter(s => (s.designation || '').toLowerCase().includes('counselor'))}
+        staffList={staffList}
+        activeStaff={activeStaff}
+        isAdminMode={isAdminMode}
+        onSuccess={() => fetchAcademyData()}
+      />
+
+      {/* ADMIN EDIT STUDENT MODAL */}
+      {isEditStudentModalOpen && editingStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <Card variant="glass" className="w-full max-w-md p-6 border-border shadow-2xl relative">
+            <button
+              onClick={() => setIsEditStudentModalOpen(false)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-base font-black text-foreground mb-1">Edit Student Details</h3>
+            <p className="text-xs text-muted-foreground mb-4">Update registration record, package fee, or assigned counselor.</p>
+
+            <form onSubmit={handleSaveEditStudent} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase mb-1">Student Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editStudentForm.name}
+                  onChange={(e) => setEditStudentForm({ ...editStudentForm, name: e.target.value })}
+                  className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-muted-foreground uppercase mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editStudentForm.phone}
+                    onChange={(e) => setEditStudentForm({ ...editStudentForm, phone: e.target.value })}
+                    className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-muted-foreground uppercase mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={editStudentForm.email}
+                    onChange={(e) => setEditStudentForm({ ...editStudentForm, email: e.target.value })}
+                    className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase mb-1">Package Fee (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={editStudentForm.total_fees}
+                  onChange={(e) => setEditStudentForm({ ...editStudentForm, total_fees: e.target.value })}
+                  className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase mb-1">Assigned Batch</label>
+                <select
+                  value={editStudentForm.batch_id}
+                  onChange={(e) => setEditStudentForm({ ...editStudentForm, batch_id: e.target.value })}
+                  className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary"
+                >
+                  {batches.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.batch_name} ({b.batch_type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase mb-1">Enrolling Counselor</label>
+                <select
+                  value={editStudentForm.counselor_id}
+                  onChange={(e) => setEditStudentForm({ ...editStudentForm, counselor_id: e.target.value })}
+                  className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary"
+                >
+                  <option value="">-- Direct / Admin --</option>
+                  {staffList.filter(s => (s.designation || '').toLowerCase().includes('counselor')).map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.full_name} ({c.designation})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="pt-3 border-t border-border flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditStudentModalOpen(false)}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-lg text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
 
       {/* 1. Create Batch Modal */}
       {isBatchModalOpen && (

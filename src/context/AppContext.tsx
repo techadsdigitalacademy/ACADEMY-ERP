@@ -155,6 +155,33 @@ const mergeRealtimeRow = <T extends { id?: any }>(
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+
+interface LocalPunchData {
+  punch_in?: string;
+  punch_out?: string;
+  status?: string;
+  selfie_url?: string;
+  lat?: number;
+  lng?: number;
+}
+
+const getStoredPunch = (staffId: string, dateStr: string): LocalPunchData | null => {
+  try {
+    const raw = localStorage.getItem(`staff_punch_${staffId}_${dateStr}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const saveStoredPunch = (staffId: string, dateStr: string, data: Partial<LocalPunchData>) => {
+  try {
+    const existing = getStoredPunch(staffId, dateStr) || {};
+    const updated = { ...existing, ...data };
+    localStorage.setItem(`staff_punch_${staffId}_${dateStr}`, JSON.stringify(updated));
+  } catch {}
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeStaff, setActiveStaff] = useState<Staff | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -308,11 +335,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         }
 
-        const normalized = attDataList.map((d: any) => ({
-          ...d,
-          status: (d.status || 'present').toUpperCase(),
-          punch_in: d.punch_in || (d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
-        }));
+        const normalized = attDataList.map((d: any) => {
+          const stored = getStoredPunch(d.staff_id, d.attendance_date);
+          return {
+            ...d,
+            status: (stored?.status || d.status || 'present').toUpperCase(),
+            punch_in: stored?.punch_in || d.punch_in || (d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00'),
+            punch_out: stored?.punch_out || d.punch_out || undefined,
+            selfie_url: stored?.selfie_url || d.selfie_url || undefined,
+            lat: stored?.lat !== undefined ? stored.lat : d.lat,
+            lng: stored?.lng !== undefined ? stored.lng : d.lng
+          };
+        });
         setAttendance(normalized as Attendance[]);
       } catch (e) {
         setAttendance([]);
@@ -581,7 +615,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'attendance' },
+        { event: '*', schema: 'public', table: 'staff_attendance' },
         (payload) => {
           invalidateTables('attendance');
           // This array is what todayAttendance derives from, so it is the one
@@ -988,48 +1022,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
 
-    if (todayAttendance) return;
+    if (todayAttendance?.punch_in) return;
 
-    const dbStatus = (status || 'present').toLowerCase();
-    let savedRecord: any = null;
+    // Database check constraint strictly enforces: status IN ('present', 'absent', 'leave')
+    // Always store 'present' in DB. The detailed status (LATE, HALF_DAY) is preserved in stored metadata.
+    const dbStatus = 'present';
+    const displayStatus = (status || 'PRESENT').toUpperCase();
 
-    const fullPayload = {
-      staff_id: activeStaff.id,
-      attendance_date: todayStr,
+    saveStoredPunch(activeStaff.id, todayStr, {
       punch_in: timeStr,
-      selfie_url: selfieUrl || null,
-      lat: (lat !== null && lat !== undefined) ? lat : null,
-      lng: (lng !== null && lng !== undefined) ? lng : null,
-      status: dbStatus
-    };
+      status: displayStatus,
+      selfie_url: selfieUrl || activeStaff.avatar_url,
+      lat: lat ?? undefined,
+      lng: lng ?? undefined
+    });
+
+    let savedRecord: any = null;
     const minimalPayload = {
       staff_id: activeStaff.id,
       attendance_date: todayStr,
       status: dbStatus
     };
 
-    // 1. Route directly through secure admin proxy first (service role key bypasses RLS permanently)
     try {
-      let proxyRes = await fetch('/supabase-admin/rest/v1/attendance', {
+      // 1. Route directly through secure admin proxy to staff_attendance table
+      const proxyRes = await fetch('/supabase-admin/rest/v1/staff_attendance', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Prefer': 'return=representation'
         },
-        body: JSON.stringify([fullPayload])
+        body: JSON.stringify([minimalPayload])
       });
-
-      if (!proxyRes.ok) {
-        // Fallback to staff_attendance table via proxy
-        proxyRes = await fetch('/supabase-admin/rest/v1/staff_attendance', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify([minimalPayload])
-        });
-      }
 
       if (proxyRes.ok) {
         const proxyData = await proxyRes.json();
@@ -1038,30 +1062,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     } catch (proxyErr) {
-      console.warn('Admin proxy punch insert error:', proxyErr);
+      console.warn('Admin proxy staff_attendance insert notice:', proxyErr);
     }
 
-    // 2. Fallback to direct client if proxy was not reached (e.g. static production builds)
+    // 2. Direct Supabase fallback
     if (!savedRecord) {
       try {
-        const { data: attData, error: attErr } = await supabase
-          .from('attendance')
-          .insert(fullPayload)
+        const { data: saData } = await supabase
+          .from('staff_attendance')
+          .insert(minimalPayload)
           .select()
           .maybeSingle();
-
-        if (!attErr && attData) {
-          savedRecord = attData;
-        } else {
-          const { data: saData } = await supabase
-            .from('staff_attendance')
-            .insert(minimalPayload)
-            .select()
-            .maybeSingle();
-          if (saData) savedRecord = saData;
-        }
+        if (saData) savedRecord = saData;
       } catch (clientErr) {
-        console.warn('Direct client punch insert fallback notice:', clientErr);
+        console.warn('Direct client staff_attendance insert notice:', clientErr);
       }
     }
 
@@ -1070,71 +1084,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       staff_id: activeStaff.id,
       attendance_date: todayStr,
       punch_in: timeStr,
+      punch_out: undefined,
       selfie_url: selfieUrl || activeStaff.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256&auto=format&fit=crop',
-      lat: lat !== null && lat !== undefined ? lat : undefined,
-      lng: lng !== null && lng !== undefined ? lng : undefined,
-      status: (status || 'PRESENT').toUpperCase() as any
+      lat: lat ?? undefined,
+      lng: lng ?? undefined,
+      status: displayStatus as any
     };
 
-    setAttendance((prev) => [localRecord, ...prev]);
-    invalidateTables('attendance');
+    setAttendance((prev) => {
+      const filtered = prev.filter(a => !(a.staff_id === activeStaff.id && a.attendance_date === todayStr));
+      return [localRecord, ...filtered];
+    });
+    setTodayAttendance(localRecord);
+
     invalidateTables('staff_attendance');
     window.dispatchEvent(new CustomEvent('attendance_data_changed'));
   };
 
   const punchOut = async (status?: string) => {
     if (!activeStaff || !todayAttendance) return;
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
-    const dbStatus = status ? status.toLowerCase() : 'present';
+    const displayStatus = status ? status.toUpperCase() : (todayAttendance.status || 'PRESENT');
+
+    saveStoredPunch(activeStaff.id, todayStr, {
+      punch_out: timeStr,
+      status: displayStatus
+    });
 
     try {
-      let proxyPatch = await fetch(`/supabase-admin/rest/v1/attendance?id=eq.${todayAttendance.id}`, {
+      await fetch(`/supabase-admin/rest/v1/staff_attendance?id=eq.${todayAttendance.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ punch_out: timeStr, status: dbStatus })
-      });
-
-      if (!proxyPatch.ok) {
-        proxyPatch = await fetch(`/supabase-admin/rest/v1/staff_attendance?id=eq.${todayAttendance.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: dbStatus })
-        });
-      }
-
-      if (!proxyPatch.ok) {
-        const { error } = await supabase
-          .from('attendance')
-          .update({ punch_out: timeStr, status: dbStatus })
-          .eq('id', todayAttendance.id);
-
-        if (error) {
-          await supabase
-            .from('staff_attendance')
-            .update({ status: dbStatus })
-            .eq('id', todayAttendance.id);
-        }
-      }
+        body: JSON.stringify({ status: 'present' })
+      }).catch(() => {});
     } catch (err) {
       console.warn('Punch out update notice:', err);
     }
 
     setAttendance((prev) =>
       prev.map((item) =>
-        item.id === todayAttendance.id
+        item.id === todayAttendance.id || (item.staff_id === activeStaff.id && item.attendance_date === todayStr)
           ? {
               ...item,
               punch_out: timeStr,
-              status: status ? (status.toUpperCase() as any) : item.status
+              status: displayStatus as any
             }
           : item
       )
     );
 
-    invalidateTables('attendance');
+    setTodayAttendance((prev) => prev ? {
+      ...prev,
+      punch_out: timeStr,
+      status: displayStatus as any
+    } : null);
+
     invalidateTables('staff_attendance');
     window.dispatchEvent(new CustomEvent('attendance_data_changed'));
   };
+
 
   return (
     <AppContext.Provider

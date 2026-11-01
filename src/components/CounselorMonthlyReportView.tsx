@@ -22,6 +22,7 @@ export interface CounselorMonthlyReportViewProps {
   counselorId?: string; // If 'all' or undefined, shows all counselors for Admin
   isAdminView?: boolean;
   activeStaff?: any;
+  selectedMonth?: string;
   students?: any[];
   batches?: any[];
   installments?: any[];
@@ -35,6 +36,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
   counselorId = 'all',
   isAdminView = false,
   activeStaff,
+  selectedMonth: propSelectedMonth,
   students = [],
   batches = [],
   installments = [],
@@ -44,7 +46,13 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
   onViewSlip
 }) => {
   const currentMonthStr = useMemo(() => new Date().toISOString().substring(0, 7), []);
-  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
+  const [selectedMonth, setSelectedMonth] = useState<string>(propSelectedMonth || currentMonthStr);
+
+  useEffect(() => {
+    if (propSelectedMonth && propSelectedMonth !== selectedMonth) {
+      setSelectedMonth(propSelectedMonth);
+    }
+  }, [propSelectedMonth]);
   const [selectedCounselor, setSelectedCounselor] = useState<string>(counselorId);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeReportTab, setActiveReportTab] = useState<'admissions' | 'collections'>('admissions');
@@ -242,7 +250,12 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
   // Aggregate Metrics for Selected View
   const totalRegistrations = monthStudents.length;
   const totalPackageBooked = monthStudents.reduce((sum, s) => sum + Number(s.total_fees || s.total_fee || 0), 0);
-  const totalCollections = monthCollections.reduce((sum, c) => sum + Number(c.amount_paid || c.amount || 0), 0);
+  const collectionsSum = monthCollections.reduce((sum, c) => sum + Number(c.amount_paid || c.amount || 0), 0);
+  const studentsInitialPaidSum = monthStudents.reduce((sum, s) => {
+    const hasCollection = monthCollections.some((c: any) => c.student_id === s.id);
+    return sum + (hasCollection ? 0 : Number(s.paid_fee || 0));
+  }, 0);
+  const totalCollections = collectionsSum + studentsInitialPaidSum;
   const totalPendingBalance = Math.max(0, totalPackageBooked - totalCollections);
   const collectionConversionRate = totalPackageBooked > 0 ? Math.round((totalCollections / totalPackageBooked) * 100) : 0;
 
@@ -264,7 +277,12 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
 
       const enrolledCount = cStudents.length;
       const bookedAmount = cStudents.reduce((sum, s) => sum + Number(s.total_fees || s.total_fee || 0), 0);
-      const collectedAmount = cCollections.reduce((sum, inst) => sum + Number(inst.amount_paid || inst.amount || 0), 0);
+      const cCollSum = cCollections.reduce((sum, inst) => sum + Number(inst.amount_paid || inst.amount || 0), 0);
+      const cExtraPaid = cStudents.reduce((sum, s) => {
+        const has = cCollections.some((inst: any) => inst.student_id === s.id);
+        return sum + (has ? 0 : Number(s.paid_fee || 0));
+      }, 0);
+      const collectedAmount = cCollSum + cExtraPaid;
       const pendingAmount = Math.max(0, bookedAmount - collectedAmount);
       const rate = bookedAmount > 0 ? Math.round((collectedAmount / bookedAmount) * 100) : 0;
 
@@ -581,8 +599,9 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
                   {filteredStudents.map((s: any) => {
                     const batch = effectiveBatches.find((b: any) => b.id === s.batch_id);
                     const counselor = effectiveStaffList.find((st: any) => st.id === s.counselor_id);
-                    const studentInstallments = installments.filter((i: any) => i.student_id === s.id);
-                    const paid = studentInstallments.reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
+                    const studentInstallments = effectiveInstallments.filter((i: any) => i.student_id === s.id);
+                    const paidFromInstallments = studentInstallments.reduce((sum, i) => sum + Number(i.amount_paid || i.amount || 0), 0);
+                    const paid = Math.max(paidFromInstallments, Number(s.paid_fee || 0));
                     const total = Number(s.total_fees || s.total_fee || 0);
                     const balance = Math.max(0, total - paid);
                     const isFullyPaid = paid >= total && total > 0;

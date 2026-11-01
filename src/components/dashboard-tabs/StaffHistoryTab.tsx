@@ -32,6 +32,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
   const [profileExpenses, setProfileExpenses] = useState<any[]>([]);
   const [profileTarget, setProfileTarget] = useState<number>(0);
   const [monthTargetsMap, setMonthTargetsMap] = useState<{ [staffId: string]: number }>({});
+  const [counselorStatsMap, setCounselorStatsMap] = useState<{ [counselorId: string]: { achievedAmount: number; registrationsCount: number; bookedAmount: number } }>({});
 
   const [editingSale, setEditingSale] = useState<any | null>(null);
   const [deletingSale, setDeletingSale] = useState<any | null>(null);
@@ -250,6 +251,49 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
         );
 
         setMonthTargetsMap(map);
+
+        // Fetch counselor metrics for active month
+        try {
+          const [sRes, fRes] = await Promise.all([
+            fetch('/supabase-admin/rest/v1/students?select=*').then(r => r.ok ? r.json() : []).catch(() => []),
+            fetch('/supabase-admin/rest/v1/fee_collections?select=*').then(r => r.ok ? r.json() : []).catch(() => [])
+          ]);
+
+          const cMap: { [counselorId: string]: { achievedAmount: number; registrationsCount: number; bookedAmount: number } } = {};
+          
+          counselorTeam.forEach((c: any) => {
+            const cStudents = (sRes || []).filter((s: any) => {
+              const dStr = s.enrollment_date || (s.created_at ? s.created_at.split('T')[0] : '');
+              return dStr.startsWith(activeMonthStr) && s.counselor_id === c.id;
+            });
+
+            const cFees = (fRes || []).filter((f: any) => {
+              const dStr = f.payment_date || (f.created_at ? f.created_at.split('T')[0] : '');
+              if (!dStr.startsWith(activeMonthStr)) return false;
+              if (f.collected_by === c.id) return true;
+              const matchedStudent = (sRes || []).find((st: any) => st.id === f.student_id);
+              return matchedStudent?.counselor_id === c.id;
+            });
+
+            const bookedAmount = cStudents.reduce((sum: number, s: any) => sum + Number(s.total_fee || 0), 0);
+            const feesSum = cFees.reduce((sum: number, f: any) => sum + Number(f.amount || 0), 0);
+            const extraDeposit = cStudents.reduce((sum: number, s: any) => {
+              const hasFee = cFees.some((f: any) => f.student_id === s.id);
+              return sum + (hasFee ? 0 : Number(s.paid_fee || 0));
+            }, 0);
+            const achievedAmount = feesSum + extraDeposit;
+
+            cMap[c.id] = {
+              achievedAmount,
+              registrationsCount: cStudents.length,
+              bookedAmount
+            };
+          });
+
+          setCounselorStatsMap(cMap);
+        } catch (cErr) {
+          console.warn('Counselor stats resolution error:', cErr);
+        }
       } catch (err) {
         console.warn('Grid targets resolution info:', err);
       }
@@ -267,7 +311,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
       const isSales = d.includes('sales') || isCounselor;
 
       if (isCounselor) {
-        setProfileDetailTab('leads');
+        setProfileDetailTab('sales');
       } else if (isOwner || isSales) {
         setProfileDetailTab('sales');
       } else if (isTutor) {
@@ -822,6 +866,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                     counselorId={selectedProfile?.id}
                     isAdminView={true}
                     activeStaff={selectedProfile}
+                    selectedMonth={activeMonthStr}
                     onViewSlip={(slip) => setPreviewSlipUrl(slip)}
                   />
                   <SelfieLightboxModal
@@ -1332,7 +1377,8 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4.5">
               {counselorTeam.map(member => {
                 const cardTarget = monthTargetsMap[member.id] ?? resolveMonthTarget(member, activeMonthStr);
-                const achievedAmt = member.achievedAmount || 0;
+                const cStat = counselorStatsMap[member.id] || { achievedAmount: 0, registrationsCount: 0, bookedAmount: 0 };
+                const achievedAmt = cStat.achievedAmount || member.achievedAmount || 0;
                 const targetPct = cardTarget > 0 ? Math.min(Math.round((achievedAmt / cardTarget) * 100), 100) : 0;
                 const avatarSrc = member.avatar_url || getAvatarUrl(member.full_name, member.gender);
 
@@ -1401,13 +1447,13 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                       </div>
 
                       <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
-                        <span className="text-[9px] font-bold text-primary uppercase tracking-wider">Deals Logged</span>
-                        <span className="text-xs font-black text-primary mt-1">{member.salesWorksCount || 0} Deals</span>
+                        <span className="text-[9px] font-bold text-primary uppercase tracking-wider">Registrations</span>
+                        <span className="text-xs font-black text-primary mt-1">{cStat.registrationsCount} Admitted</span>
                       </div>
 
                       <div className="bg-muted dark:bg-muted-2 p-2.5 rounded-md border border-border dark:border-border flex flex-col justify-between">
-                        <span className="text-[9px] font-bold text-success uppercase tracking-wider">Attendance</span>
-                        <span className="text-xs font-black text-success mt-1">{member.attendancePCount || 0}/{member.attendanceTotalCount || 0} Days</span>
+                        <span className="text-[9px] font-bold text-indigo-400 uppercase tracking-wider">Course Value</span>
+                        <span className="text-xs font-black text-indigo-400 mt-1">{formatCurrency(cStat.bookedAmount)}</span>
                       </div>
                     </div>
                   </div>

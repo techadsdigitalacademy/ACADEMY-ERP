@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
+import { UnifiedEnrollmentModal } from './UnifiedEnrollmentModal';
 import { Card } from './Card';
 import { Badge } from './Badge';
 import { Button } from './Button';
@@ -90,8 +91,8 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
   onNavigateToStudent,
   onNavigateToAttendance,
 }) => {
-  const { isAdminMode } = useApp();
-  const dbClient = supabase;
+  const { isAdminMode, activeStaff } = useApp();
+    const dbClient = supabase;
 
   // Data States
   const [batches, setBatches] = useState<BatchItem[]>([]);
@@ -129,18 +130,8 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
   // Modal: Quick Enroll Student
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
   const [targetBatchForEnroll, setTargetBatchForEnroll] = useState<BatchItem | null>(null);
-  const [enrollForm, setEnrollForm] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    total_fee: '',
-    paid_fee: '',
-    counselor_id: '',
-    payment_mode: 'online'
-  });
-  const [isSubmittingEnroll, setIsSubmittingEnroll] = useState(false);
-  const [enrollError, setEnrollError] = useState<string | null>(null);
 
+  
   // Fetch all live data from Supabase
   const loadData = async (showRefreshIndicator = false) => {
     if (showRefreshIndicator) setIsRefreshing(true);
@@ -253,7 +244,11 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
           if (sRes.ok) stuList = await sRes.json();
         } catch (_) {}
       }
-      setStudents((stuList || []) as StudentItem[]);
+      const formattedStudents: StudentItem[] = (stuList || []).map((s: any) => ({
+        ...s,
+        counselor_name: s.counselor_id ? staffMap.get(s.counselor_id) || 'Assigned Counselor' : 'Direct / Admin'
+      }));
+      setStudents(formattedStudents);
 
       // 4. Fetch Fee Collections
       let feeList: any[] = [];
@@ -518,22 +513,39 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
 
   const handleUpdateBatchStatus = async (batchId: string, newStatus: 'upcoming' | 'running' | 'completed') => {
     try {
-      const { error } = await supabase
-        .from('batches')
-        .update({ status: newStatus })
-        .eq('id', batchId);
-      if (error) {
-        const res = await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batchId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: newStatus })
-        });
-        if (!res.ok) throw error;
+      // Immediate optimistic update so batch moves between sections instantly
+      setBatches(prev => prev.map(b => b.id === batchId ? { ...b, status: newStatus } : b));
+
+      const res = await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batchId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!res.ok) {
+        const { error } = await supabase
+          .from('batches')
+          .update({ status: newStatus })
+          .eq('id', batchId);
+        if (error) throw error;
       }
+
       await loadData(true);
       window.dispatchEvent(new CustomEvent('batches_data_changed'));
+
+      if (newStatus === 'running') {
+        const targetB = batches.find(b => b.id === batchId);
+        console.log(`Batch "${targetB?.batch_name || 'Selected Batch'}" has started and moved to Active Batches.`);
+        setTimeout(() => {
+          document.getElementById('active-batches-section')?.scrollIntoView({ behavior: 'smooth' });
+        }, 150);
+      }
     } catch (err: any) {
       alert(`Failed to update status: ${err.message}`);
+      await loadData(true);
     }
   };
 
@@ -548,12 +560,12 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
     }
 
     try {
-      const { error } = await supabase.from('batches').delete().eq('id', batchId);
-      if (error) {
-        const res = await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batchId}`, {
-          method: 'DELETE'
-        });
-        if (!res.ok) throw error;
+      const res = await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batchId}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) {
+        const { error } = await supabase.from('batches').delete().eq('id', batchId);
+        if (error) throw error;
       }
       await loadData(true);
       window.dispatchEvent(new CustomEvent('batches_data_changed'));
@@ -565,106 +577,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
   // Quick Enroll Student Handler
   const handleOpenEnrollModal = (batch: BatchItem) => {
     setTargetBatchForEnroll(batch);
-    setEnrollForm({
-      name: '',
-      phone: '',
-      email: '',
-      total_fee: String(batch.fee_amount || 25000),
-      paid_fee: '0',
-      counselor_id: (batch.assigned_counselors && batch.assigned_counselors[0]) || counselorsList[0]?.id || staffList[0]?.id || '',
-      payment_mode: 'online'
-    });
-    setEnrollError(null);
     setIsEnrollModalOpen(true);
-  };
-
-  const handleSaveStudentEnroll = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!targetBatchForEnroll) return;
-    if (!enrollForm.name.trim()) {
-      setEnrollError('Student Name is required.');
-      return;
-    }
-
-    setIsSubmittingEnroll(true);
-    setEnrollError(null);
-
-    try {
-      // Auto-generate student code e.g. STU-2026-X
-      const codeNum = String(students.length + 101).padStart(3, '0');
-      const studentCode = `STU-${new Date().getFullYear()}-${codeNum}`;
-
-      const totalFee = parseFloat(enrollForm.total_fee) || Number(targetBatchForEnroll.fee_amount) || 0;
-      const paidFee = parseFloat(enrollForm.paid_fee) || 0;
-
-      // 1. Insert into students table
-      let newStudent: any = null;
-      const studentPayload = {
-        student_id_code: studentCode,
-        name: enrollForm.name.trim(),
-        phone: enrollForm.phone.trim() || null,
-        email: enrollForm.email.trim() || null,
-        batch_id: targetBatchForEnroll.id,
-        counselor_id: enrollForm.counselor_id || null,
-        total_fee: totalFee,
-        paid_fee: paidFee
-      };
-
-      const { data: sData, error: sErr } = await dbClient
-        .from('students')
-        .insert([studentPayload])
-        .select();
-
-      if (!sErr && sData && sData.length > 0) {
-        newStudent = sData;
-      } else {
-        // Fallback to proxy
-        const res = await fetch('/supabase-admin/rest/v1/students', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify([studentPayload])
-        });
-        if (res.ok) {
-          newStudent = await res.json();
-        } else {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || sErr?.message || 'Failed to enroll student.');
-        }
-      }
-
-      // 2. If student paid initial deposit, log to fee_collections table
-      if (paidFee > 0 && newStudent && newStudent[0]) {
-        const curMonth = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
-        const feePayload = {
-          student_id: newStudent[0].id,
-          batch_id: targetBatchForEnroll.id,
-          amount: paidFee,
-          payment_mode: enrollForm.payment_mode, // 'cash', 'bank_transfer', or 'online'
-          installment_month: curMonth,
-          notes: 'Initial admission fee payment'
-        };
-        const { error: fErr } = await dbClient.from('fee_collections').insert([feePayload]);
-        if (fErr) {
-          await fetch('/supabase-admin/rest/v1/fee_collections', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify([feePayload])
-          });
-        }
-      }
-
-      setIsEnrollModalOpen(false);
-      await loadData(true);
-      window.dispatchEvent(new CustomEvent('students_data_changed'));
-    } catch (err: any) {
-      console.error('Failed to enroll student:', err);
-      setEnrollError(err.message || 'Failed to enroll student.');
-    } finally {
-      setIsSubmittingEnroll(false);
-    }
   };
 
   const toggleCounselorSelection = (staffId: string) => {
@@ -1092,26 +1005,28 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* 5. RUNNING BATCHES SECTION (Requirement 4: Stats like students, fees, att) */}
+      {/* 5. ACTIVE BATCHES SECTION (High energy distinct theme & styling)           */}
       {/* ========================================================================= */}
       {(statusFilter === 'all' || statusFilter === 'running') && (
-        <div className="space-y-4 pt-4">
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <div className="flex items-center gap-2.5">
-              <span className="relative flex h-3 w-3">
+        <div className="space-y-5 pt-4 animate-fade-in" id="active-batches-section">
+          <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3.5 bg-gradient-to-r from-emerald-500/[0.08] via-transparent to-transparent p-3.5 rounded-2xl border border-emerald-500/20">
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-3.5 w-3.5 items-center justify-center">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-              </span>
-              <h3 className="text-lg font-black uppercase tracking-wider text-foreground flex items-center gap-2">
-                Running Batches — Active Classes
-              </h3>
-              <Badge variant="success" className="text-xs font-bold">
-                {runningBatches.length} In Session
-              </Badge>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </div>
+              <div>
+                <h3 className="text-lg font-black uppercase tracking-wider text-foreground flex items-center gap-2">
+                  Active Batches — In Session
+                </h3>
+                <p className="text-xs text-emerald-400/90 font-medium">
+                  Live classroom sessions, active student attendance registers & fee milestones
+                </p>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground hidden sm:block">
-              Real-time attendance & fee collection performance
-            </p>
+            <Badge variant="success" className="text-xs font-extrabold px-3 py-1 shadow-sm bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+              {runningBatches.length} Batches Active
+            </Badge>
           </div>
 
           {runningBatches.length === 0 ? (
@@ -1140,10 +1055,10 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                   <Card
                     key={batch.id}
                     variant="glass"
-                    className="p-5 border-border hover:border-emerald-500/40 transition-all duration-300 relative flex flex-col justify-between overflow-hidden shadow-lg group hover:shadow-emerald-500/5"
+                    className="p-5 border-emerald-500/30 bg-gradient-to-br from-emerald-500/[0.06] via-card to-card hover:border-emerald-500/70 transition-all duration-300 relative flex flex-col justify-between overflow-hidden shadow-xl shadow-emerald-500/5 group"
                   >
-                    {/* Top Decorative Border */}
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400" />
+                    {/* Vibrant Active Neon Top Border */}
+                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 shadow-sm shadow-emerald-500/50" />
 
                     <div>
                       {/* Batch Title & Info */}
@@ -1614,160 +1529,17 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       {/* ========================================================================= */}
       {/* 8. QUICK ENROLL STUDENT MODAL                                             */}
       {/* ========================================================================= */}
-      {isEnrollModalOpen && targetBatchForEnroll && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-          <Card variant="glass" className="w-full max-w-md p-6 border-border shadow-2xl relative">
-            <button
-              onClick={() => setIsEnrollModalOpen(false)}
-              className="absolute top-5 right-5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="mb-4">
-              <h2 className="text-xl font-black text-foreground flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-primary" />
-                Enroll Student
-              </h2>
-              <p className="text-xs text-primary font-semibold mt-1">
-                Batch: {targetBatchForEnroll.batch_name} ({targetBatchForEnroll.course_name})
-              </p>
-            </div>
-
-            {enrollError && (
-              <div className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{enrollError}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSaveStudentEnroll} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                  Student Full Name <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  required
-                  type="text"
-                  placeholder="e.g. Mohammed Farhan"
-                  value={enrollForm.name}
-                  onChange={e => setEnrollForm({ ...enrollForm, name: e.target.value })}
-                  className="w-full bg-muted/60 border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                    Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="9876543210"
-                    value={enrollForm.phone}
-                    onChange={e => setEnrollForm({ ...enrollForm, phone: e.target.value })}
-                    className="w-full bg-muted/60 border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="student@gmail.com"
-                    value={enrollForm.email}
-                    onChange={e => setEnrollForm({ ...enrollForm, email: e.target.value })}
-                    className="w-full bg-muted/60 border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                    Total Package Fee (₹)
-                  </label>
-                  <input
-                    required
-                    type="number"
-                    min="0"
-                    value={enrollForm.total_fee}
-                    onChange={e => setEnrollForm({ ...enrollForm, total_fee: e.target.value })}
-                    className="w-full bg-muted/60 border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                    Initial Deposit Paid (₹)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={enrollForm.paid_fee}
-                    onChange={e => setEnrollForm({ ...enrollForm, paid_fee: e.target.value })}
-                    className="w-full bg-muted/60 border border-border rounded-xl px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none font-mono text-emerald-400 font-bold"
-                  />
-                </div>
-              </div>
-
-              {parseFloat(enrollForm.paid_fee) > 0 && (
-                <div>
-                  <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                    Deposit Payment Mode
-                  </label>
-                  <select
-                    value={enrollForm.payment_mode}
-                    onChange={e => setEnrollForm({ ...enrollForm, payment_mode: e.target.value })}
-                    className="w-full bg-muted/60 border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
-                  >
-                    <option value="online">Online / UPI</option>
-                    <option value="cash">Cash</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
-                  Enrolling Counselor
-                </label>
-                <select
-                  value={enrollForm.counselor_id}
-                  onChange={e => setEnrollForm({ ...enrollForm, counselor_id: e.target.value })}
-                  className="w-full bg-muted/60 border border-border rounded-xl px-3.5 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
-                >
-                  <option value="">-- None / Direct Admission --</option>
-                  {(counselorsList.length > 0 ? counselorsList : staffList).map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.full_name} ({s.designation || 'Counselor'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="pt-3 flex items-center justify-end gap-3 border-t border-border">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setIsEnrollModalOpen(false)}
-                  disabled={isSubmittingEnroll}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isSubmittingEnroll}
-                  className="bg-primary text-primary-foreground font-bold px-6"
-                >
-                  {isSubmittingEnroll ? 'Enrolling...' : 'Confirm Admission'}
-                </Button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
+      <UnifiedEnrollmentModal
+        isOpen={isEnrollModalOpen}
+        onClose={() => setIsEnrollModalOpen(false)}
+        targetBatch={targetBatchForEnroll}
+        allBatches={batches}
+        counselorsList={counselorsList}
+        staffList={staffList}
+        activeStaff={activeStaff}
+        isAdminMode={isAdminMode}
+        onSuccess={() => loadData(true)}
+      />
 
     </div>
   );
