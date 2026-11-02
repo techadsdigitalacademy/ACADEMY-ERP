@@ -120,3 +120,4 @@ export async function enrichAttendanceRecords(records: any[]): Promise<any[]> {
     })
   );
 }
+

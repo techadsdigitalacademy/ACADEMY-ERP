@@ -96,7 +96,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
   onNavigateToAttendance,
 }) => {
   const { isAdminMode, activeStaff } = useApp();
-    const dbClient = supabase;
+  const dbClient = supabase;
 
   // Data States
   const [batches, setBatches] = useState<BatchItem[]>([]);
@@ -142,7 +142,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
   // Modal: Historical Data Migration / Import
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
-  
+
   // Fetch all live data from Supabase
   const loadData = async (showRefreshIndicator = false) => {
     if (showRefreshIndicator) setIsRefreshing(true);
@@ -253,7 +253,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
         try {
           const sRes = await fetch('/supabase-admin/rest/v1/students?select=*&order=created_at.desc');
           if (sRes.ok) stuList = await sRes.json();
-        } catch (_) {}
+        } catch (_) { }
       }
       const formattedStudents: StudentItem[] = (stuList || []).map((s: any) => ({
         ...s,
@@ -272,7 +272,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
         try {
           const fRes = await fetch('/supabase-admin/rest/v1/fee_collections?select=*');
           if (fRes.ok) feeList = await fRes.json();
-        } catch (_) {}
+        } catch (_) { }
       }
       setFeeCollections((feeList || []) as FeeCollectionItem[]);
 
@@ -576,9 +576,9 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
 
     try {
       // Cascade delete fee collections, attendance, and students for this dummy batch
-      await fetch(`/supabase-admin/rest/v1/fee_collections?batch_id=eq.${batchId}`, { method: 'DELETE' }).catch(() => {});
-      await fetch(`/supabase-admin/rest/v1/student_attendance?batch_id=eq.${batchId}`, { method: 'DELETE' }).catch(() => {});
-      await fetch(`/supabase-admin/rest/v1/students?batch_id=eq.${batchId}`, { method: 'DELETE' }).catch(() => {});
+      await fetch(`/supabase-admin/rest/v1/fee_collections?batch_id=eq.${batchId}`, { method: 'DELETE' }).catch(() => { });
+      await fetch(`/supabase-admin/rest/v1/student_attendance?batch_id=eq.${batchId}`, { method: 'DELETE' }).catch(() => { });
+      await fetch(`/supabase-admin/rest/v1/students?batch_id=eq.${batchId}`, { method: 'DELETE' }).catch(() => { });
 
       const res = await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batchId}`, {
         method: 'DELETE'
@@ -630,7 +630,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
 
   return (
     <div className="space-y-8 animate-fade-in pb-16">
-      
+
       {/* 1. Header Banner & Quick Action */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-card via-card/90 to-card/70 border border-border p-6 rounded-2xl shadow-xl backdrop-blur-md">
         <div className="space-y-1">
@@ -689,7 +689,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
 
       {/* 2. Aggregate KPI Overview Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        
+
         {/* Total Batches Card */}
         <Card variant="glass" className="p-4 border-border hover:border-primary/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-2">
@@ -919,13 +919,12 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                           <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
                             <Users className="w-3 h-3 text-primary" /> Seat Availability
                           </span>
-                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
-                            isFull 
-                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' 
-                              : isAlmostFull 
-                              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' 
-                              : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                          }`}>
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${isFull
+                              ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                              : isAlmostFull
+                                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                                : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            }`}>
                             {isFull ? 'FULL' : `${stats.fillPercentage}% Filled`}
                           </span>
                         </div>
@@ -949,11 +948,10 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                           </div>
 
                           {/* Balance Seats */}
-                          <div className={`p-2 rounded-lg border ${
-                            stats.balanceSeats === 0 
-                              ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' 
+                          <div className={`p-2 rounded-lg border ${stats.balanceSeats === 0
+                              ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
                               : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-                          }`}>
+                            }`}>
                             <span className="text-[10px] font-bold uppercase block opacity-80">Balance</span>
                             <span className="text-xl font-black">
                               {stats.balanceSeats}
@@ -965,13 +963,12 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                         <div className="space-y-1">
                           <div className="w-full bg-muted-2 rounded-full h-2.5 overflow-hidden p-0.5 border border-border">
                             <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                isFull 
-                                  ? 'bg-rose-500' 
-                                  : isAlmostFull 
-                                  ? 'bg-gradient-to-r from-amber-500 to-orange-500' 
-                                  : 'bg-gradient-to-r from-emerald-500 to-teal-400'
-                              }`}
+                              className={`h-full rounded-full transition-all duration-500 ${isFull
+                                  ? 'bg-rose-500'
+                                  : isAlmostFull
+                                    ? 'bg-gradient-to-r from-amber-500 to-orange-500'
+                                    : 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                                }`}
                               style={{ width: `${Math.max(4, Math.min(100, stats.fillPercentage))}%` }}
                             />
                           </div>
@@ -1022,11 +1019,10 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                         size="sm"
                         onClick={() => handleOpenEnrollModal(batch)}
                         disabled={isFull}
-                        className={`text-xs font-bold flex items-center gap-1.5 rounded-lg ${
-                          isFull 
-                            ? 'opacity-50 cursor-not-allowed bg-muted' 
+                        className={`text-xs font-bold flex items-center gap-1.5 rounded-lg ${isFull
+                            ? 'opacity-50 cursor-not-allowed bg-muted'
                             : 'bg-primary text-primary-foreground shadow-md'
-                        }`}
+                          }`}
                       >
                         <UserPlus className="w-3.5 h-3.5" />
                         <span>{isFull ? 'Batch Full' : 'Enroll Student'}</span>
@@ -1130,7 +1126,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                       {/* THREE STATS: Total Students, Fee Collections, Attendance */}
                       {/* ======================================================= */}
                       <div className="grid grid-cols-3 gap-3 my-4">
-                        
+
                         {/* 1. Total Students */}
                         <div className="p-3 rounded-xl bg-card/80 border border-border shadow-sm flex flex-col justify-between">
                           <div className="flex items-center justify-between text-muted-foreground mb-1">
@@ -1168,9 +1164,8 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                             <span className="text-[10px] font-bold uppercase tracking-wider">Attendance</span>
                             <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
                           </div>
-                          <div className={`text-2xl font-black ${
-                            stats.attendancePercentage >= 80 ? 'text-emerald-400' : stats.attendancePercentage >= 65 ? 'text-amber-400' : 'text-rose-400'
-                          }`}>
+                          <div className={`text-2xl font-black ${stats.attendancePercentage >= 80 ? 'text-emerald-400' : stats.attendancePercentage >= 65 ? 'text-amber-400' : 'text-rose-400'
+                            }`}>
                             {stats.attendancePercentage}%
                           </div>
                           <span className="text-[10px] text-muted-foreground mt-1">
@@ -1364,7 +1359,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
             )}
 
             <form onSubmit={handleSaveBatch} noValidate className="space-y-4">
-              
+
               {/* 1. Batch Name & 2. Course Name */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
@@ -1406,22 +1401,20 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                     <button
                       type="button"
                       onClick={() => setBatchForm({ ...batchForm, mode: 'offline' })}
-                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${
-                        batchForm.mode === 'offline'
+                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${batchForm.mode === 'offline'
                           ? 'bg-primary text-primary-foreground border-primary shadow-sm'
                           : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
-                      }`}
+                        }`}
                     >
                       <span>🏢 Offline</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setBatchForm({ ...batchForm, mode: 'online' })}
-                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${
-                        batchForm.mode === 'online'
+                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 ${batchForm.mode === 'online'
                           ? 'bg-purple-600 text-white border-purple-500 shadow-sm'
                           : 'bg-muted/40 border-border text-muted-foreground hover:text-foreground'
-                      }`}
+                        }`}
                     >
                       <span>🌐 Online</span>
                     </button>
@@ -1533,11 +1526,10 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                             type="button"
                             key={staff.id}
                             onClick={() => toggleCounselorSelection(staff.id)}
-                            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all ${
-                              isSelected
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all ${isSelected
                                 ? 'bg-primary/20 text-primary border-primary/40 font-bold shadow-sm'
                                 : 'bg-background border-border text-muted-foreground hover:text-foreground hover:border-primary/30'
-                            }`}
+                              }`}
                           >
                             <span className="w-3.5 h-3.5 rounded-full flex items-center justify-center border border-current text-[9px]">
                               {isSelected ? '✓' : '+'}

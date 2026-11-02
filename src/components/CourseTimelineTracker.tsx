@@ -71,3 +71,4 @@ export const CourseTimelineTracker: React.FC<CourseTimelineTrackerProps> = ({
     </div>
   );
 };
+
