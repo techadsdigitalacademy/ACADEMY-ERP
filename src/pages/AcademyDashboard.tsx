@@ -12,13 +12,12 @@ import { StudentAttendancePortal } from '../components/StudentAttendancePortal';
 import { UnifiedEnrollmentModal } from '../components/UnifiedEnrollmentModal';
 import { CounselorMonthlyReportView } from '../components/CounselorMonthlyReportView';
 import { CourseTimelineTracker } from '../components/CourseTimelineTracker';
-import { AcademyImportModal } from '../components/AcademyImportModal';
 import { 
   Users, BookOpen, UserPlus, GraduationCap, DollarSign,
   Wallet, Search, X,
   ArrowUpRight, Layers, UserCheck,
   Eye, UploadCloud, Sun, Moon, TrendingUp, RotateCcw,
-  Database, Trash2, PlayCircle
+  Trash2, PlayCircle, Download, FileText
 } from 'lucide-react';
 
 interface AcademyBatch {
@@ -47,6 +46,8 @@ interface AcademyStudent {
   phone: string;
   batch_id: string;
   total_fees: number;
+  paid_fee?: number;
+  enrollment_date?: string;
   status: string;
   created_at: string;
   batch?: AcademyBatch;
@@ -133,8 +134,6 @@ export const AcademyDashboard: React.FC = () => {
   const [activatingBatch, setActivatingBatch] = useState<AcademyBatch | null>(null);
   const [manualStartDate, setManualStartDate] = useState(new Date().toISOString().slice(0, 10));
 
-  // Historical Import Modal state
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   // Student Hub Layout & Filter
   const [studentViewLayout, setStudentViewLayout] = useState<'batch' | 'flat'>('batch');
@@ -690,6 +689,273 @@ export const AcademyDashboard: React.FC = () => {
     }
   };
 
+  // --- EXPORT FUNCTIONS FOR STUDENTS & ACADEMY OVERVIEW ---
+  const handleExportStudentsExcel = () => {
+    try {
+      const csvRows: any[][] = [];
+      csvRows.push([`Tech Ads ERP - Academy Students Directory`]);
+      csvRows.push([`Generated on: ${new Date().toLocaleDateString('en-IN')}`, `Total Enrolled: ${students.length}`]);
+      csvRows.push([]);
+      csvRows.push(['Reg. No', 'Student Name', 'Assigned Batch', 'Phone', 'Email', 'Counselor', 'Total Fees (INR)', 'Paid Amount (INR)', 'Balance Due (INR)', 'Status', 'Admission Date']);
+
+      const filteredExport = students.filter(s => {
+        if (studentStatusFilter === 'active') return s.status !== 'Discontinued' && s.status !== 'Completed';
+        if (studentStatusFilter === 'completed') return s.status === 'Completed';
+        if (studentStatusFilter === 'discontinued') return s.status === 'Discontinued';
+        return true;
+      });
+
+      filteredExport.forEach(s => {
+        const batch = batches.find(b => b.id === s.batch_id);
+        const counselor = staffList.find(staff => staff.id === s.counselor_id);
+        const sInst = installments.filter(i => i.student_id === s.id);
+        const paid = sInst.reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
+        const balance = s.status === 'Discontinued' ? 0 : Math.max(0, (s.total_fees || 0) - paid);
+
+        csvRows.push([
+          s.registration_number || s.id,
+          s.student_name,
+          batch?.batch_name || 'Unassigned',
+          s.phone || '-',
+          s.email || '-',
+          counselor?.full_name || 'Direct / Management',
+          s.total_fees || 0,
+          paid,
+          balance,
+          s.status || 'Active',
+          s.enrollment_date || (s.created_at ? s.created_at.slice(0, 10) : '-')
+        ]);
+      });
+
+      const BOM = "\uFEFF";
+      const csvContent = BOM + csvRows.map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Academy_Students_Directory_${new Date().toISOString().slice(0, 10)}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e: any) {
+      alert('Error exporting students to Excel: ' + e.message);
+    }
+  };
+
+  const handleExportStudentsPDF = () => {
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to export PDF');
+        return;
+      }
+
+      const filteredExport = students.filter(s => {
+        if (studentStatusFilter === 'active') return s.status !== 'Discontinued' && s.status !== 'Completed';
+        if (studentStatusFilter === 'completed') return s.status === 'Completed';
+        if (studentStatusFilter === 'discontinued') return s.status === 'Discontinued';
+        return true;
+      });
+
+      const rowsHtml = filteredExport.map(s => {
+        const batch = batches.find(b => b.id === s.batch_id);
+        const counselor = staffList.find(staff => staff.id === s.counselor_id);
+        const sInst = installments.filter(i => i.student_id === s.id);
+        const paid = sInst.reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
+        const balance = s.status === 'Discontinued' ? 0 : Math.max(0, (s.total_fees || 0) - paid);
+
+        return `
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px; font-family: monospace; font-weight: bold;">${s.registration_number || '-'}</td>
+            <td style="padding: 8px; font-weight: bold;">${s.student_name}</td>
+            <td style="padding: 8px;">${batch?.batch_name || '-'}</td>
+            <td style="padding: 8px;">${s.phone || '-'}</td>
+            <td style="padding: 8px;">${counselor?.full_name || 'Direct'}</td>
+            <td style="padding: 8px; text-align: right;">₹${(s.total_fees || 0).toLocaleString()}</td>
+            <td style="padding: 8px; text-align: right; color: #059669; font-weight: bold;">₹${paid.toLocaleString()}</td>
+            <td style="padding: 8px; text-align: right; color: ${balance > 0 ? '#e11d48' : '#64748b'}; font-weight: bold;">₹${balance.toLocaleString()}</td>
+            <td style="padding: 8px; text-align: center; font-weight: bold; color: ${s.status === 'Completed' ? '#9333ea' : s.status === 'Discontinued' ? '#e11d48' : '#059669'};">${s.status || 'Active'}</td>
+          </tr>
+        `;
+      }).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Academy Students Directory</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; }
+              h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
+              .metrics { display: flex; gap: 10px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
+              .metric-item { flex: 1; text-align: center; }
+              .metric-label { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+              .metric-val { font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+              th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+              th.center { text-align: center; }
+              th.right { text-align: right; }
+            </style>
+          </head>
+          <body>
+            <h1>Tech Ads ERP - Academy Students Directory</h1>
+            <p>Generated on: <strong>${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong> &bull; Total Students: <strong>${filteredExport.length}</strong></p>
+            <table>
+              <thead>
+                <tr>
+                  <th>Reg No</th>
+                  <th>Student Name</th>
+                  <th>Assigned Batch</th>
+                  <th>Contact</th>
+                  <th>Counselor</th>
+                  <th class="right">Total Package</th>
+                  <th class="right">Paid</th>
+                  <th class="right">Balance Due</th>
+                  <th class="center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+            <script>
+              window.onload = function() { window.print(); };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (e: any) {
+      alert('Error exporting Students PDF: ' + e.message);
+    }
+  };
+
+  const handleExportAcademyOverviewExcel = () => {
+    try {
+      const csvRows: any[][] = [];
+      const totalCollected = installments.reduce((a, b) => a + Number(b.amount_paid || 0), 0);
+      const totalFeesExpected = students.reduce((a, b) => a + Number(b.total_fees || 0), 0);
+      const balanceRemaining = Math.max(0, totalFeesExpected - totalCollected);
+
+      csvRows.push([`Tech Ads ERP - Academy Overview Executive Summary`]);
+      csvRows.push([`Generated on: ${new Date().toLocaleDateString('en-IN')}`]);
+      csvRows.push([`Total Students: ${students.length}`, `Total Expected: ₹${totalFeesExpected.toLocaleString()}`, `Total Collected: ₹${totalCollected.toLocaleString()}`, `Balance Remaining: ₹${balanceRemaining.toLocaleString()}`]);
+      csvRows.push([]);
+      csvRows.push(['Batch Name', 'Course Name', 'Mode', 'Status', 'Start Date', 'Total Seats', 'Enrolled Students']);
+
+      batches.forEach(b => {
+        const enrolled = students.filter(s => s.batch_id === b.id).length;
+        csvRows.push([
+          b.batch_name,
+          b.course_name,
+          (b.mode || 'offline').toUpperCase(),
+          b.status.toUpperCase(),
+          b.start_date || '-',
+          b.total_seats,
+          enrolled
+        ]);
+      });
+
+      const BOM = "\uFEFF";
+      const csvContent = BOM + csvRows.map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Academy_Overview_Summary_${new Date().toISOString().slice(0, 10)}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e: any) {
+      alert('Error exporting Academy Overview Excel: ' + e.message);
+    }
+  };
+
+  const handleExportAcademyOverviewPDF = () => {
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to export PDF');
+        return;
+      }
+
+      const totalCollected = installments.reduce((a, b) => a + Number(b.amount_paid || 0), 0);
+      const totalFeesExpected = students.reduce((a, b) => a + Number(b.total_fees || 0), 0);
+      const balanceRemaining = Math.max(0, totalFeesExpected - totalCollected);
+
+      const batchRows = batches.map(b => {
+        const enrolled = students.filter(s => s.batch_id === b.id).length;
+        return `
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px; font-weight: bold;">${b.batch_name}</td>
+            <td style="padding: 8px;">${b.course_name}</td>
+            <td style="padding: 8px; text-transform: uppercase;">${b.mode || 'offline'}</td>
+            <td style="padding: 8px; font-weight: bold; color: ${b.status === 'running' ? '#059669' : b.status === 'completed' ? '#9333ea' : '#d97706'};">${b.status.toUpperCase()}</td>
+            <td style="padding: 8px;">${b.start_date || '-'}</td>
+            <td style="padding: 8px; text-align: center;">${enrolled} / ${b.total_seats}</td>
+          </tr>
+        `;
+      }).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Academy Executive Overview</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; }
+              h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
+              .metrics { display: flex; gap: 10px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
+              .metric-item { flex: 1; text-align: center; }
+              .metric-label { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+              .metric-val { font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+              th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+              th.center { text-align: center; }
+            </style>
+          </head>
+          <body>
+            <h1>Tech Ads ERP - Academy Executive Overview</h1>
+            <p>Generated on: <strong>${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong></p>
+            
+            <div class="metrics">
+              <div class="metric-item"><div class="metric-label">Total Enrolled</div><div class="metric-val">${students.length}</div></div>
+              <div class="metric-item"><div class="metric-label">Total Expected</div><div class="metric-val" style="color: #2563eb;">₹${totalFeesExpected.toLocaleString()}</div></div>
+              <div class="metric-item"><div class="metric-label">Total Collected</div><div class="metric-val" style="color: #059669;">₹${totalCollected.toLocaleString()}</div></div>
+              <div class="metric-item"><div class="metric-label">Balance Remaining</div><div class="metric-val" style="color: #e11d48;">₹${balanceRemaining.toLocaleString()}</div></div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Batch Name</th>
+                  <th>Course</th>
+                  <th>Mode</th>
+                  <th>Status</th>
+                  <th>Start Date</th>
+                  <th class="center">Enrolled / Total Seats</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${batchRows}
+              </tbody>
+            </table>
+            <script>
+              window.onload = function() { window.print(); };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (e: any) {
+      alert('Error exporting Academy Overview PDF: ' + e.message);
+    }
+  };
+
   // --- RENDERS ---
 
   const renderOverview = () => {
@@ -734,6 +1000,22 @@ export const AcademyDashboard: React.FC = () => {
             >
               <UserCheck className="w-3.5 h-3.5 text-success" />
               <span>Mark Attendance</span>
+            </button>
+            <button
+              onClick={handleExportAcademyOverviewExcel}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              title="Export Academy Overview Summary to Excel"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export Excel</span>
+            </button>
+            <button
+              onClick={handleExportAcademyOverviewPDF}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+              title="Export Academy Overview Summary to PDF"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Export PDF</span>
             </button>
           </div>
         </div>
@@ -1019,18 +1301,25 @@ export const AcademyDashboard: React.FC = () => {
                 <span>+ Register Student</span>
               </Button>
 
-              {/* Historical Data Migration */}
-              {isAdminMode && (
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsImportModalOpen(true)}
-                  className="flex items-center gap-1.5 whitespace-nowrap text-xs font-bold border-border text-foreground hover:bg-muted rounded-xl cursor-pointer"
-                  title="Import historical student records from CSV or past database"
-                >
-                  <Database className="w-4 h-4 text-purple-400" />
-                  <span className="hidden md:inline">Import Past Data</span>
-                </Button>
-              )}
+              {/* Export Options for Students Hub */}
+              <button
+                type="button"
+                onClick={handleExportStudentsExcel}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                title="Export student directory to Excel / CSV"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Export Excel</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportStudentsPDF}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                title="Export student directory to PDF"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Export PDF</span>
+              </button>
             </div>
           </div>
 
@@ -2282,16 +2571,7 @@ export const AcademyDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* HISTORICAL DATA MIGRATION & STUDENT BULK IMPORT MODAL */}
-      <AcademyImportModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        existingBatches={batches}
-        staffList={staffList}
-        onImportComplete={async () => {
-          await fetchAcademyData();
-        }}
-      />
+
 
     </div>
   );

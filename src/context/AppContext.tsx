@@ -4,6 +4,7 @@ import { supabase, SALES_COLUMNS, monthWindowStart } from '../services/supabase'
 import { formatStaffEmail, ensureStaffAuthUser, normalizePassword } from '../services/staffAuth';
 import { dataCache } from '../services/dataCache';
 import { extensionForBlob } from '../utils/imageUtils';
+import { savePunchMetaToStorage } from '../utils/attendanceStorage';
 
 export type TabType = 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_reports' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets';
 
@@ -179,15 +180,7 @@ const saveStoredPunch = (staffId: string, dateStr: string, data: Partial<LocalPu
     const existing = getStoredPunch(staffId, dateStr) || {};
     const updated = { ...existing, ...data };
     localStorage.setItem(`staff_punch_${staffId}_${dateStr}`, JSON.stringify(updated));
-
-    // Asynchronously backup punch metadata to Supabase Storage attendance bucket
-    supabase.storage
-      .from('attendance')
-      .upload(`${staffId}/${dateStr}.json`, JSON.stringify(updated), {
-        contentType: 'application/json',
-        upsert: true
-      })
-      .catch(() => {});
+    savePunchMetaToStorage(staffId, dateStr, updated as any).catch(() => {});
   } catch {}
 };
 
@@ -1029,7 +1022,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const punchIn = async (selfieUrl?: string, lat?: number, lng?: number, status?: string) => {
     if (!activeStaff) return;
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
 
     if (todayAttendance?.punch_in) return;
 
@@ -1113,7 +1106,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const punchOut = async (status?: string) => {
     if (!activeStaff || !todayAttendance) return;
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const timeStr = new Date().toLocaleTimeString('en-US', { hour12: false });
+    const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
     const displayStatus = status ? status.toUpperCase() : (todayAttendance.status || 'PRESENT');
 
     saveStoredPunch(activeStaff.id, todayStr, {

@@ -46,6 +46,8 @@ export const UnifiedEnrollmentModal: React.FC<UnifiedEnrollmentModalProps> = ({
   // Status & error states
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [enrollmentDate, setEnrollmentDate] = useState<string>(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
+  const [customStudentCode, setCustomStudentCode] = useState<string>('');
 
   // Initialize batch and counselor when modal opens
   useEffect(() => {
@@ -65,6 +67,8 @@ export const UnifiedEnrollmentModal: React.FC<UnifiedEnrollmentModalProps> = ({
       setSlipFile(null);
       setSlipPreviewUrl(null);
       setFormError(null);
+      setEnrollmentDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
+      setCustomStudentCode('');
 
       // Counselor resolution: if counselor user, assign to activeStaff; else default counselor
       if (isCounselor && activeStaff?.id) {
@@ -169,8 +173,10 @@ export const UnifiedEnrollmentModal: React.FC<UnifiedEnrollmentModalProps> = ({
         : (counselorId || null);
 
       // 2. Generate Student Code
-      const studentCode = `STU-${Date.now().toString().slice(-5)}`;
-      const enrollmentDate = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const studentCode = customStudentCode.trim() || `STU-${Date.now().toString().slice(-5)}`;
+      const effectiveEnrollmentDate = enrollmentDate && enrollmentDate.trim() 
+        ? enrollmentDate.trim() 
+        : new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
       const studentPayload = {
         student_id_code: studentCode,
@@ -181,7 +187,7 @@ export const UnifiedEnrollmentModal: React.FC<UnifiedEnrollmentModalProps> = ({
         counselor_id: effectiveCounselorId,
         total_fee: numTotalFee,
         paid_fee: numPaidFee,
-        enrollment_date: enrollmentDate
+        enrollment_date: effectiveEnrollmentDate
       };
 
       // 3. Insert student record (try anon then admin proxy)
@@ -253,7 +259,9 @@ export const UnifiedEnrollmentModal: React.FC<UnifiedEnrollmentModalProps> = ({
           finalNotes = `${finalNotes} [Slip: ${uploadedSlipUrl}]`;
         }
 
-        const curMonth = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
+        const curMonth = effectiveEnrollmentDate 
+          ? new Date(effectiveEnrollmentDate).toLocaleString('default', { month: 'long', year: 'numeric' })
+          : new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
         const feePayload = {
           student_id: studentId,
           batch_id: selectedBatchId,
@@ -357,11 +365,41 @@ export const UnifiedEnrollmentModal: React.FC<UnifiedEnrollmentModalProps> = ({
                 <option value="">-- Choose a Course Batch --</option>
                 {allBatches.map(b => (
                   <option key={b.id} value={b.id}>
-                    {b.batch_name} ({b.course_name || b.batch_name}) &bull; {b.mode === 'online' ? 'Online' : 'Offline'}
+                    {b.batch_name} ({b.course_name || b.batch_name}) • {b.status === 'completed' ? '🎓 Completed' : b.status === 'running' ? '⚡ Active' : '📅 Upcoming'}
                   </option>
                 ))}
               </select>
             )}
+          </div>
+
+          {/* Admission Date & Custom Reg No */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <span>Admission Date</span>
+                <span className="text-[10px] text-primary font-semibold">Supports Backfilling</span>
+              </label>
+              <input
+                type="date"
+                required
+                value={enrollmentDate}
+                onChange={(e) => setEnrollmentDate(e.target.value)}
+                className="w-full bg-muted border border-border rounded-xl px-3.5 py-2.5 text-xs font-semibold text-foreground focus:border-primary focus:outline-none transition-colors cursor-pointer"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <span>Student / Reg. Code</span>
+                <span className="text-[10px] text-muted-foreground font-normal">Optional</span>
+              </label>
+              <input
+                type="text"
+                placeholder="Auto-generated if blank (e.g. STU-102)"
+                value={customStudentCode}
+                onChange={(e) => setCustomStudentCode(e.target.value)}
+                className="w-full bg-muted border border-border rounded-xl px-3.5 py-2.5 text-xs font-mono font-bold text-foreground focus:border-primary focus:outline-none transition-colors"
+              />
+            </div>
           </div>
 
           {/* 2. Student Full Name */}

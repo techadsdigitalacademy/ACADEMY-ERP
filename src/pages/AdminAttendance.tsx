@@ -13,14 +13,12 @@ import {
   AlertCircle, 
   Search, 
   Filter, 
-  MapPin, 
   Award,
   X,
   TrendingUp,
   Briefcase,
   UserCheck,
   Calendar,
-  ExternalLink,
   Download,
   FileText,
   Star,
@@ -54,6 +52,7 @@ export const AdminAttendance: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'All' | 'Present' | 'Late' | 'Half Day' | 'Leave' | 'Absent'>('All');
   const [adminTab, setAdminTab] = useState<'registry' | 'reports'>('registry');
   const [masterStaffList, setMasterStaffList] = useState<any[]>([]);
+  const [enlargedSelfie, setEnlargedSelfie] = useState<string | null>(null);
 
   const handleExportStaffAttendanceExcel = (staff: any, month: string, logs: any[], present: number, late: number, halfDay: number, leave: number, holiday: number, attPct: number) => {
     try {
@@ -423,7 +422,7 @@ export const AdminAttendance: React.FC = () => {
       csvRows.push([`Tech Ads ERP - Daily Staff Attendance Registry`]);
       csvRows.push([`Registry Date: ${todayDisplayDate}`, `Total Staff: ${filteredStaff.length}`]);
       csvRows.push([]);
-      csvRows.push(['Staff Name', 'Staff Code', 'Designation', 'Department', 'Punch In', 'Punch Out', 'Status', 'GPS Verified', 'Selfie Verified']);
+      csvRows.push(['Staff Name', 'Staff Code', 'Designation', 'Department', 'Punch In', 'Punch Out', 'Working Hours', 'Status', 'GPS Verified', 'Selfie Verified']);
 
       filteredStaff.forEach(staff => {
         const isPunchIn = staff.todayRecord?.punch_in || '-';
@@ -1015,97 +1014,152 @@ export const AdminAttendance: React.FC = () => {
                   <div className="space-y-3">
                     {filteredStaff.length > 0 ? (
                       <>
-                        {/* Desktop Table View */}
-                        <div className="hidden md:block overflow-hidden rounded-lg border border-border bg-card">
+                        {/* Desktop Table View - Legacy CRM Format */}
+                        <div className="hidden md:block overflow-hidden rounded-xl border border-border bg-card shadow-lg">
                           <table className="w-full text-left border-collapse">
                             <thead>
                               <tr className="border-b border-border bg-muted-2 text-xs font-bold text-primary tracking-wider">
-                                <th className="py-4 px-6">Staff Member</th>
-                                <th className="py-4 px-6">Designation</th>
-                                <th className="py-4 px-6">Punch In</th>
-                                <th className="py-4 px-6">Punch Out</th>
-                                <th className="py-4 px-6 text-right">Actions / Status</th>
+                                <th className="py-3.5 px-4 text-center w-16">Selfie</th>
+                                <th className="py-3.5 px-5">Staff Member</th>
+                                <th className="py-3.5 px-4">Designation</th>
+                                <th className="py-3.5 px-4 text-center">Punch In</th>
+                                <th className="py-3.5 px-4 text-center">Punch Out</th>
+                                <th className="py-3.5 px-4 text-center">Working Hours</th>
+                                <th className="py-3.5 px-4 text-center">Status</th>
+                                <th className="py-3.5 px-4 text-right">Actions</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-border text-sm">
                               {filteredStaff.map((staff) => {
-                                // Determine display fields
                                 const isPunchIn = staff.todayRecord?.punch_in;
                                 const isPunchOut = staff.todayRecord?.punch_out;
-                                
+                                const workingHours = staff.todayRecord?.working_hours || '-';
+                                const selfieUrl = staff.todayRecord?.selfie_url;
+
                                 let displayStatus = 'ABSENT';
                                 let badgeVariant: 'success' | 'warning' | 'info' | 'error' | 'purple' = 'error';
 
                                 if (staff.todayRecord) {
-                                  const status = staff.todayRecord.status;
+                                  const status = (staff.todayRecord.status || 'PRESENT').toUpperCase();
                                   if (status === 'PRESENT') {
-                                    if (isPunchIn && isPunchIn > '09:30:00') {
-                                      displayStatus = 'LATE';
-                                      badgeVariant = 'warning';
-                                    } else {
-                                      displayStatus = 'PRESENT';
-                                      badgeVariant = 'success';
-                                    }
+                                    displayStatus = 'PRESENT';
+                                    badgeVariant = 'success';
                                   } else if (status === 'LATE') {
                                     displayStatus = 'LATE';
                                     badgeVariant = 'warning';
                                   } else if (status === 'HALF_DAY') {
                                     displayStatus = 'HALF DAY';
                                     badgeVariant = 'purple';
-                                  } else if (status === 'LEAVE') {
+                                  } else if (status === 'LEAVE' || status === 'ON LEAVE') {
                                     displayStatus = 'ON LEAVE';
                                     badgeVariant = 'info';
+                                  } else {
+                                    displayStatus = status;
+                                    badgeVariant = 'error';
                                   }
                                 }
 
                                 return (
-                                  <tr key={staff.id} className="hover:bg-muted-2 transition-colors duration-200">
-                                    <td className="py-4 px-6 flex items-center gap-3.5">
-                                      <img 
-                                        src={staff.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=128&auto=format&fit=crop'} 
-                                        alt="" 
-                                        className="w-10 h-10 rounded-full border border-border object-cover"
-                                      />
-                                      <div>
-                                        <h4 className="font-bold text-foreground leading-tight">{staff.full_name}</h4>
-                                        <span className="text-xs text-muted-foreground font-semibold">{staff.staff_code} &bull; {staff.role_name}</span>
+                                  <tr key={staff.id} className="hover:bg-muted-2/60 transition-colors duration-200">
+                                    {/* 1. Selfie Thumbnail */}
+                                    <td className="py-3.5 px-4 text-center">
+                                      {selfieUrl ? (
+                                        <button 
+                                          type="button" 
+                                          onClick={() => setEnlargedSelfie(selfieUrl)}
+                                          className="inline-block relative group focus:outline-none cursor-pointer"
+                                          title="Click to view full punch-in selfie photo"
+                                        >
+                                          <img 
+                                            src={selfieUrl} 
+                                            alt="Selfie" 
+                                            className="w-10 h-10 rounded-full border-2 border-emerald-500/60 object-cover hover:border-primary shadow-sm hover:scale-105 transition-all"
+                                          />
+                                          <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-card flex items-center justify-center shadow">
+                                            <span className="w-1.5 h-1.5 bg-white rounded-full"></span>
+                                          </span>
+                                        </button>
+                                      ) : staff.avatar_url ? (
+                                        <img 
+                                          src={staff.avatar_url} 
+                                          alt="" 
+                                          className="w-10 h-10 rounded-full border border-border object-cover opacity-75 inline-block"
+                                          title="Profile Avatar (No punch selfie logged)"
+                                        />
+                                      ) : (
+                                        <div className="w-10 h-10 rounded-full bg-muted border border-border flex items-center justify-center text-xs font-bold text-muted-foreground uppercase mx-auto">
+                                          {staff.full_name?.slice(0, 2) || 'ST'}
+                                        </div>
+                                      )}
+                                    </td>
+
+                                    {/* 2. Staff Member */}
+                                    <td className="py-3.5 px-5">
+                                      <div className="flex flex-col">
+                                        <h4 className="font-bold text-foreground leading-tight text-sm">{staff.full_name}</h4>
+                                        <span className="text-xs text-muted-foreground font-semibold mt-0.5">
+                                          {staff.staff_code} &bull; {staff.department_name || staff.role_name}
+                                        </span>
                                       </div>
                                     </td>
-                                    <td className="py-4 px-6 text-muted-foreground font-medium">{staff.designation || staff.role_name || 'Senior Sales Consultant'}</td>
-                                    <td className="py-4 px-6 font-semibold text-foreground">
-                                      {isPunchIn ? (
-                                        <span className="flex items-center gap-1.5">
-                                          <Star className="w-3.5 h-3.5 text-success" />
+
+                                    {/* 3. Designation */}
+                                    <td className="py-3.5 px-4 text-muted-foreground font-medium text-xs">
+                                      {staff.designation || staff.role_name || 'Staff'}
+                                    </td>
+
+                                    {/* 4. Punch In */}
+                                    <td className="py-3.5 px-4 text-center font-bold text-foreground font-mono text-xs">
+                                      {isPunchIn && isPunchIn !== '-' ? (
+                                        <span className="inline-flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-md border border-emerald-500/20">
+                                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                                           {isPunchIn}
                                         </span>
                                       ) : (
                                         <span className="text-muted-foreground">—</span>
                                       )}
                                     </td>
-                                    <td className="py-4 px-6 font-semibold text-foreground">
-                                      {isPunchOut ? (
-                                        <span className="flex items-center gap-1.5">
-                                          <Star className="w-3.5 h-3.5 text-primary" />
+
+                                    {/* 5. Punch Out */}
+                                    <td className="py-3.5 px-4 text-center font-bold text-foreground font-mono text-xs">
+                                      {isPunchOut && isPunchOut !== '-' ? (
+                                        <span className="inline-flex items-center gap-1.5 text-primary bg-primary/10 px-2.5 py-1 rounded-md border border-primary/20">
+                                          <span className="w-2 h-2 rounded-full bg-primary"></span>
                                           {isPunchOut}
                                         </span>
                                       ) : (
                                         <span className="text-muted-foreground">—</span>
                                       )}
                                     </td>
-                                    <td className="py-4 px-6 text-right">
-                                      <div className="flex justify-end items-center gap-3">
-                                        <Button 
-                                          variant="glass" 
-                                          size="sm" 
-                                          onClick={() => handleOpenDrillModal(staff)}
-                                          className="!py-1 !px-2.5 text-[10px] font-bold"
-                                        >
-                                          View
-                                        </Button>
-                                        <Badge variant={badgeVariant} className="px-2.5 py-0.5 text-[11px] font-bold min-w-[75px] text-center">
-                                          {displayStatus}
-                                        </Badge>
-                                      </div>
+
+                                    {/* 6. Working Hours */}
+                                    <td className="py-3.5 px-4 text-center font-semibold text-xs">
+                                      {workingHours && workingHours !== '-' ? (
+                                        <span className={"px-2.5 py-1 rounded-md text-[11px] font-bold " + (workingHours.includes('In Office') ? 'bg-primary/15 text-primary border border-primary/25' : 'bg-muted-2 text-foreground border border-border')}>
+                                          {workingHours}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                      )}
+                                    </td>
+
+                                    {/* 7. Status */}
+                                    <td className="py-3.5 px-4 text-center">
+                                      <Badge variant={badgeVariant} className="px-2.5 py-1 text-[11px] font-black min-w-[80px] text-center shadow-sm">
+                                        {displayStatus}
+                                      </Badge>
+                                    </td>
+
+                                    {/* 8. Actions */}
+                                    <td className="py-3.5 px-4 text-right">
+                                      <Button 
+                                        variant="glass" 
+                                        size="sm" 
+                                        onClick={() => handleOpenDrillModal(staff)}
+                                        className="!py-1.5 !px-3 text-xs font-bold hover:border-primary cursor-pointer"
+                                      >
+                                        View History
+                                      </Button>
                                     </td>
                                   </tr>
                                 );
@@ -1119,95 +1173,90 @@ export const AdminAttendance: React.FC = () => {
                           {filteredStaff.map((staff) => {
                             const isPunchIn = staff.todayRecord?.punch_in;
                             const isPunchOut = staff.todayRecord?.punch_out;
+                            const workingHours = staff.todayRecord?.working_hours || '-';
+                            const selfieUrl = staff.todayRecord?.selfie_url;
                             
                             let displayStatus = 'ABSENT';
                             let badgeVariant: 'success' | 'warning' | 'info' | 'error' | 'purple' = 'error';
 
                             if (staff.todayRecord) {
-                              const status = staff.todayRecord.status;
+                              const status = (staff.todayRecord.status || 'PRESENT').toUpperCase();
                               if (status === 'PRESENT') {
-                                if (isPunchIn && isPunchIn > '09:30:00') {
-                                  displayStatus = 'LATE';
-                                  badgeVariant = 'warning';
-                                } else {
-                                  displayStatus = 'PRESENT';
-                                  badgeVariant = 'success';
-                                }
+                                displayStatus = 'PRESENT';
+                                badgeVariant = 'success';
                               } else if (status === 'LATE') {
                                 displayStatus = 'LATE';
                                 badgeVariant = 'warning';
                               } else if (status === 'HALF_DAY') {
                                 displayStatus = 'HALF DAY';
                                 badgeVariant = 'purple';
-                              } else if (status === 'LEAVE') {
+                              } else if (status === 'LEAVE' || status === 'ON LEAVE') {
                                 displayStatus = 'ON LEAVE';
                                 badgeVariant = 'info';
+                              } else {
+                                displayStatus = status;
+                                badgeVariant = 'error';
                               }
                             }
 
                             return (
                               <Card key={staff.id} variant="glass" className="p-4 border border-border">
-                                <div className="flex justify-between items-start gap-2">
+                                <div className="flex justify-between items-start gap-3">
                                   <div className="flex items-center gap-3">
-                                    <img 
-                                      src={staff.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=128&auto=format&fit=crop'} 
-                                      alt="" 
-                                      className="w-11 h-11 rounded-full border border-border object-cover"
-                                    />
+                                    {selfieUrl ? (
+                                      <button 
+                                        type="button" 
+                                        onClick={() => setEnlargedSelfie(selfieUrl)}
+                                        className="relative focus:outline-none cursor-pointer"
+                                        title="Click to view selfie"
+                                      >
+                                        <img 
+                                          src={selfieUrl} 
+                                          alt="" 
+                                          className="w-12 h-12 rounded-full border-2 border-emerald-500/60 object-cover shadow-sm"
+                                        />
+                                        <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-card"></span>
+                                      </button>
+                                    ) : (
+                                      <img 
+                                        src={staff.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=128&auto=format&fit=crop'} 
+                                        alt="" 
+                                        className="w-12 h-12 rounded-full border border-border object-cover"
+                                      />
+                                    )}
                                     <div>
                                       <h4 className="text-sm font-bold text-foreground">{staff.full_name}</h4>
                                       <span className="text-[10px] text-muted-foreground font-semibold">{staff.staff_code} &bull; {staff.role_name}</span>
-                                      <p className="text-[10px] text-primary font-bold mt-0.5">{staff.designation || staff.role_name || 'Senior Sales Consultant'}</p>
+                                      <p className="text-[10px] text-primary font-bold mt-0.5">{staff.designation || 'Staff'}</p>
                                     </div>
                                   </div>
-                                  <Badge variant={badgeVariant} className="px-2 py-0 text-[10px]">
+                                  <Badge variant={badgeVariant} className="px-2.5 py-0.5 text-[10px] font-bold">
                                     {displayStatus}
                                   </Badge>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-border text-xs">
+                                <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-border text-xs">
                                   <div>
-                                    <span className="text-muted-foreground font-medium block">Punch In:</span>
-                                    {isPunchIn ? (
-                                      <span className="text-foreground font-bold flex items-center gap-1 mt-0.5">
-                                        <Star className="w-3.5 h-3.5 text-success" />
-                                        {isPunchIn}
-                                      </span>
-                                    ) : (
-                                      <span className="text-muted-foreground block mt-0.5">—</span>
-                                    )}
+                                    <span className="text-muted-foreground font-medium block text-[10px]">Punch In</span>
+                                    <span className="text-foreground font-bold block mt-0.5 text-xs text-emerald-400">
+                                      {isPunchIn && isPunchIn !== '-' ? isPunchIn : '—'}
+                                    </span>
                                   </div>
 
                                   <div>
-                                    <span className="text-muted-foreground font-medium block">Punch Out:</span>
-                                    {isPunchOut ? (
-                                      <span className="text-foreground font-bold flex items-center gap-1 mt-0.5">
-                                        <Star className="w-3.5 h-3.5 text-primary" />
-                                        {isPunchOut}
-                                      </span>
-                                    ) : (
-                                      <span className="text-muted-foreground block mt-0.5">—</span>
-                                    )}
+                                    <span className="text-muted-foreground font-medium block text-[10px]">Punch Out</span>
+                                    <span className="text-foreground font-bold block mt-0.5 text-xs text-primary">
+                                      {isPunchOut && isPunchOut !== '-' ? isPunchOut : '—'}
+                                    </span>
+                                  </div>
+
+                                  <div>
+                                    <span className="text-muted-foreground font-medium block text-[10px]">Working HR's</span>
+                                    <span className="text-foreground font-bold block mt-0.5 text-xs">
+                                      {workingHours && workingHours !== '-' ? workingHours : '—'}
+                                    </span>
                                   </div>
                                 </div>
-
-                                {staff.todayRecord?.lat && staff.todayRecord?.lng && (
-                                  <div className="mt-3 pt-2.5 border-t border-border flex items-center justify-between">
-                                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                      <MapPin className="w-3.5 h-3.5 text-primary" />
-                                      <span>Verified GPS: {staff.todayRecord.lat.toFixed(4)}, {staff.todayRecord.lng.toFixed(4)}</span>
-                                    </div>
-                                    <a 
-                                      href={`https://www.google.com/maps/search/?api=1&query=${staff.todayRecord.lat},${staff.todayRecord.lng}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-[10px] text-primary font-bold flex items-center gap-0.5 hover:underline"
-                                    >
-                                      <span>View Map</span>
-                                      <ExternalLink className="w-2.5 h-2.5" />
-                                    </a>
-                                  </div>
-                                )}
 
                                 <div className="mt-3 pt-2.5 border-t border-border">
                                   <Button 
@@ -1526,13 +1575,13 @@ export const AdminAttendance: React.FC = () => {
                                     <tr key={log.date} className="hover:bg-muted-2">
                                       <td className="py-2.5 px-3">
                                         {log.selfie_url ? (
-                                          <a href={log.selfie_url} target="_blank" rel="noopener noreferrer">
+                                          <button type="button" onClick={() => setEnlargedSelfie(log.selfie_url)} className="focus:outline-none cursor-pointer" title="Click to enlarge selfie">
                                             <img 
                                               src={log.selfie_url} 
                                               alt="" 
-                                              className="w-8 h-8 rounded-full border border-border object-cover cursor-pointer hover:border-primary"
+                                              className="w-8 h-8 rounded-full border border-border object-cover hover:border-primary shadow-sm hover:scale-105 transition-all"
                                             />
-                                          </a>
+                                          </button>
                                         ) : (
                                           <span className="text-foreground block text-center">—</span>
                                         )}
@@ -1571,6 +1620,40 @@ export const AdminAttendance: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Lightbox Selfie Modal */}
+      {enlargedSelfie && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in"
+          onClick={() => setEnlargedSelfie(null)}
+        >
+          <div 
+            className="relative max-w-sm w-full rounded-2xl overflow-hidden border border-border bg-card shadow-2xl p-4 flex flex-col items-center animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-full flex justify-between items-center pb-2.5 border-b border-border mb-3">
+              <span className="text-xs font-extrabold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                Attendance Selfie Verification
+              </span>
+              <button 
+                onClick={() => setEnlargedSelfie(null)}
+                className="p-1 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <img 
+              src={enlargedSelfie} 
+              alt="Verified Selfie" 
+              className="w-full h-80 object-cover rounded-xl border border-border shadow-md"
+            />
+            <div className="mt-3 text-[11px] text-muted-foreground text-center font-medium">
+              Verified Facial Attendance Photo &bull; Secured with Timestamp
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Mobile Sticky Bottom Tab Bar Navigation (Hidden on desktop) */}
       <nav className="fixed bottom-0 left-0 right-0 bg-card border border-border border-t border-border py-2.5 px-6 z-40 md:hidden">

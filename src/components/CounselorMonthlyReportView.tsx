@@ -15,7 +15,9 @@ import {
   Plus,
   Search,
   BarChart3,
-  X
+  X,
+  Download,
+  FileText
 } from 'lucide-react';
 
 export interface CounselorMonthlyReportViewProps {
@@ -325,6 +327,167 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
     });
   }, [monthCollections, searchQuery, students]);
 
+  // --- EXPORT FUNCTIONS FOR COUNSELOR ADMISSIONS & COLLECTIONS ---
+  const handleExportCounselorExcel = () => {
+    try {
+      const counselorName = effectiveCounselorId && effectiveCounselorId !== 'all'
+        ? counselorStaff.find((c: any) => c.id === effectiveCounselorId)?.full_name || 'Counselor'
+        : 'All Counselors Consolidated';
+
+      const csvRows: any[][] = [];
+      csvRows.push([`Tech Ads ERP - Counselor Admissions & Collections Report`]);
+      csvRows.push([`Counselor: ${counselorName}`, `Month: ${selectedMonth}`]);
+      csvRows.push([`Admissions: ${totalRegistrations}`, `Package Total: ₹${totalPackageBooked.toLocaleString()}`, `Collections: ₹${totalCollections.toLocaleString()}`, `Pending: ₹${totalPendingBalance.toLocaleString()}`, `Conversion: ${collectionConversionRate}%`]);
+      csvRows.push([]);
+      csvRows.push(['--- MONTHLY ADMISSIONS ---']);
+      csvRows.push(['Reg No', 'Student Name', 'Assigned Batch', 'Counselor', 'Package Fee (INR)', 'Paid (INR)', 'Balance Due (INR)', 'Enrollment Date']);
+
+      monthStudents.forEach((s: any) => {
+        const batch = effectiveBatches.find((b: any) => b.id === s.batch_id);
+        const counselor = effectiveStaffList.find((st: any) => st.id === s.counselor_id);
+        const sInst = effectiveInstallments.filter((i: any) => i.student_id === s.id);
+        const paid = sInst.reduce((sum: number, i: any) => sum + Number(i.amount_paid || i.amount || 0), 0) || Number(s.paid_fee || 0);
+        const balance = Math.max(0, Number(s.total_fees || s.total_fee || 0) - paid);
+
+        csvRows.push([
+          s.registration_number || s.student_id_code || s.id,
+          s.student_name || s.name,
+          batch?.batch_name || 'Unassigned',
+          counselor?.full_name || 'Direct / Management',
+          Number(s.total_fees || s.total_fee || 0),
+          paid,
+          balance,
+          s.enrollment_date || (s.created_at ? s.created_at.slice(0, 10) : '-')
+        ]);
+      });
+
+      csvRows.push([]);
+      csvRows.push(['--- MONTHLY FEE COLLECTIONS ---']);
+      csvRows.push(['Receipt / Date', 'Student Name', 'Amount (INR)', 'Payment Mode', 'Collected By', 'Notes']);
+
+      monthCollections.forEach((inst: any) => {
+        const student = effectiveStudents.find((st: any) => st.id === inst.student_id);
+        const collector = effectiveStaffList.find((st: any) => st.id === inst.collected_by);
+
+        csvRows.push([
+          inst.payment_date || (inst.created_at ? inst.created_at.slice(0, 10) : '-'),
+          student?.student_name || student?.name || 'Student',
+          Number(inst.amount_paid || inst.amount || 0),
+          (inst.payment_mode || 'online').toUpperCase(),
+          collector?.full_name || 'Management',
+          inst.notes || '-'
+        ]);
+      });
+
+      const BOM = "\uFEFF";
+      const csvContent = BOM + csvRows.map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Counselor_Admissions_Report_${counselorName.replace(/\s+/g, '_')}_${selectedMonth}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e: any) {
+      alert('Error exporting counselor report: ' + e.message);
+    }
+  };
+
+  const handleExportCounselorPDF = () => {
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to export PDF');
+        return;
+      }
+
+      const counselorName = effectiveCounselorId && effectiveCounselorId !== 'all'
+        ? counselorStaff.find((c: any) => c.id === effectiveCounselorId)?.full_name || 'Counselor'
+        : 'All Counselors Consolidated';
+
+      const studentRows = monthStudents.map((s: any) => {
+        const batch = effectiveBatches.find((b: any) => b.id === s.batch_id);
+        const counselor = effectiveStaffList.find((st: any) => st.id === s.counselor_id);
+        const sInst = effectiveInstallments.filter((i: any) => i.student_id === s.id);
+        const paid = sInst.reduce((sum: number, i: any) => sum + Number(i.amount_paid || i.amount || 0), 0) || Number(s.paid_fee || 0);
+        const balance = Math.max(0, Number(s.total_fees || s.total_fee || 0) - paid);
+
+        return `
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px; font-weight: bold;">${s.student_name || s.name}</td>
+            <td style="padding: 8px; font-family: monospace;">${s.registration_number || s.student_id_code || '-'}</td>
+            <td style="padding: 8px;">${batch?.batch_name || '-'}</td>
+            <td style="padding: 8px;">${counselor?.full_name || 'Direct'}</td>
+            <td style="padding: 8px; text-align: right;">₹${Number(s.total_fees || s.total_fee || 0).toLocaleString()}</td>
+            <td style="padding: 8px; text-align: right; color: #059669; font-weight: bold;">₹${paid.toLocaleString()}</td>
+            <td style="padding: 8px; text-align: right; color: ${balance > 0 ? '#e11d48' : '#64748b'}; font-weight: bold;">₹${balance.toLocaleString()}</td>
+            <td style="padding: 8px; text-align: center;">${s.enrollment_date || (s.created_at ? s.created_at.slice(0, 10) : '-')}</td>
+          </tr>
+        `;
+      }).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Counselor Report - ${counselorName}</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; }
+              h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
+              .metrics { display: flex; gap: 10px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
+              .metric-item { flex: 1; text-align: center; }
+              .metric-label { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+              .metric-val { font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+              th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+              th.center { text-align: center; }
+              th.right { text-align: right; }
+            </style>
+          </head>
+          <body>
+            <h1>Tech Ads ERP - Academic Counselor Report</h1>
+            <p>Counselor: <strong>${counselorName}</strong> &bull; Period: <strong>${selectedMonth}</strong></p>
+            
+            <div class="metrics">
+              <div class="metric-item"><div class="metric-label">Admissions</div><div class="metric-val">${totalRegistrations}</div></div>
+              <div class="metric-item"><div class="metric-label">Course Package Total</div><div class="metric-val" style="color: #6366f1;">₹${totalPackageBooked.toLocaleString()}</div></div>
+              <div class="metric-item"><div class="metric-label">Fee Collections</div><div class="metric-val" style="color: #059669;">₹${totalCollections.toLocaleString()}</div></div>
+              <div class="metric-item"><div class="metric-label">Pending Dues</div><div class="metric-val" style="color: #e11d48;">₹${totalPendingBalance.toLocaleString()}</div></div>
+              <div class="metric-item"><div class="metric-label">Conversion</div><div class="metric-val">${collectionConversionRate}%</div></div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Student Name</th>
+                  <th>Reg No</th>
+                  <th>Batch</th>
+                  <th>Counselor</th>
+                  <th class="right">Package Fee</th>
+                  <th class="right">Paid</th>
+                  <th class="right">Balance Due</th>
+                  <th class="center">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${studentRows || '<tr><td colspan="8" style="text-align: center; padding: 12px; color: #64748b;">No admissions logged for this period.</td></tr>'}
+              </tbody>
+            </table>
+            <script>
+              window.onload = function() { window.print(); };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (e: any) {
+      alert('Error exporting Counselor PDF: ' + e.message);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* 1. Header with Controls */}
@@ -386,6 +549,24 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
               Counselor: {activeStaff?.full_name}
             </Badge>
           )}
+
+          {/* Export Options */}
+          <button
+            onClick={handleExportCounselorExcel}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+            title="Export Counselor Admissions and Collections to Excel"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Export Excel</span>
+          </button>
+          <button
+            onClick={handleExportCounselorPDF}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+            title="Export Counselor Report to PDF"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Export PDF</span>
+          </button>
         </div>
       </div>
 

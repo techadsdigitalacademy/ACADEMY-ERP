@@ -8,6 +8,8 @@ import { supabase } from '../services/supabase';
 import { formatCurrency } from '../services/mockData';
 import {
   RotateCcw,
+  Download,
+  FileText,
   Layers,
   Users,
   Calendar,
@@ -25,11 +27,9 @@ import {
   Edit2,
   Trash2,
   X,
-  RefreshCw,
-  Database
+  RefreshCw
 } from 'lucide-react';
 import { CourseTimelineTracker } from './CourseTimelineTracker';
-import { AcademyImportModal } from './AcademyImportModal';
 
 export interface BatchItem {
   id: string;
@@ -139,8 +139,6 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
   const [activatingBatch, setActivatingBatch] = useState<BatchItem | null>(null);
   const [manualStartDate, setManualStartDate] = useState(new Date().toISOString().slice(0, 10));
 
-  // Modal: Historical Data Migration / Import
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
 
   // Fetch all live data from Supabase
@@ -413,6 +411,134 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
 
   // --- ACTIONS ---
 
+  const handleExportBatchesExcel = () => {
+    try {
+      const csvRows: any[][] = [];
+      csvRows.push([`Tech Ads ERP - Academy Batches Directory`]);
+      csvRows.push([`Generated on: ${new Date().toLocaleDateString('en-IN')}`, `Total Batches: ${batches.length}`]);
+      csvRows.push([`Upcoming: ${kpis.upcomingCount}`, `Active: ${kpis.runningCount}`, `Completed: ${kpis.completedCount}`, `Total Students: ${kpis.totalStudentsEnrolled}`, `Total Revenue: ₹${kpis.totalRunningCollected.toLocaleString()}`]);
+      csvRows.push([]);
+      csvRows.push(['Batch Name', 'Course Name', 'Mode', 'Status', 'Start Date', 'Tutor', 'Total Seats', 'Enrolled Students', 'Revenue Collected (INR)', 'Attendance %']);
+
+      batches.forEach(b => {
+        const stats = batchStatsMap.get(b.id) || { filledSeats: 0, totalCollected: 0, attendancePercentage: 0 };
+        csvRows.push([
+          b.batch_name,
+          b.course_name,
+          b.mode.toUpperCase(),
+          b.status.toUpperCase(),
+          b.start_date || '-',
+          b.tutor_name || '-',
+          b.total_seats,
+          stats.filledSeats,
+          stats.totalCollected,
+          `${stats.attendancePercentage}%`
+        ]);
+      });
+
+      const BOM = "\uFEFF";
+      const csvContent = BOM + csvRows.map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', `Academy_Batches_Directory_${new Date().toISOString().slice(0, 10)}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e: any) {
+      alert('Error exporting batches to Excel: ' + e.message);
+    }
+  };
+
+  const handleExportBatchesPDF = () => {
+    try {
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to export PDF');
+        return;
+      }
+
+      const rowsHtml = batches.map(b => {
+        const stats = batchStatsMap.get(b.id) || { filledSeats: 0, totalCollected: 0, attendancePercentage: 0 };
+        return `
+          <tr style="border-bottom: 1px solid #e2e8f0;">
+            <td style="padding: 8px; font-weight: bold;">${b.batch_name}</td>
+            <td style="padding: 8px;">${b.course_name}</td>
+            <td style="padding: 8px; text-transform: uppercase;">${b.mode}</td>
+            <td style="padding: 8px; font-weight: bold; color: ${b.status === 'running' ? '#059669' : b.status === 'completed' ? '#9333ea' : '#d97706'};">${b.status.toUpperCase()}</td>
+            <td style="padding: 8px;">${b.start_date || '-'}</td>
+            <td style="padding: 8px;">${b.tutor_name || '-'}</td>
+            <td style="padding: 8px; text-align: center;">${stats.filledSeats} / ${b.total_seats}</td>
+            <td style="padding: 8px; text-align: right; font-weight: bold; color: #059669;">₹${stats.totalCollected.toLocaleString()}</td>
+            <td style="padding: 8px; text-align: center;">${stats.attendancePercentage}%</td>
+          </tr>
+        `;
+      }).join('');
+
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <title>Academy Batches Directory</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; }
+              h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
+              .metrics { display: flex; gap: 10px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
+              .metric-item { flex: 1; text-align: center; }
+              .metric-label { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+              .metric-val { font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 2px; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
+              th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
+              th.center { text-align: center; }
+              th.right { text-align: right; }
+            </style>
+          </head>
+          <body>
+            <h1>Tech Ads ERP - Academy Batches Directory</h1>
+            <p>Generated on: <strong>${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong> &bull; Total Batches: <strong>${batches.length}</strong></p>
+            
+            <div class="metrics">
+              <div class="metric-item"><div class="metric-label">Total Batches</div><div class="metric-val">${kpis.totalBatches}</div></div>
+              <div class="metric-item"><div class="metric-label">Upcoming</div><div class="metric-val" style="color: #d97706;">${kpis.upcomingCount}</div></div>
+              <div class="metric-item"><div class="metric-label">Active / Running</div><div class="metric-val" style="color: #059669;">${kpis.runningCount}</div></div>
+              <div class="metric-item"><div class="metric-label">Completed</div><div class="metric-val" style="color: #9333ea;">${kpis.completedCount}</div></div>
+              <div class="metric-item"><div class="metric-label">Total Students</div><div class="metric-val" style="color: #2563eb;">${kpis.totalStudentsEnrolled}</div></div>
+              <div class="metric-item"><div class="metric-label">Revenue Collected</div><div class="metric-val" style="color: #059669;">₹${kpis.totalRunningCollected.toLocaleString()}</div></div>
+            </div>
+
+            <table>
+              <thead>
+                <tr>
+                  <th>Batch Name</th>
+                  <th>Course</th>
+                  <th>Mode</th>
+                  <th>Status</th>
+                  <th>Start Date</th>
+                  <th>Tutor</th>
+                  <th class="center">Enrolled / Seats</th>
+                  <th class="right">Revenue</th>
+                  <th class="center">Attendance</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+            <script>
+              window.onload = function() { window.print(); };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (e: any) {
+      alert('Error exporting Batches PDF: ' + e.message);
+    }
+  };
+
   const handleOpenCreateModal = () => {
     setEditingBatch(null);
     setBatchForm({
@@ -665,15 +791,22 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
 
           {isAdminMode && (
             <>
-              <Button
-                variant="secondary"
-                onClick={() => setIsImportModalOpen(true)}
-                className="flex items-center gap-1.5 border-border text-foreground hover:bg-muted font-bold px-3 py-2.5 rounded-xl text-xs cursor-pointer"
-                title="Import past student records & historical batches"
+              <button
+                onClick={handleExportBatchesExcel}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                title="Export all academy batches to Excel / CSV"
               >
-                <Database className="w-4 h-4 text-purple-400" />
-                <span>Import Past Data</span>
-              </Button>
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Excel</span>
+              </button>
+              <button
+                onClick={handleExportBatchesPDF}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                title="Export Batches Directory to PDF"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Export PDF</span>
+              </button>
               <Button
                 id="create-new-batch-btn"
                 onClick={handleOpenCreateModal}
@@ -1311,12 +1444,41 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                         <td className="px-4 py-3 text-right font-bold text-emerald-400">{formatCurrency(stats.totalCollected)}</td>
                         <td className="px-4 py-3 text-center font-bold text-primary">{stats.attendancePercentage}%</td>
                         <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => handleUpdateBatchStatus(b.id, 'running')}
-                            className="text-xs text-primary font-bold hover:underline"
-                          >
-                            Reopen
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="glass"
+                              onClick={() => handleOpenEnrollModal(b)}
+                              className="text-xs font-bold !py-1 !px-2.5 flex items-center gap-1 text-primary border-primary/30"
+                              title="Admit / Backfill historical student into this completed batch"
+                            >
+                              <UserPlus className="w-3.5 h-3.5" />
+                              <span>+ Student</span>
+                            </Button>
+                            <button
+                              onClick={() => handleOpenEditModal(b)}
+                              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors cursor-pointer"
+                              title="Edit Completed Batch"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleUpdateBatchStatus(b.id, 'running')}
+                              className="px-2 py-1 text-xs text-primary font-bold hover:underline rounded bg-primary/10 cursor-pointer"
+                              title="Reopen batch back to running classes"
+                            >
+                              Reopen
+                            </button>
+                            {isAdminMode && (
+                              <button
+                                onClick={() => handleDeleteBatch(b.id, b.batch_name)}
+                                className="p-1.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                                title="Delete Batch"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -1648,18 +1810,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 10. HISTORICAL DATA MIGRATION & STUDENT BULK IMPORT MODAL                */}
-      {/* ========================================================================= */}
-      <AcademyImportModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        existingBatches={batches}
-        staffList={staffList}
-        onImportComplete={async () => {
-          await loadData(true);
-        }}
-      />
+
 
     </div>
   );

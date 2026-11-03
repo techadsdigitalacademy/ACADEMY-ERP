@@ -37,6 +37,7 @@ export interface Attendance {
   punch_in?: string; // HH:MM:SS
   punch_out?: string; // HH:MM:SS
   selfie_url?: string;
+  working_hours?: string;
   lat?: number;
   lng?: number;
   status: 'PRESENT' | 'ABSENT' | 'LATE' | 'HALF_DAY' | 'LEAVE';

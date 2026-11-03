@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { enrichAttendanceRecords } from '../utils/attendanceStorage';
+import { enrichAttendanceRecords, calculateWorkingHours } from '../utils/attendanceStorage';
 import { Card } from './Card';
 import { Button } from './Button';
 import { Badge } from './Badge';
@@ -59,12 +59,7 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
         .lte('attendance_date', monthEnd);
       if (error) throw error;
       const enriched = await enrichAttendanceRecords(data || []);
-      const normalized = enriched.map((d: any) => ({
-        ...d,
-        status: (d.status || 'present').toUpperCase(),
-        punch_in: d.punch_in || (d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
-      }));
-      setAttendance(normalized);
+      setAttendance(enriched);
     } catch (err: any) {
       console.error('Error fetching attendance logs:', err.message);
     }
@@ -249,14 +244,10 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       else if (matchedLog.status === 'HALF_DAY') halfDayCount++;
       else if (matchedLog.status === 'LEAVE') leaveCount++;
       
-      let workingHours = '-';
-      if (matchedLog.punch_in && matchedLog.punch_out) {
-        const [inH, inM] = matchedLog.punch_in.split(':').map(Number);
-        const [outH, outM] = matchedLog.punch_out.split(':').map(Number);
-        const diffMs = new Date(2000, 0, 1, outH, outM, 0).getTime() - new Date(2000, 0, 1, inH, inM, 0).getTime();
-        const diffHrs = Math.max(0, diffMs / (1000 * 60 * 60));
-        workingHours = `${diffHrs.toFixed(1)} hrs`;
-      }
+      const isTodayLog = dateStr === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      let workingHours = matchedLog.working_hours && matchedLog.working_hours !== '-' 
+        ? matchedLog.working_hours 
+        : calculateWorkingHours(matchedLog.punch_in, matchedLog.punch_out, isTodayLog);
 
       monthlyLogs.push({
         id: matchedLog.id,
