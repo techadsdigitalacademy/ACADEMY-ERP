@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { enrichAttendanceRecords, calculateWorkingHours } from '../utils/attendanceStorage';
+import { enrichAttendanceRecords, calculateWorkingHours, fetchStaffAttendanceRecords, getStoredPunchLocal } from '../utils/attendanceStorage';
 import { getLinkedStaffIds } from '../utils/staffAliases';
 import { Card } from './Card';
 import { Button } from './Button';
@@ -57,15 +57,11 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       const linkedIds = getLinkedStaffIds(staffId || fullName, allProfiles || []);
       const idsToQuery = Array.from(new Set([staffId, ...linkedIds].filter(Boolean)));
 
-      const { data, error } = await supabase
-        .from('staff_attendance')
-        .select('*')
-        .in('staff_id', idsToQuery)
-        .gte('attendance_date', monthStart)
-        .lte('attendance_date', monthEnd)
-        .order('attendance_date', { ascending: true });
-
-      if (error) throw error;
+      const data = await fetchStaffAttendanceRecords({
+        staffIds: idsToQuery,
+        startDate: monthStart,
+        endDate: monthEnd
+      });
 
       const aliasMap = new Map<string, string[]>();
       aliasMap.set(staffId, idsToQuery);
@@ -258,11 +254,28 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
 
   for (let d = 1; d <= maxDay; d++) {
     const dateStr = `${year}-${String(monthIdx).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const matchedLog = attendance.find(a => a.attendance_date === dateStr);
+    let matchedLog: any = attendance.find(a => a.attendance_date === dateStr);
     const dateObj = new Date(year, monthIdx - 1, d);
     const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
     const isWeeklyOff = dayName.toLowerCase() === userWeeklyOff.toLowerCase();
     const matchHoliday = holidays.find(h => h.holiday_date === dateStr);
+    const isTodayLog = dateStr === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+    if (!matchedLog) {
+      const local = getStoredPunchLocal(staffId, dateStr);
+      if (local && (local.punch_in || local.selfie_url)) {
+        matchedLog = {
+          id: `local-${dateStr}`,
+          staff_id: staffId,
+          attendance_date: dateStr,
+          punch_in: local.punch_in || '-',
+          punch_out: local.punch_out || '-',
+          status: ((local.status || 'PRESENT') as any).toUpperCase(),
+          selfie_url: local.selfie_url || null,
+          working_hours: local.working_hours || calculateWorkingHours(local.punch_in, local.punch_out, isTodayLog)
+        };
+      }
+    }
     
     if (matchedLog) {
       if (matchedLog.status === 'PRESENT') presentCount++;
@@ -270,7 +283,6 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       else if (matchedLog.status === 'HALF_DAY') halfDayCount++;
       else if (matchedLog.status === 'LEAVE') leaveCount++;
       
-      const isTodayLog = dateStr === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       let workingHours = matchedLog.working_hours && matchedLog.working_hours !== '-' 
         ? matchedLog.working_hours 
         : calculateWorkingHours(matchedLog.punch_in, matchedLog.punch_out, isTodayLog);

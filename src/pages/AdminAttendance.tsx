@@ -6,7 +6,7 @@ import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { supabase, STAFF_PROFILE_COLUMNS } from '../services/supabase';
 import { dataCache } from '../services/dataCache';
-import { enrichAttendanceRecords } from '../utils/attendanceStorage';
+import { enrichAttendanceRecords, fetchStaffAttendanceRecords, getStoredPunchLocal } from '../utils/attendanceStorage';
 import { deduplicateStaffProfiles, getLinkedStaffIds } from '../utils/staffAliases';
 import { MetricCardsSkeleton, TableSkeleton } from '../components/Skeleton';
 import type { Staff, Attendance } from '../types';
@@ -223,17 +223,11 @@ export const AdminAttendance: React.FC = () => {
       const logs = await dataCache.fetchWithCache(
         cacheKey,
         async () => {
-          const { data, error } = await supabase
-            .from('staff_attendance')
-            .select('*')
-            .in('staff_id', idsToQuery)
-            .gte('attendance_date', monthStart)
-            .lte('attendance_date', monthEnd)
-            .order('attendance_date', { ascending: false });
-          if (error) {
-            console.warn("Could not load drill logs from staff_attendance:", error);
-            return [];
-          }
+          const data = await fetchStaffAttendanceRecords({
+            staffIds: idsToQuery,
+            startDate: monthStart,
+            endDate: monthEnd
+          });
           const aliasMap = new Map<string, string[]>();
           aliasMap.set(staffId, idsToQuery);
           const enriched = await enrichAttendanceRecords(data || [], aliasMap);
@@ -270,14 +264,14 @@ export const AdminAttendance: React.FC = () => {
     try {
       let rangeAttData: any[] = [];
       try {
-        const { data, error: rangeAttErr } = await supabase
-          .from('staff_attendance')
-          .select('*')
-          .gte('attendance_date', reportFromDate)
-          .lte('attendance_date', reportToDate);
+        const data = await fetchStaffAttendanceRecords({
+          startDate: reportFromDate,
+          endDate: reportToDate
+        });
 
-        if (!rangeAttErr && data) {
-          rangeAttData = data.map((d: any) => ({
+        if (data && data.length > 0) {
+          const enriched = await enrichAttendanceRecords(data);
+          rangeAttData = enriched.map((d: any) => ({
             ...d,
             status: (d.status || 'present').toUpperCase(),
             punch_in: d.punch_in || (d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
@@ -587,16 +581,16 @@ export const AdminAttendance: React.FC = () => {
       const { staffData, profilesData, attData } = await dataCache.fetchWithCache(
         cacheKey,
         async () => {
-          const [staffRes, profilesRes, attRes] = await Promise.all([
+          const [staffRes, profilesRes, attResData] = await Promise.all([
             supabase.from('staff').select('*, departments(name), roles(role_name)'),
             supabase.from('staff_profiles').select(STAFF_PROFILE_COLUMNS),
-            supabase.from('staff_attendance').select('*').gte('attendance_date', startOfMonthStr)
+            fetchStaffAttendanceRecords({ startDate: startOfMonthStr })
           ]);
 
           return {
             staffData: staffRes.data || [],
             profilesData: profilesRes.data || [],
-            attData: attRes.data || []
+            attData: attResData || []
           };
         },
         { ttlMs: 45000, forceRefresh }
@@ -699,6 +693,23 @@ export const AdminAttendance: React.FC = () => {
           (linked.includes(a.staff_id) || a.staff_id === staffId || a.staff_id === p.id) && a.attendance_date === todayStr
         );
 
+        let resolvedTodayRecord = todayRecord;
+        if (!resolvedTodayRecord && todayStr === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })) {
+          const local = getStoredPunchLocal(staffId, todayStr, linked);
+          if (local && (local.punch_in || local.selfie_url)) {
+            resolvedTodayRecord = {
+              id: `local-${todayStr}`,
+              staff_id: staffId,
+              attendance_date: todayStr,
+              punch_in: local.punch_in || '-',
+              punch_out: local.punch_out || '-',
+              status: ((local.status || 'PRESENT') as any).toUpperCase(),
+              selfie_url: local.selfie_url || null,
+              working_hours: local.working_hours || '-'
+            };
+          }
+        }
+
         return {
           id: staffId,
           linked_ids: linked,
@@ -713,7 +724,7 @@ export const AdminAttendance: React.FC = () => {
           department_name: sMatch?.departments?.name || 'Academy Counseling',
           role_name: p.designation || 'Staff',
           designation: p.designation || 'Staff',
-          todayRecord: todayRecord as Attendance | undefined
+          todayRecord: (resolvedTodayRecord || todayRecord) as Attendance | undefined
         };
       });
 

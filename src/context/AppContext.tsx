@@ -4,7 +4,7 @@ import { supabase, SALES_COLUMNS, monthWindowStart } from '../services/supabase'
 import { formatStaffEmail, ensureStaffAuthUser, normalizePassword } from '../services/staffAuth';
 import { dataCache } from '../services/dataCache';
 import { extensionForBlob } from '../utils/imageUtils';
-import { savePunchMetaToStorage, enrichAttendanceRecords, calculateWorkingHours } from '../utils/attendanceStorage';
+import { savePunchMetaToStorage, enrichAttendanceRecords, calculateWorkingHours, fetchStaffAttendanceRecords } from '../utils/attendanceStorage';
 import { getLinkedStaffIds } from '../utils/staffAliases';
 
 export type TabType = 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_reports' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets';
@@ -192,12 +192,43 @@ const saveStoredPunch = (staffId: string, dateStr: string, data: Partial<LocalPu
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [activeStaff, setActiveStaff] = useState<Staff | null>(null);
+  const [activeStaff, setActiveStaff] = useState<Staff | null>(() => {
+    try {
+      const saved = localStorage.getItem('tech_ads_active_staff');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [sales, setSales] = useState<Sale[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [dailyReports, setDailyReports] = useState<DailyReport[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().substring(0, 7));
-  const [todayAttendance, setTodayAttendance] = useState<Attendance | null>(null);
+  const [todayAttendance, setTodayAttendance] = useState<Attendance | null>(() => {
+    try {
+      const savedStaffRaw = localStorage.getItem('tech_ads_active_staff');
+      if (savedStaffRaw) {
+        const savedStaff = JSON.parse(savedStaffRaw);
+        const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        const localPunch = getStoredPunch(savedStaff.id, todayStr);
+        if (localPunch && localPunch.punch_in) {
+          return {
+            id: `local-${todayStr}`,
+            staff_id: savedStaff.id,
+            attendance_date: todayStr,
+            punch_in: localPunch.punch_in,
+            punch_out: localPunch.punch_out,
+            status: (localPunch.status || 'PRESENT') as any,
+            selfie_url: localPunch.selfie_url,
+            working_hours: localPunch.working_hours,
+            lat: localPunch.lat,
+            lng: localPunch.lng
+          };
+        }
+      }
+    } catch {}
+    return null;
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [dbError, setDbError] = useState<string | null>(null);
   const [activeTab, setActiveTabState] = useState<TabType>(() => tabForPath(window.location.pathname) as TabType);
@@ -317,14 +348,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const linkedIds = getLinkedStaffIds(staffId, allProfiles || []);
         const idsToQuery = Array.from(new Set([staffId, ...linkedIds].filter(Boolean)));
 
-        const { data: attData, error: attErr } = await supabase
-          .from('staff_attendance')
-          .select('*')
-          .in('staff_id', idsToQuery)
-          .gte('attendance_date', windowStartStr)
-          .order('attendance_date', { ascending: true });
+        const attData = await fetchStaffAttendanceRecords({
+          staffIds: idsToQuery,
+          startDate: windowStartStr
+        });
 
-        if (!attErr && attData && attData.length > 0) {
+        if (attData && attData.length > 0) {
           attDataList = attData;
         }
 
@@ -332,13 +361,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         aliasMap.set(staffId, idsToQuery);
 
         const enriched = await enrichAttendanceRecords(attDataList, aliasMap);
-        setAttendance(enriched as Attendance[]);
 
         const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
         const todayRec = enriched.find((a: any) => a.attendance_date === todayStr);
-        setTodayAttendance(todayRec || null);
+
+        if (todayRec) {
+          setTodayAttendance(todayRec);
+        } else {
+          // Check local punch before resetting to null
+          const localPunch = getStoredPunch(staffId, todayStr);
+          if (localPunch && localPunch.punch_in) {
+            const localToday: Attendance = {
+              id: `local-${todayStr}`,
+              staff_id: staffId,
+              attendance_date: todayStr,
+              punch_in: localPunch.punch_in,
+              punch_out: localPunch.punch_out,
+              status: (localPunch.status || 'PRESENT') as any,
+              selfie_url: localPunch.selfie_url,
+              working_hours: localPunch.working_hours,
+              lat: localPunch.lat,
+              lng: localPunch.lng
+            };
+            setTodayAttendance(localToday);
+            if (!enriched.some((a: any) => a.attendance_date === todayStr)) {
+              enriched.unshift(localToday);
+            }
+          } else {
+            setTodayAttendance(null);
+          }
+        }
+
+        setAttendance(enriched as Attendance[]);
       } catch (e) {
-        setAttendance([]);
+        console.warn('Dashboard attendance fetch notice:', e);
       }
 
       // Safely fetch daily reports from Supabase
@@ -540,8 +596,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const todayRecord = attendance.find((a) => a.attendance_date === todayStr);
-    setTodayAttendance(todayRecord || null);
-  }, [attendance]);
+    if (todayRecord) {
+      setTodayAttendance(todayRecord);
+    } else {
+      const activeId = activeStaff?.id;
+      if (activeId) {
+        const local = getStoredPunch(activeId, todayStr);
+        if (local && local.punch_in) {
+          // Keep local punch intact, avoid wiping to null
+          return;
+        }
+      }
+      setTodayAttendance(null);
+    }
+  }, [attendance, activeStaff?.id]);
 
   // Real-time synchronization across clients & tabs.
   //
@@ -1112,16 +1180,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, linkedIds);
 
     try {
-      await fetch(`/supabase-admin/rest/v1/staff_attendance?id=eq.${todayAttendance.id}`, {
+      const allIds = Array.from(new Set([activeStaff.id, ...linkedIds].filter(Boolean)));
+      const patchQuery = todayAttendance.id && !todayAttendance.id.startsWith('local-')
+        ? `id=eq.${todayAttendance.id}`
+        : `staff_id=in.(${allIds.join(',')})&attendance_date=eq.${todayStr}`;
+
+      await fetch(`/supabase-admin/rest/v1/staff_attendance?${patchQuery}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'present' })
       }).catch(() => {});
 
-      await supabase
-        .from('staff_attendance')
-        .update({ status: 'present' })
-        .eq('id', todayAttendance.id);
+      if (todayAttendance.id && !todayAttendance.id.startsWith('local-')) {
+        await supabase
+          .from('staff_attendance')
+          .update({ status: 'present' })
+          .eq('id', todayAttendance.id);
+      }
     } catch (err) {
       console.warn('Punch out update notice:', err);
     }

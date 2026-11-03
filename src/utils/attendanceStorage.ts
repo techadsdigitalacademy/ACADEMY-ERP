@@ -268,23 +268,40 @@ export async function getPunchMeta(
   // 2. Check Supabase Storage .json across all IDs
   for (const id of idsToCheck) {
     const key = `${id}_${dateStr}`;
+    const fileName = `${id}/${dateStr}.json`;
+    let meta: any = null;
+
     try {
-      const fileName = `${id}/${dateStr}.json`;
       const { data: { publicUrl } } = supabase.storage.from('attendance').getPublicUrl(fileName);
       if (publicUrl) {
         const res = await fetch(publicUrl, { cache: 'no-cache' });
         if (res.ok) {
-          const meta = await res.json();
-          const local = getStoredPunchLocal(id, dateStr);
-          const combined = { ...(local || {}), ...meta };
-          memoryPunchCache.set(key, combined);
-          try {
-            localStorage.setItem(`staff_punch_${id}_${dateStr}`, JSON.stringify(combined));
-          } catch (_) {}
-          return combined;
+          meta = await res.json();
         }
       }
     } catch (_) {}
+
+    if (!meta) {
+      try {
+        let proxyRes = await fetch(`/supabase-admin/storage/v1/object/public/attendance/${fileName}`, { cache: 'no-cache' });
+        if (!proxyRes.ok) {
+          proxyRes = await fetch(`/supabase-admin/storage/v1/object/attendance/${fileName}`, { cache: 'no-cache' });
+        }
+        if (proxyRes.ok) {
+          meta = await proxyRes.json();
+        }
+      } catch (_) {}
+    }
+
+    if (meta) {
+      const local = getStoredPunchLocal(id, dateStr);
+      const combined = { ...(local || {}), ...meta };
+      memoryPunchCache.set(key, combined);
+      try {
+        localStorage.setItem(`staff_punch_${id}_${dateStr}`, JSON.stringify(combined));
+      } catch (_) {}
+      return combined;
+    }
   }
 
   // 3. Fallback: Check if an image exists in storage bucket for this date across IDs
@@ -302,6 +319,74 @@ export async function getPunchMeta(
   }
 
   return getStoredPunchLocal(staffId, dateStr);
+}
+
+/**
+ * Safely fetch staff attendance records across both dev server and production (Vercel),
+ * bypassing Postgres RLS restrictions via the secure admin proxy.
+ */
+export async function fetchStaffAttendanceRecords(options: {
+  staffIds?: string[];
+  startDate?: string;
+  endDate?: string;
+} = {}): Promise<any[]> {
+  const { staffIds, startDate, endDate } = options;
+  const params: string[] = ['select=*', 'order=created_at.asc'];
+
+  if (staffIds && staffIds.length > 0) {
+    const validIds = staffIds.filter(Boolean);
+    if (validIds.length === 1) {
+      params.push(`staff_id=eq.${validIds[0]}`);
+    } else if (validIds.length > 1) {
+      params.push(`staff_id=in.(${validIds.join(',')})`);
+    }
+  }
+
+  if (startDate) {
+    params.push(`attendance_date=gte.${startDate}`);
+  }
+  if (endDate) {
+    params.push(`attendance_date=lte.${endDate}`);
+  }
+
+  const queryString = params.join('&');
+
+  // 1. Try secure admin proxy (works on localhost:5180 and on Vercel deployment, bypassing RLS)
+  try {
+    const proxyRes = await fetch(`/supabase-admin/rest/v1/staff_attendance?${queryString}`);
+    if (proxyRes.ok) {
+      const data = await proxyRes.json();
+      if (Array.isArray(data)) {
+        return data;
+      }
+    }
+  } catch (proxyErr) {
+    console.warn('Admin proxy attendance fetch notice:', proxyErr);
+  }
+
+  // 2. Direct Supabase client fallback
+  try {
+    let query = supabase.from('staff_attendance').select('*');
+    if (staffIds && staffIds.length > 0) {
+      query = query.in('staff_id', staffIds);
+    }
+    if (startDate) {
+      query = query.gte('attendance_date', startDate);
+    }
+    if (endDate) {
+      query = query.lte('attendance_date', endDate);
+    }
+    query = query.order('created_at', { ascending: true });
+
+    const { data, error } = await query;
+    if (!error && data && data.length > 0) {
+      return data;
+    }
+  } catch (clientErr) {
+    console.warn('Direct client attendance fetch notice:', clientErr);
+  }
+
+  return [];
 }
 
 /**
