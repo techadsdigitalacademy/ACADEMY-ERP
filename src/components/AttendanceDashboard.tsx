@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { enrichAttendanceRecords, calculateWorkingHours } from '../utils/attendanceStorage';
+import { getLinkedStaffIds } from '../utils/staffAliases';
 import { Card } from './Card';
 import { Button } from './Button';
 import { Badge } from './Badge';
@@ -51,14 +52,25 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       const monthStart = `${selectedAttMonth}-01`;
       const monthEnd = `${selectedAttMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
 
+      // Fetch all staff profiles to resolve alias IDs for this staff member
+      const { data: allProfiles } = await supabase.from('staff_profiles').select('*');
+      const linkedIds = getLinkedStaffIds(staffId || fullName, allProfiles || []);
+      const idsToQuery = Array.from(new Set([staffId, ...linkedIds].filter(Boolean)));
+
       const { data, error } = await supabase
         .from('staff_attendance')
         .select('*')
-        .eq('staff_id', staffId)
+        .in('staff_id', idsToQuery)
         .gte('attendance_date', monthStart)
-        .lte('attendance_date', monthEnd);
+        .lte('attendance_date', monthEnd)
+        .order('attendance_date', { ascending: true });
+
       if (error) throw error;
-      const enriched = await enrichAttendanceRecords(data || []);
+
+      const aliasMap = new Map<string, string[]>();
+      aliasMap.set(staffId, idsToQuery);
+
+      const enriched = await enrichAttendanceRecords(data || [], aliasMap);
       setAttendance(enriched);
     } catch (err: any) {
       console.error('Error fetching attendance logs:', err.message);
@@ -68,26 +80,40 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   const fetchLogs = async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch staff metadata to get dynamic weekly_off and shift times
-      const { data: staffRecord } = await supabase
-        .from('staff')
-        .select('full_name')
-        .eq('id', staffId)
+      // 1. Fetch staff metadata directly from staff_profiles to get dynamic weekly_off and shift times
+      const { data: profRecord } = await supabase
+        .from('staff_profiles')
+        .select('shift_start_time, shift_end_time, weekly_off_day')
+        .or(`id.eq.${staffId},full_name.ilike.${fullName}`)
+        .limit(1)
         .maybeSingle();
 
-      if (staffRecord) {
-        const { data: profRecord } = await supabase
-          .from('staff_profiles')
-          .select('shift_start_time, shift_end_time, weekly_off_day')
-          .eq('full_name', staffRecord.full_name)
+      if (profRecord) {
+        setProfileDetails({
+          shift_start_time: profRecord.shift_start_time || '09:00:00',
+          shift_end_time: profRecord.shift_end_time || '18:00:00',
+          weekly_off_day: profRecord.weekly_off_day || 'Sunday'
+        });
+      } else {
+        const { data: staffRecord } = await supabase
+          .from('staff')
+          .select('full_name')
+          .eq('id', staffId)
           .maybeSingle();
 
-        if (profRecord) {
-          setProfileDetails({
-            shift_start_time: profRecord.shift_start_time || '09:00:00',
-            shift_end_time: profRecord.shift_end_time || '18:00:00',
-            weekly_off_day: profRecord.weekly_off_day || 'Sunday'
-          });
+        if (staffRecord) {
+          const { data: pRec } = await supabase
+            .from('staff_profiles')
+            .select('shift_start_time, shift_end_time, weekly_off_day')
+            .eq('full_name', staffRecord.full_name)
+            .maybeSingle();
+          if (pRec) {
+            setProfileDetails({
+              shift_start_time: pRec.shift_start_time || '09:00:00',
+              shift_end_time: pRec.shift_end_time || '18:00:00',
+              weekly_off_day: pRec.weekly_off_day || 'Sunday'
+            });
+          }
         }
       }
 

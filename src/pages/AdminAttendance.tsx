@@ -7,12 +7,13 @@ import { Button } from '../components/Button';
 import { supabase, STAFF_PROFILE_COLUMNS } from '../services/supabase';
 import { dataCache } from '../services/dataCache';
 import { enrichAttendanceRecords } from '../utils/attendanceStorage';
+import { deduplicateStaffProfiles, getLinkedStaffIds } from '../utils/staffAliases';
 import { MetricCardsSkeleton, TableSkeleton } from '../components/Skeleton';
 import type { Staff, Attendance } from '../types';
-import { 
-  AlertCircle, 
-  Search, 
-  Filter, 
+import {
+  AlertCircle,
+  Search,
+  Filter,
   Award,
   X,
   TrendingUp,
@@ -26,6 +27,7 @@ import {
 
 interface StaffWithAttendance extends Staff {
   todayRecord?: Attendance;
+  linked_ids?: string[];
 }
 
 export const AdminAttendance: React.FC = () => {
@@ -50,6 +52,7 @@ export const AdminAttendance: React.FC = () => {
   const [staffList, setStaffList] = useState<StaffWithAttendance[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Present' | 'Late' | 'Half Day' | 'Leave' | 'Absent'>('All');
+  const [selectedRegistryDate, setSelectedRegistryDate] = useState<string>(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
   const [adminTab, setAdminTab] = useState<'registry' | 'reports'>('registry');
   const [masterStaffList, setMasterStaffList] = useState<any[]>([]);
   const [enlargedSelfie, setEnlargedSelfie] = useState<string | null>(null);
@@ -62,13 +65,13 @@ export const AdminAttendance: React.FC = () => {
       csvRows.push([`Present: ${present}`, `Late: ${late}`, `Half Day: ${halfDay}`, `Leave: ${leave}`, `Holiday: ${holiday}`, `Attendance %: ${attPct}%`]);
       csvRows.push([]);
       csvRows.push(['Date', 'Clock In', 'Clock Out', 'Working Hours', 'Status', 'Selfie Verified']);
-      
+
       (logs || []).slice().reverse().forEach((log: any) => {
         csvRows.push([
-          log.date, 
-          log.punch_in || '-', 
-          log.punch_out || '-', 
-          log.working_hours || '-', 
+          log.date,
+          log.punch_in || '-',
+          log.punch_out || '-',
+          log.working_hours || '-',
           log.status || 'ABSENT',
           log.selfie_url ? 'Yes' : 'No'
         ]);
@@ -211,13 +214,19 @@ export const AdminAttendance: React.FC = () => {
       const [dYear, dMonth] = month.split('-').map(Number);
       const monthStart = `${month}-01`;
       const monthEnd = `${month}-${String(new Date(dYear, dMonth, 0).getDate()).padStart(2, '0')}`;
+
+      // Resolve linked alias IDs
+      const targetStaff = staffList.find(s => s.id === staffId) || selectedStaffForDrill;
+      const linkedIds = targetStaff?.linked_ids || getLinkedStaffIds(staffId, masterStaffList);
+      const idsToQuery = Array.from(new Set([staffId, ...linkedIds].filter(Boolean)));
+
       const logs = await dataCache.fetchWithCache(
         cacheKey,
         async () => {
           const { data, error } = await supabase
             .from('staff_attendance')
             .select('*')
-            .eq('staff_id', staffId)
+            .in('staff_id', idsToQuery)
             .gte('attendance_date', monthStart)
             .lte('attendance_date', monthEnd)
             .order('attendance_date', { ascending: false });
@@ -225,7 +234,9 @@ export const AdminAttendance: React.FC = () => {
             console.warn("Could not load drill logs from staff_attendance:", error);
             return [];
           }
-          const enriched = await enrichAttendanceRecords(data || []);
+          const aliasMap = new Map<string, string[]>();
+          aliasMap.set(staffId, idsToQuery);
+          const enriched = await enrichAttendanceRecords(data || [], aliasMap);
           return enriched.map((d: any) => ({
             ...d,
             status: (d.status || 'present').toUpperCase(),
@@ -280,8 +291,9 @@ export const AdminAttendance: React.FC = () => {
       const targetStaffs = (masterStaffList.length > 0 ? masterStaffList : staffList).filter(s => s && s.full_name && !s.full_name.toLowerCase().includes('althaf'));
 
       const aggregated = targetStaffs.map(staff => {
-        const staffLogs = logs.filter(l => l.staff_id === staff.id);
-        
+        const staffLinkedIds = staff.linked_ids || [staff.id];
+        const staffLogs = logs.filter(l => staffLinkedIds.includes(l.staff_id) || l.staff_id === staff.id);
+
         let present = 0;
         let late = 0;
         let halfDay = 0;
@@ -475,7 +487,7 @@ export const AdminAttendance: React.FC = () => {
       }
 
       const todayDisplayDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-      
+
       const rowsHtml = filteredStaff.map(staff => {
         const isPunchIn = staff.todayRecord?.punch_in || '-';
         const isPunchOut = staff.todayRecord?.punch_out || '-';
@@ -566,8 +578,9 @@ export const AdminAttendance: React.FC = () => {
     }
     setError(null);
     try {
-      const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-      const startOfMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`;
+      const todayStr = selectedRegistryDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const [rYear, rMonth] = todayStr.split('-').map(Number);
+      const startOfMonthStr = `${rYear}-${String(rMonth).padStart(2, '0')}-01`;
 
       // Parallelize Supabase requests
       const cacheKey = `admin_attendance_month_${startOfMonthStr}`;
@@ -580,22 +593,10 @@ export const AdminAttendance: React.FC = () => {
             supabase.from('staff_attendance').select('*').gte('attendance_date', startOfMonthStr)
           ]);
 
-          let attRecords: any[] = [];
-          if (attRes.data) {
-            const enriched = await enrichAttendanceRecords(attRes.data);
-            attRecords = enriched.map((a: any) => ({
-              ...a,
-              status: (a.status || 'present').toUpperCase(),
-              punch_in: a.punch_in || (a.created_at ? new Date(a.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
-            }));
-          } else if (attRes.error) {
-            console.warn("staff_attendance load info:", attRes.error);
-          }
-
           return {
             staffData: staffRes.data || [],
             profilesData: profilesRes.data || [],
-            attData: attRecords
+            attData: attRes.data || []
           };
         },
         { ttlMs: 45000, forceRefresh }
@@ -622,7 +623,7 @@ export const AdminAttendance: React.FC = () => {
       };
 
       // Filter active profiles matching Staff Management directory (excludes Company Owners)
-      const activeProfiles = (profilesData || []).filter((p: any) => {
+      const rawActiveProfiles = (profilesData || []).filter((p: any) => {
         if (!p || !p.full_name) return false;
         if (p.status === 'INACTIVE' || p.status === 'RESIGNED') return false;
         if (isOwnerProfile(p)) return false;
@@ -630,7 +631,7 @@ export const AdminAttendance: React.FC = () => {
         const desig = String(p.designation || '').toLowerCase().trim();
         const rName = String(p.role_name || p.role || '').toLowerCase().trim();
 
-        const isAdminDir = (desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director')) && 
+        const isAdminDir = (desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director')) &&
           desig !== 'managing director';
 
         if (isAdminDir) return false;
@@ -638,15 +639,18 @@ export const AdminAttendance: React.FC = () => {
         return true;
       });
 
+      // Deduplicate active profiles to avoid duplicate rows for the same person
+      const activeProfiles = deduplicateStaffProfiles(rawActiveProfiles);
+
       // Master staff list for reports
-      const validMasterProfiles = (profilesData || []).filter((p: any) => {
+      const rawMasterProfiles = (profilesData || []).filter((p: any) => {
         if (!p || !p.full_name) return false;
         if (isOwnerProfile(p)) return false;
 
         const desig = String(p.designation || '').toLowerCase().trim();
         const rName = String(p.role_name || p.role || '').toLowerCase().trim();
 
-        const isAdminDir = (desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director')) && 
+        const isAdminDir = (desig.includes('admin') || desig.includes('director') || rName.includes('admin') || rName.includes('director')) &&
           desig !== 'managing director';
 
         if (isAdminDir) return false;
@@ -654,13 +658,33 @@ export const AdminAttendance: React.FC = () => {
         return true;
       });
 
+      const validMasterProfiles = deduplicateStaffProfiles(rawMasterProfiles);
+
+      // Build alias map
+      const aliasMap = new Map<string, string[]>();
+      activeProfiles.forEach(p => {
+        aliasMap.set(p.id, p.linked_ids);
+      });
+
+      // Enrich attendance records with alias consolidation, selfies, in/out times
+      let attRecords: any[] = [];
+      if (attData && attData.length > 0) {
+        const enriched = await enrichAttendanceRecords(attData, aliasMap);
+        attRecords = enriched.map((a: any) => ({
+          ...a,
+          status: (a.status || 'present').toUpperCase(),
+          punch_in: a.punch_in || (a.created_at ? new Date(a.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
+        }));
+      }
+
       setMasterStaffList(validMasterProfiles.map((p: any) => {
         const sMatch = staffByCleanName.get(p.full_name.trim().toLowerCase());
         return {
-          id: sMatch?.id || p.id,
+          id: p.id || sMatch?.id,
+          linked_ids: p.linked_ids,
           full_name: p.full_name,
           designation: p.designation || 'Staff',
-          department_name: sMatch?.departments?.name || 'Sales & Growth',
+          department_name: sMatch?.departments?.name || 'Academy Counseling',
           status: p.status || 'ACTIVE'
         };
       }));
@@ -668,22 +692,25 @@ export const AdminAttendance: React.FC = () => {
       // Map attendance records onto active staff profiles list
       const mappedList: StaffWithAttendance[] = activeProfiles.map((p: any) => {
         const sMatch = staffByCleanName.get(p.full_name.trim().toLowerCase());
-        const staffId = sMatch?.id || p.id;
-        const todayRecord = (attData || []).find((a: any) => 
-          (a.staff_id === staffId || a.staff_id === p.id) && a.attendance_date === todayStr
+        const staffId = p.id || sMatch?.id;
+        const linked = p.linked_ids || [staffId];
+
+        const todayRecord = (attRecords || []).find((a: any) =>
+          (linked.includes(a.staff_id) || a.staff_id === staffId || a.staff_id === p.id) && a.attendance_date === todayStr
         );
 
         return {
           id: staffId,
-          staff_code: sMatch?.staff_code || `EMP-${p.id.slice(0, 4)}`,
+          linked_ids: linked,
+          staff_code: sMatch?.staff_code || `EMP-${p.id.slice(0, 4).toUpperCase()}`,
           full_name: p.full_name,
           department_id: sMatch?.department_id,
           role_id: sMatch?.role_id,
           avatar_url: p.avatar_url || sMatch?.avatar_url,
           monthly_target_amount: Number(sMatch?.monthly_target_amount || 0),
           notice_period_days: sMatch?.notice_period_days || 30,
-          status: p.status as 'ACTIVE' | 'INACTIVE',
-          department_name: sMatch?.departments?.name || 'Sales & Growth',
+          status: (p.status || 'ACTIVE') as 'ACTIVE' | 'INACTIVE',
+          department_name: sMatch?.departments?.name || 'Academy Counseling',
           role_name: p.designation || 'Staff',
           designation: p.designation || 'Staff',
           todayRecord: todayRecord as Attendance | undefined
@@ -700,13 +727,13 @@ export const AdminAttendance: React.FC = () => {
   };
 
   useEffect(() => {
-    loadAttendanceData();
+    loadAttendanceData(true);
 
     const handleStaffChanged = () => {
-      loadAttendanceData();
+      loadAttendanceData(true);
     };
     const handleAttendanceChanged = () => {
-      loadAttendanceData();
+      loadAttendanceData(true);
     };
 
     window.addEventListener('staff_profiles_changed', handleStaffChanged);
@@ -716,12 +743,12 @@ export const AdminAttendance: React.FC = () => {
       window.removeEventListener('staff_profiles_changed', handleStaffChanged);
       window.removeEventListener('attendance_data_changed', handleAttendanceChanged);
     };
-  }, []);
+  }, [selectedRegistryDate]);
 
   // Compute metrics for today (excluding owners)
-  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const todayStr = selectedRegistryDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const totalStaffCount = staffList.length;
-  
+
   // Present: strictly present on time (excluding Late and Half Day)
   const presentCount = staffList.filter(s => {
     if (!s.todayRecord) return false;
@@ -767,8 +794,8 @@ export const AdminAttendance: React.FC = () => {
 
   // Filter & search staff list
   const filteredStaff = staffList.filter((staff) => {
-    const matchesSearch = 
-      staff.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch =
+      staff.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       staff.staff_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (staff.department_name && staff.department_name.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -777,7 +804,7 @@ export const AdminAttendance: React.FC = () => {
     if (staff.todayRecord) {
       const status = staff.todayRecord.status;
       const punchIn = staff.todayRecord.punch_in;
-      
+
       if (status === 'PRESENT') {
         if (punchIn && punchIn > '09:30:00') {
           currentStatus = 'Late';
@@ -800,27 +827,27 @@ export const AdminAttendance: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-card text-foreground font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
-      
+
 
       {/* Left Sidebar Navigation (Desktop only) */}
       <Sidebar />
 
       {/* Main Content Area */}
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12">
-        
+
         {/* Header Profile Section */}
         <header className="bg-card border border-border sticky top-14 lg:top-0 z-30 px-4 md:px-8 py-3.5 border-b border-border">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
               {/* Avatar (Mobile only) */}
               <div className="relative group cursor-pointer md:hidden">
-                <img 
-                  src={activeStaff.avatar_url} 
-                  alt={activeStaff.full_name} 
+                <img
+                  src={activeStaff.avatar_url}
+                  alt={activeStaff.full_name}
                   className="relative w-10 h-10 rounded-full border-2 border-primary object-cover"
                 />
               </div>
-              
+
               <div>
                 <h1 className="text-base md:text-xl font-bold text-foreground tracking-wide flex items-center gap-2">
                   <span className="md:hidden">Attendance Logs</span>
@@ -834,10 +861,10 @@ export const AdminAttendance: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button 
-                variant="glass" 
-                size="sm" 
-                className="!py-2 !px-3 font-bold text-xs" 
+              <Button
+                variant="glass"
+                size="sm"
+                className="!py-2 !px-3 font-bold text-xs"
                 onClick={() => loadAttendanceData(true)}
                 isLoading={loading}
               >
@@ -849,7 +876,7 @@ export const AdminAttendance: React.FC = () => {
 
         {/* Main Content Panels */}
         <main className="max-w-6xl w-full mx-auto px-4 md:px-8 mt-6 space-y-6">
-          
+
           {loading && staffList.length === 0 ? (
             <div className="space-y-6 animate-fade-in">
               <MetricCardsSkeleton count={7} cols="grid-cols-2 md:grid-cols-4 lg:grid-cols-7" />
@@ -913,11 +940,10 @@ export const AdminAttendance: React.FC = () => {
               <div className="flex gap-4 border-b border-border pb-1 mt-4">
                 <button
                   onClick={() => setAdminTab('registry')}
-                  className={`pb-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all duration-200 ${
- adminTab === 'registry'
- ? 'border-primary text-foreground font-extrabold'
- : 'border-transparent text-muted-foreground hover:text-foreground'
- }`}
+                  className={`pb-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all duration-200 ${adminTab === 'registry'
+                    ? 'border-primary text-foreground font-extrabold'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
                 >
                   Daily Registry
                 </button>
@@ -926,11 +952,10 @@ export const AdminAttendance: React.FC = () => {
                     setAdminTab('reports');
                     generateReport();
                   }}
-                  className={`pb-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all duration-200 ${
- adminTab === 'reports'
- ? 'border-primary text-foreground font-extrabold'
- : 'border-transparent text-muted-foreground hover:text-foreground'
- }`}
+                  className={`pb-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all duration-200 ${adminTab === 'reports'
+                    ? 'border-primary text-foreground font-extrabold'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
                 >
                   Custom Reports
                 </button>
@@ -961,9 +986,24 @@ export const AdminAttendance: React.FC = () => {
                         <FileText className="w-3.5 h-3.5" />
                         <span>Export PDF</span>
                       </button>
-                      <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-semibold bg-card border border-border py-1 px-2.5 rounded-lg">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold bg-card border border-border py-1 px-3 rounded-lg shadow-sm">
                         <Calendar className="w-3.5 h-3.5 text-primary" />
-                        <span>Today: {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Date:</span>
+                        <input
+                          type="date"
+                          value={selectedRegistryDate}
+                          onChange={(e) => setSelectedRegistryDate(e.target.value)}
+                          className="bg-transparent text-xs font-bold text-foreground focus:outline-none cursor-pointer"
+                        />
+                        {selectedRegistryDate !== new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }) && (
+                          <button
+                            onClick={() => setSelectedRegistryDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))}
+                            className="text-[10px] font-bold text-primary hover:underline ml-1 cursor-pointer"
+                            title="Reset to today"
+                          >
+                            Today
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -972,15 +1012,15 @@ export const AdminAttendance: React.FC = () => {
                   <div className="flex flex-col md:flex-row gap-3">
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-3.5 w-4 h-4 text-muted-foreground" />
-                      <input 
-                        type="text" 
-                        placeholder="Search employee name, staff code, or department..." 
+                      <input
+                        type="text"
+                        placeholder="Search employee name, staff code, or department..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-9 pr-4 py-3 rounded-md bg-muted-2 border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-[var(--ring)] transition-all duration-300"
                       />
                       {searchQuery && (
-                        <button 
+                        <button
                           onClick={() => setSearchQuery('')}
                           className="absolute right-3 top-3.5 text-muted-foreground hover:text-white"
                         >
@@ -999,9 +1039,9 @@ export const AdminAttendance: React.FC = () => {
                           onClick={() => setStatusFilter(filter)}
                           className={`
  text-xs px-3.5 py-2.5 rounded-md font-bold border transition-all duration-300 shrink-0
- ${statusFilter === filter 
- ? 'bg-primary border-primary text-foreground shadow-md' 
- : 'bg-muted-2 border-border text-muted-foreground hover:text-foreground hover:bg-muted'}
+ ${statusFilter === filter
+                              ? 'bg-primary border-primary text-foreground shadow-md'
+                              : 'bg-muted-2 border-border text-muted-foreground hover:text-foreground hover:bg-muted'}
  `}
                         >
                           {filter}
@@ -1064,15 +1104,15 @@ export const AdminAttendance: React.FC = () => {
                                     {/* 1. Selfie Thumbnail */}
                                     <td className="py-3.5 px-4 text-center">
                                       {selfieUrl ? (
-                                        <button 
-                                          type="button" 
+                                        <button
+                                          type="button"
                                           onClick={() => setEnlargedSelfie(selfieUrl)}
                                           className="inline-block relative group focus:outline-none cursor-pointer"
                                           title="Click to view full punch-in selfie photo"
                                         >
-                                          <img 
-                                            src={selfieUrl} 
-                                            alt="Selfie" 
+                                          <img
+                                            src={selfieUrl}
+                                            alt="Selfie"
                                             className="w-10 h-10 rounded-full border-2 border-emerald-500/60 object-cover hover:border-primary shadow-sm hover:scale-105 transition-all"
                                           />
                                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-card flex items-center justify-center shadow">
@@ -1080,9 +1120,9 @@ export const AdminAttendance: React.FC = () => {
                                           </span>
                                         </button>
                                       ) : staff.avatar_url ? (
-                                        <img 
-                                          src={staff.avatar_url} 
-                                          alt="" 
+                                        <img
+                                          src={staff.avatar_url}
+                                          alt=""
                                           className="w-10 h-10 rounded-full border border-border object-cover opacity-75 inline-block"
                                           title="Profile Avatar (No punch selfie logged)"
                                         />
@@ -1152,9 +1192,9 @@ export const AdminAttendance: React.FC = () => {
 
                                     {/* 8. Actions */}
                                     <td className="py-3.5 px-4 text-right">
-                                      <Button 
-                                        variant="glass" 
-                                        size="sm" 
+                                      <Button
+                                        variant="glass"
+                                        size="sm"
                                         onClick={() => handleOpenDrillModal(staff)}
                                         className="!py-1.5 !px-3 text-xs font-bold hover:border-primary cursor-pointer"
                                       >
@@ -1175,7 +1215,7 @@ export const AdminAttendance: React.FC = () => {
                             const isPunchOut = staff.todayRecord?.punch_out;
                             const workingHours = staff.todayRecord?.working_hours || '-';
                             const selfieUrl = staff.todayRecord?.selfie_url;
-                            
+
                             let displayStatus = 'ABSENT';
                             let badgeVariant: 'success' | 'warning' | 'info' | 'error' | 'purple' = 'error';
 
@@ -1204,23 +1244,23 @@ export const AdminAttendance: React.FC = () => {
                                 <div className="flex justify-between items-start gap-3">
                                   <div className="flex items-center gap-3">
                                     {selfieUrl ? (
-                                      <button 
-                                        type="button" 
+                                      <button
+                                        type="button"
                                         onClick={() => setEnlargedSelfie(selfieUrl)}
                                         className="relative focus:outline-none cursor-pointer"
                                         title="Click to view selfie"
                                       >
-                                        <img 
-                                          src={selfieUrl} 
-                                          alt="" 
+                                        <img
+                                          src={selfieUrl}
+                                          alt=""
                                           className="w-12 h-12 rounded-full border-2 border-emerald-500/60 object-cover shadow-sm"
                                         />
                                         <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-card"></span>
                                       </button>
                                     ) : (
-                                      <img 
-                                        src={staff.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=128&auto=format&fit=crop'} 
-                                        alt="" 
+                                      <img
+                                        src={staff.avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=128&auto=format&fit=crop'}
+                                        alt=""
                                         className="w-12 h-12 rounded-full border border-border object-cover"
                                       />
                                     )}
@@ -1259,9 +1299,9 @@ export const AdminAttendance: React.FC = () => {
                                 </div>
 
                                 <div className="mt-3 pt-2.5 border-t border-border">
-                                  <Button 
-                                    variant="glass" 
-                                    size="sm" 
+                                  <Button
+                                    variant="glass"
+                                    size="sm"
                                     onClick={() => handleOpenDrillModal(staff)}
                                     className="w-full text-xs font-bold py-1.5"
                                   >
@@ -1299,8 +1339,8 @@ export const AdminAttendance: React.FC = () => {
                   <div className="flex flex-col sm:flex-row gap-4 items-end">
                     <div className="space-y-1.5 flex-1">
                       <label className="text-[10px] font-bold uppercase text-muted-foreground">From Date</label>
-                      <input 
-                        type="date" 
+                      <input
+                        type="date"
                         value={reportFromDate}
                         onChange={(e) => setReportFromDate(e.target.value)}
                         className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs font-bold text-foreground focus:outline-none focus:border-primary"
@@ -1309,8 +1349,8 @@ export const AdminAttendance: React.FC = () => {
 
                     <div className="space-y-1.5 flex-1">
                       <label className="text-[10px] font-bold uppercase text-muted-foreground">To Date</label>
-                      <input 
-                        type="date" 
+                      <input
+                        type="date"
                         value={reportToDate}
                         onChange={(e) => setReportToDate(e.target.value)}
                         className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs font-bold text-foreground focus:outline-none focus:border-primary"
@@ -1387,7 +1427,7 @@ export const AdminAttendance: React.FC = () => {
               {selectedStaffForDrill && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-card/80 animate-fade-in">
                   <Card variant="glass" className="w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-border p-6 flex flex-col gap-6 relative">
-                    <button 
+                    <button
                       onClick={() => setSelectedStaffForDrill(null)}
                       className="absolute top-4 right-4 p-2 rounded-lg bg-card/85 hover:bg-muted text-muted-foreground hover:text-white transition-colors"
                     >
@@ -1395,9 +1435,9 @@ export const AdminAttendance: React.FC = () => {
                     </button>
 
                     <div className="border-b border-border pb-4 flex items-center gap-4">
-                      <img 
-                        src={selectedStaffForDrill.avatar_url} 
-                        alt="" 
+                      <img
+                        src={selectedStaffForDrill.avatar_url}
+                        alt=""
                         className="w-12 h-12 rounded-full border border-border object-cover"
                       />
                       <div>
@@ -1416,7 +1456,7 @@ export const AdminAttendance: React.FC = () => {
                         // Generate monthly logs for drill Month (Day 1 to Current Date)
                         const [year, monthIdx] = drillMonth.split('-').map(Number);
                         const daysInMonth = new Date(year, monthIdx, 0).getDate();
-                        
+
                         const todayObj = new Date();
                         const currentYear = todayObj.getFullYear();
                         const currentMonth = todayObj.getMonth() + 1;
@@ -1440,7 +1480,7 @@ export const AdminAttendance: React.FC = () => {
                           const dateStr = `${year}-${String(monthIdx).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                           const matchedLog = drillLogs.find(a => a.attendance_date === dateStr);
                           const dayOfWeek = new Date(year, monthIdx - 1, d).getDay(); // 0 is Sunday
-                          
+
                           if (matchedLog) {
                             let effectiveStatus = matchedLog.status;
                             if (effectiveStatus === 'PRESENT' && matchedLog.punch_in && matchedLog.punch_in > '09:30:00') {
@@ -1451,7 +1491,7 @@ export const AdminAttendance: React.FC = () => {
                             else if (effectiveStatus === 'LATE') lateCount++;
                             else if (effectiveStatus === 'HALF_DAY') halfDayCount++;
                             else if (effectiveStatus === 'LEAVE' || effectiveStatus === 'ABSENT') leaveCount++;
-                            
+
                             let workingHours = '-';
                             if (matchedLog.punch_in && matchedLog.punch_out) {
                               const [inH, inM] = matchedLog.punch_in.split(':').map(Number);
@@ -1495,39 +1535,39 @@ export const AdminAttendance: React.FC = () => {
                         }
 
                         const totalWorkingDays = maxDay - holidayCount;
-                        const attendancePercentage = totalWorkingDays > 0 
+                        const attendancePercentage = totalWorkingDays > 0
                           ? Math.min(100, Math.round(((presentCount + lateCount + halfDayCount * 0.5) / totalWorkingDays) * 100))
                           : 0;
 
                         return (
                           <div className="space-y-6">
-                              <div className="flex justify-between items-center bg-muted-2 p-4 rounded-md border border-border">
-                                <span className="text-xs font-bold text-muted-foreground uppercase">Filter Registry Month</span>
-                                <div className="flex items-center gap-2">
-                                  <input 
-                                    type="month" 
-                                    value={drillMonth}
-                                    onChange={(e) => setDrillMonth(e.target.value)}
-                                    className="px-3 py-1.5 rounded-md bg-card border border-border text-xs font-bold text-foreground focus:outline-none"
-                                  />
-                                  <button 
-                                    onClick={() => handleExportStaffAttendanceExcel(selectedStaffForDrill, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
-                                    title="Export Attendance Report to Excel / CSV"
-                                  >
-                                    <Download className="w-3.5 h-3.5" />
-                                    <span>Export Excel</span>
-                                  </button>
-                                  <button 
-                                    onClick={() => handleExportStaffAttendancePDF(selectedStaffForDrill, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft hover:bg-danger-soft text-danger border border-danger/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
-                                    title="Export Attendance Report to PDF"
-                                  >
-                                    <FileText className="w-3.5 h-3.5" />
-                                    <span>Export PDF</span>
-                                  </button>
-                                </div>
+                            <div className="flex justify-between items-center bg-muted-2 p-4 rounded-md border border-border">
+                              <span className="text-xs font-bold text-muted-foreground uppercase">Filter Registry Month</span>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="month"
+                                  value={drillMonth}
+                                  onChange={(e) => setDrillMonth(e.target.value)}
+                                  className="px-3 py-1.5 rounded-md bg-card border border-border text-xs font-bold text-foreground focus:outline-none"
+                                />
+                                <button
+                                  onClick={() => handleExportStaffAttendanceExcel(selectedStaffForDrill, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                                  title="Export Attendance Report to Excel / CSV"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span>Export Excel</span>
+                                </button>
+                                <button
+                                  onClick={() => handleExportStaffAttendancePDF(selectedStaffForDrill, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft hover:bg-danger-soft text-danger border border-danger/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                                  title="Export Attendance Report to PDF"
+                                >
+                                  <FileText className="w-3.5 h-3.5" />
+                                  <span>Export PDF</span>
+                                </button>
                               </div>
+                            </div>
 
                             {/* Summary Metrics */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
@@ -1576,9 +1616,9 @@ export const AdminAttendance: React.FC = () => {
                                       <td className="py-2.5 px-3">
                                         {log.selfie_url ? (
                                           <button type="button" onClick={() => setEnlargedSelfie(log.selfie_url)} className="focus:outline-none cursor-pointer" title="Click to enlarge selfie">
-                                            <img 
-                                              src={log.selfie_url} 
-                                              alt="" 
+                                            <img
+                                              src={log.selfie_url}
+                                              alt=""
                                               className="w-8 h-8 rounded-full border border-border object-cover hover:border-primary shadow-sm hover:scale-105 transition-all"
                                             />
                                           </button>
@@ -1591,14 +1631,14 @@ export const AdminAttendance: React.FC = () => {
                                       <td className="py-2.5 px-3 text-muted-foreground">{log.punch_out || '-'}</td>
                                       <td className="py-2.5 px-3 text-muted-foreground">{log.working_hours}</td>
                                       <td className="py-2.5 px-3 text-center">
-                                        <Badge 
+                                        <Badge
                                           variant={
-                                            log.status === 'PRESENT' ? 'success' : 
-                                            log.status === 'LATE' ? 'warning' : 
-                                            log.status === 'HALF_DAY' ? 'purple' : 
-                                            log.status === 'LEAVE' ? 'info' : 
-                                            log.status === 'HOLIDAY' ? 'indigo' : 'error'
-                                          } 
+                                            log.status === 'PRESENT' ? 'success' :
+                                              log.status === 'LATE' ? 'warning' :
+                                                log.status === 'HALF_DAY' ? 'purple' :
+                                                  log.status === 'LEAVE' ? 'info' :
+                                                    log.status === 'HOLIDAY' ? 'indigo' : 'error'
+                                          }
                                           className="text-[9px] py-0.5 px-1.5"
                                         >
                                           {log.status === 'HALF_DAY' ? 'HALF DAY' : log.status === 'LEAVE' ? 'ON LEAVE' : log.status}
@@ -1623,11 +1663,11 @@ export const AdminAttendance: React.FC = () => {
 
       {/* Lightbox Selfie Modal */}
       {enlargedSelfie && (
-        <div 
+        <div
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in"
           onClick={() => setEnlargedSelfie(null)}
         >
-          <div 
+          <div
             className="relative max-w-sm w-full rounded-2xl overflow-hidden border border-border bg-card shadow-2xl p-4 flex flex-col items-center animate-scale-up"
             onClick={(e) => e.stopPropagation()}
           >
@@ -1636,16 +1676,16 @@ export const AdminAttendance: React.FC = () => {
                 <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
                 Attendance Selfie Verification
               </span>
-              <button 
+              <button
                 onClick={() => setEnlargedSelfie(null)}
                 className="p-1 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <img 
-              src={enlargedSelfie} 
-              alt="Verified Selfie" 
+            <img
+              src={enlargedSelfie}
+              alt="Verified Selfie"
               className="w-full h-80 object-cover rounded-xl border border-border shadow-md"
             />
             <div className="mt-3 text-[11px] text-muted-foreground text-center font-medium">
@@ -1658,7 +1698,7 @@ export const AdminAttendance: React.FC = () => {
       {/* Mobile Sticky Bottom Tab Bar Navigation (Hidden on desktop) */}
       <nav className="fixed bottom-0 left-0 right-0 bg-card border border-border border-t border-border py-2.5 px-6 z-40 md:hidden">
         <div className="max-w-md mx-auto flex items-center justify-around">
-          <button 
+          <button
             onClick={() => setActiveTab('sales')}
             className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
           >
@@ -1666,20 +1706,20 @@ export const AdminAttendance: React.FC = () => {
             <span className="text-[9px] font-medium">Sales Hub</span>
           </button>
 
-          <button 
+          <button
             onClick={() => setActiveTab('history')}
             className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
           >
             <Star className="w-5 h-5" />
             <span className="text-[9px] font-medium">History</span>
           </button>
-          
+
           <button className="flex flex-col items-center gap-1 text-primary select-none">
             <Star className="w-5 h-5" />
             <span className="text-[9px] font-bold">Attendance</span>
           </button>
 
-          <button 
+          <button
             onClick={() => setActiveTab('leads')}
             className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
           >
@@ -1689,7 +1729,7 @@ export const AdminAttendance: React.FC = () => {
 
           {isAdminMode && (
             <>
-              <button 
+              <button
                 onClick={() => setActiveTab('academy_batches')}
                 className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
               >
@@ -1697,7 +1737,7 @@ export const AdminAttendance: React.FC = () => {
                 <span className="text-[9px] font-medium">Academy</span>
               </button>
 
-              <button 
+              <button
                 onClick={() => setActiveTab('staff')}
                 className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
               >
@@ -1705,7 +1745,7 @@ export const AdminAttendance: React.FC = () => {
                 <span className="text-[9px] font-medium">Staff</span>
               </button>
 
-              <button 
+              <button
                 onClick={() => setActiveTab('finance')}
                 className="flex flex-col items-center gap-1 text-muted-foreground hover:text-secondary-foreground transition-colors duration-200 cursor-pointer"
               >

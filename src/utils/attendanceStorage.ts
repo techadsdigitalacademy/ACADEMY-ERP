@@ -13,6 +13,7 @@ export interface PunchMeta {
 }
 
 const memoryPunchCache = new Map<string, PunchMeta>();
+const storageFileCache = new Map<string, string[]>(); // staffId -> list of file names in attendance bucket
 
 /**
  * Format timestamp or time string cleanly in Indian Standard Time (IST)
@@ -26,7 +27,7 @@ export function formatISTTime(raw?: string | null): string {
   }
 
   // If ISO date string e.g. "2026-11-02T11:11:41.511913+00:00"
-  if (raw.includes('T') || raw.includes('-')) {
+  if (raw.includes('T') || (raw.includes('-') && raw.length >= 19)) {
     try {
       const d = new Date(raw);
       if (!isNaN(d.getTime())) {
@@ -126,134 +127,294 @@ export function calculateWorkingHours(
 }
 
 /**
- * Save punch metadata to both localStorage and Supabase Storage (with admin proxy fallback)
+ * Save punch metadata to localStorage and Supabase Storage across target ID and linked alias IDs
  */
-export async function savePunchMetaToStorage(staffId: string, dateStr: string, data: Partial<PunchMeta>): Promise<void> {
+export async function savePunchMetaToStorage(
+  staffId: string,
+  dateStr: string,
+  data: Partial<PunchMeta>,
+  linkedIds: string[] = []
+): Promise<void> {
   if (!staffId || !dateStr) return;
-  const key = `${staffId}_${dateStr}`;
-  const existing = getStoredPunchLocal(staffId, dateStr) || {};
-  const merged: PunchMeta = {
-    staff_id: staffId,
-    attendance_date: dateStr,
-    ...existing,
-    ...data
-  };
 
-  memoryPunchCache.set(key, merged);
+  const allIds = Array.from(new Set([staffId, ...linkedIds].filter(Boolean)));
 
-  try {
-    localStorage.setItem(`staff_punch_${staffId}_${dateStr}`, JSON.stringify(merged));
-  } catch (_) {}
+  for (const id of allIds) {
+    const key = `${id}_${dateStr}`;
+    const existing = getStoredPunchLocal(id, dateStr) || {};
+    const merged: PunchMeta = {
+      staff_id: id,
+      attendance_date: dateStr,
+      ...existing,
+      ...data
+    };
 
-  // Save to Supabase Storage via admin proxy to avoid RLS block
-  const fileName = `${staffId}/${dateStr}.json`;
-  const jsonBlob = JSON.stringify(merged);
+    memoryPunchCache.set(key, merged);
 
-  try {
-    const proxyRes = await fetch(`/supabase-admin/storage/v1/object/attendance/${fileName}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-upsert': 'true'
-      },
-      body: jsonBlob
-    });
+    try {
+      localStorage.setItem(`staff_punch_${id}_${dateStr}`, JSON.stringify(merged));
+    } catch (_) {}
 
-    if (!proxyRes.ok) {
-      await supabase.storage
-        .from('attendance')
-        .upload(fileName, jsonBlob, {
-          contentType: 'application/json',
-          upsert: true
-        });
+    // Save to Supabase Storage via admin proxy to avoid RLS block
+    const fileName = `${id}/${dateStr}.json`;
+    const jsonBlob = JSON.stringify(merged);
+
+    try {
+      const proxyRes = await fetch(`/supabase-admin/storage/v1/object/attendance/${fileName}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-upsert': 'true'
+        },
+        body: jsonBlob
+      });
+
+      if (!proxyRes.ok) {
+        await supabase.storage
+          .from('attendance')
+          .upload(fileName, jsonBlob, {
+            contentType: 'application/json',
+            upsert: true
+          });
+      }
+    } catch (err) {
+      console.warn('Storage punch upload notice:', err);
     }
-  } catch (err) {
-    console.warn('Storage punch upload notice:', err);
   }
 }
 
 /**
- * Read punch from localStorage
+ * Read punch from localStorage, checking primary ID and any alias IDs
  */
-export function getStoredPunchLocal(staffId: string, dateStr: string): PunchMeta | null {
-  const key = `${staffId}_${dateStr}`;
-  if (memoryPunchCache.has(key)) return memoryPunchCache.get(key)!;
+export function getStoredPunchLocal(staffId: string, dateStr: string, linkedIds: string[] = []): PunchMeta | null {
+  const idsToCheck = [staffId, ...linkedIds].filter(Boolean);
 
-  try {
-    const raw = localStorage.getItem(`staff_punch_${staffId}_${dateStr}`);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      memoryPunchCache.set(key, parsed);
-      return parsed;
-    }
-  } catch (_) {}
+  for (const id of idsToCheck) {
+    const key = `${id}_${dateStr}`;
+    if (memoryPunchCache.has(key)) return memoryPunchCache.get(key)!;
+
+    try {
+      const raw = localStorage.getItem(`staff_punch_${id}_${dateStr}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        memoryPunchCache.set(key, parsed);
+        return parsed;
+      }
+    } catch (_) {}
+  }
+
   return null;
 }
 
 /**
- * Fetch punch metadata from storage or local cache
+ * Helper to discover punch-in/out selfie photo directly from Supabase Storage bucket
+ * based on image timestamp matching the attendance date in Indian Standard Time (IST)
  */
-export async function getPunchMeta(staffId: string, dateStr: string): Promise<PunchMeta | null> {
-  const local = getStoredPunchLocal(staffId, dateStr);
-  if (local && local.selfie_url && local.punch_in) {
-    return local;
-  }
+async function findStorageSelfieForDate(staffId: string, dateStr: string): Promise<string | null> {
+  if (!staffId || !dateStr) return null;
 
-  const key = `${staffId}_${dateStr}`;
   try {
-    const fileName = `${staffId}/${dateStr}.json`;
-    const { data: { publicUrl } } = supabase.storage.from('attendance').getPublicUrl(fileName);
-    if (publicUrl) {
-      const res = await fetch(publicUrl, { cache: 'no-cache' });
-      if (res.ok) {
-        const meta = await res.json();
-        const combined = { ...(local || {}), ...meta };
-        memoryPunchCache.set(key, combined);
-        try {
-          localStorage.setItem(`staff_punch_${staffId}_${dateStr}`, JSON.stringify(combined));
-        } catch (_) {}
-        return combined;
+    let files = storageFileCache.get(staffId);
+    if (!files) {
+      const { data } = await supabase.storage.from('attendance').list(staffId);
+      if (data) {
+        files = data.map(f => f.name);
+        storageFileCache.set(staffId, files);
+      }
+    }
+
+    if (files && files.length > 0) {
+      const imageFiles = files.filter(f =>
+        f.endsWith('.webp') || f.endsWith('.jpg') || f.endsWith('.jpeg') || f.endsWith('.png')
+      );
+
+      for (const f of imageFiles) {
+        const tsStr = f.split('.')[0];
+        const ts = parseInt(tsStr, 10);
+        if (!isNaN(ts)) {
+          const fDate = new Date(ts).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+          if (fDate === dateStr) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('attendance')
+              .getPublicUrl(`${staffId}/${f}`);
+            return publicUrl;
+          }
+        }
       }
     }
   } catch (_) {}
 
-  return local;
+  return null;
 }
 
 /**
- * Enrich attendance array with selfie, accurate punch times, working hours, and status
+ * Fetch punch metadata from storage or local cache, checking primary ID and all linked alias IDs
  */
-export async function enrichAttendanceRecords(records: any[]): Promise<any[]> {
+export async function getPunchMeta(
+  staffId: string,
+  dateStr: string,
+  linkedIds: string[] = []
+): Promise<PunchMeta | null> {
+  const idsToCheck = Array.from(new Set([staffId, ...linkedIds].filter(Boolean)));
+
+  // 1. Check local storage / memory cache across all IDs
+  for (const id of idsToCheck) {
+    const local = getStoredPunchLocal(id, dateStr);
+    if (local && local.selfie_url && local.punch_in) {
+      return local;
+    }
+  }
+
+  // 2. Check Supabase Storage .json across all IDs
+  for (const id of idsToCheck) {
+    const key = `${id}_${dateStr}`;
+    try {
+      const fileName = `${id}/${dateStr}.json`;
+      const { data: { publicUrl } } = supabase.storage.from('attendance').getPublicUrl(fileName);
+      if (publicUrl) {
+        const res = await fetch(publicUrl, { cache: 'no-cache' });
+        if (res.ok) {
+          const meta = await res.json();
+          const local = getStoredPunchLocal(id, dateStr);
+          const combined = { ...(local || {}), ...meta };
+          memoryPunchCache.set(key, combined);
+          try {
+            localStorage.setItem(`staff_punch_${id}_${dateStr}`, JSON.stringify(combined));
+          } catch (_) {}
+          return combined;
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 3. Fallback: Check if an image exists in storage bucket for this date across IDs
+  for (const id of idsToCheck) {
+    const selfieUrl = await findStorageSelfieForDate(id, dateStr);
+    if (selfieUrl) {
+      const local = getStoredPunchLocal(id, dateStr) || {
+        staff_id: id,
+        attendance_date: dateStr
+      };
+      const updated = { ...local, selfie_url: selfieUrl };
+      memoryPunchCache.set(`${id}_${dateStr}`, updated);
+      return updated;
+    }
+  }
+
+  return getStoredPunchLocal(staffId, dateStr);
+}
+
+/**
+ * Enrich attendance array with selfie, accurate punch times, working hours, and status.
+ * Reconciles multi-punch rows on the same date (e.g. punch-in row and punch-out row)
+ * into a single unified record per day per employee.
+ */
+export async function enrichAttendanceRecords(
+  records: any[],
+  aliasMap?: Map<string, string[]> | Record<string, string[]>
+): Promise<any[]> {
   if (!records || records.length === 0) return [];
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
-  return Promise.all(
-    records.map(async (record) => {
-      const staffId = record.staff_id;
-      const dateStr = record.attendance_date ? String(record.attendance_date).substring(0, 10) : '';
-      if (!staffId || !dateStr) return record;
+  // Group records by (employeeIdentifier, attendance_date)
+  const grouped = new Map<string, any[]>();
 
-      const meta = await getPunchMeta(staffId, dateStr);
+  records.forEach((record) => {
+    const rawStaffId = record.staff_id;
+    const dateStr = record.attendance_date ? String(record.attendance_date).substring(0, 10) : '';
+    if (!rawStaffId || !dateStr) return;
 
-      const rawIn = meta?.punch_in || record.punch_in || (record.created_at ? formatISTTime(record.created_at) : null);
-      const rawOut = meta?.punch_out || record.punch_out || null;
-      const formattedIn = formatISTTime(rawIn);
-      const formattedOut = rawOut ? formatISTTime(rawOut) : null;
-      const isToday = dateStr === todayStr;
-      const hoursWorked = calculateWorkingHours(formattedIn, formattedOut, isToday);
+    // Resolve canonical staff ID if aliasMap is provided
+    let canonicalId = rawStaffId;
+    if (aliasMap) {
+      if (aliasMap instanceof Map) {
+        for (const [canon, aliases] of aliasMap.entries()) {
+          if (canon === rawStaffId || aliases.includes(rawStaffId)) {
+            canonicalId = canon;
+            break;
+          }
+        }
+      } else if (typeof aliasMap === 'object') {
+        for (const [canon, aliases] of Object.entries(aliasMap)) {
+          if (canon === rawStaffId || (Array.isArray(aliases) && aliases.includes(rawStaffId))) {
+            canonicalId = canon;
+            break;
+          }
+        }
+      }
+    }
 
-      const resolvedStatus = (meta?.status || record.status || 'present').toUpperCase();
+    const groupKey = `${canonicalId}_${dateStr}`;
+    if (!grouped.has(groupKey)) {
+      grouped.set(groupKey, []);
+    }
+    grouped.get(groupKey)!.push(record);
+  });
 
-      return {
-        ...record,
-        punch_in: formattedIn || '-',
-        punch_out: formattedOut || '-',
-        working_hours: hoursWorked,
-        selfie_url: meta?.selfie_url || record.selfie_url || null,
-        lat: meta?.lat ?? record.lat ?? null,
-        lng: meta?.lng ?? record.lng ?? null,
-        status: resolvedStatus
-      };
-    })
-  );
+  const enrichedResults: any[] = [];
+
+  for (const [_key, dayRecords] of grouped.entries()) {
+    // Sort records chronologically by created_at
+    dayRecords.sort((a, b) => {
+      const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return tA - tB;
+    });
+
+    const primaryRec = dayRecords[0];
+    const latestRec = dayRecords.length > 1 ? dayRecords[dayRecords.length - 1] : null;
+
+    const staffId = primaryRec.staff_id;
+    const dateStr = primaryRec.attendance_date ? String(primaryRec.attendance_date).substring(0, 10) : '';
+
+    // Collect all linked IDs for this staff member
+    let linkedIds: string[] = [];
+    if (aliasMap) {
+      if (aliasMap instanceof Map && aliasMap.has(staffId)) {
+        linkedIds = aliasMap.get(staffId)!;
+      } else if (typeof aliasMap === 'object' && Array.isArray((aliasMap as any)[staffId])) {
+        linkedIds = (aliasMap as any)[staffId];
+      }
+    }
+    // Also include any staff_ids from the grouped records
+    dayRecords.forEach(r => {
+      if (r.staff_id && !linkedIds.includes(r.staff_id)) {
+        linkedIds.push(r.staff_id);
+      }
+    });
+
+    const meta = await getPunchMeta(staffId, dateStr, linkedIds);
+
+    // Punch IN: earliest record timestamp or metadata
+    let rawIn = meta?.punch_in || primaryRec.punch_in;
+    if (!rawIn && primaryRec.created_at) {
+      rawIn = formatISTTime(primaryRec.created_at);
+    }
+
+    // Punch OUT: latest record timestamp (if different from primary) or metadata
+    let rawOut = meta?.punch_out || primaryRec.punch_out || null;
+    if (!rawOut && latestRec && latestRec.id !== primaryRec.id && latestRec.created_at) {
+      rawOut = formatISTTime(latestRec.created_at);
+    }
+
+    const formattedIn = formatISTTime(rawIn);
+    const formattedOut = rawOut ? formatISTTime(rawOut) : null;
+    const isToday = dateStr === todayStr;
+    const hoursWorked = calculateWorkingHours(formattedIn, formattedOut, isToday);
+
+    const resolvedStatus = (meta?.status || primaryRec.status || 'present').toUpperCase();
+
+    enrichedResults.push({
+      ...primaryRec,
+      punch_in: formattedIn || '-',
+      punch_out: formattedOut || '-',
+      working_hours: hoursWorked,
+      selfie_url: meta?.selfie_url || primaryRec.selfie_url || null,
+      lat: meta?.lat ?? primaryRec.lat ?? null,
+      lng: meta?.lng ?? primaryRec.lng ?? null,
+      status: resolvedStatus
+    });
+  }
+
+  return enrichedResults;
 }
