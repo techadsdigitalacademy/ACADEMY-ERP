@@ -23,11 +23,12 @@ export const PunchModal: React.FC<PunchModalProps> = ({
 }) => {
   // Office geofence. A punch is only accepted from inside this radius.
   // Overridable per-deployment so moving office does not need a code change.
+  // Temporary location near Alfa Medicare Hospital, Pookkattiri:
   const OFFICE_COORDS = {
-    lat: Number(import.meta.env.VITE_OFFICE_LAT ?? 10.934485),
-    lng: Number(import.meta.env.VITE_OFFICE_LNG ?? 76.001633)
+    lat: Number(import.meta.env.VITE_OFFICE_LAT ?? 10.9060680),
+    lng: Number(import.meta.env.VITE_OFFICE_LNG ?? 76.0980389)
   };
-  const GEOFENCE_RADIUS_M = Number(import.meta.env.VITE_GEOFENCE_RADIUS_M ?? 50);
+  const GEOFENCE_RADIUS_M = Number(import.meta.env.VITE_GEOFENCE_RADIUS_M ?? 120);
 
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   
