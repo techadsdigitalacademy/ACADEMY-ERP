@@ -6,7 +6,7 @@ import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { supabase, STAFF_PROFILE_COLUMNS } from '../services/supabase';
 import { dataCache } from '../services/dataCache';
-import { enrichAttendanceRecords, fetchStaffAttendanceRecords, getStoredPunchLocal } from '../utils/attendanceStorage';
+import { enrichAttendanceRecords, fetchStaffAttendanceRecords, getStoredPunchLocal, normalize24HourTime, formatDisplayTime, evaluatePunchStatus, calculateWorkingHours } from '../utils/attendanceStorage';
 import { deduplicateStaffProfiles, getLinkedStaffIds } from '../utils/staffAliases';
 import { MetricCardsSkeleton, TableSkeleton } from '../components/Skeleton';
 import type { Staff, Attendance } from '../types';
@@ -431,15 +431,9 @@ export const AdminAttendance: React.FC = () => {
       csvRows.push(['Staff Name', 'Staff Code', 'Designation', 'Department', 'Punch In', 'Punch Out', 'Working Hours', 'Status', 'GPS Verified', 'Selfie Verified']);
 
       filteredStaff.forEach(staff => {
-        const isPunchIn = staff.todayRecord?.punch_in || '-';
-        const isPunchOut = staff.todayRecord?.punch_out || '-';
-        let status = 'ABSENT';
-        if (staff.todayRecord) {
-          status = staff.todayRecord.status || 'ABSENT';
-          if (status === 'PRESENT' && staff.todayRecord.punch_in && staff.todayRecord.punch_in > '09:30:00') {
-            status = 'LATE';
-          }
-        }
+        const rawIn = staff.todayRecord?.punch_in;
+        const rawOut = staff.todayRecord?.punch_out;
+        const status = getEvaluatedTodayStatus(staff).toUpperCase();
         const hasGps = (staff.todayRecord?.lat && staff.todayRecord?.lng) ? 'Yes' : 'No';
         const hasSelfie = staff.todayRecord?.selfie_url ? 'Yes' : 'No';
 
@@ -448,8 +442,9 @@ export const AdminAttendance: React.FC = () => {
           staff.staff_code,
           staff.designation || staff.role_name || 'Staff',
           staff.department_name || 'Sales & Growth',
-          isPunchIn,
-          isPunchOut,
+          formatDisplayTime(rawIn),
+          formatDisplayTime(rawOut),
+          staff.todayRecord?.working_hours || '-',
           status,
           hasGps,
           hasSelfie
@@ -483,24 +478,18 @@ export const AdminAttendance: React.FC = () => {
       const todayDisplayDate = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 
       const rowsHtml = filteredStaff.map(staff => {
-        const isPunchIn = staff.todayRecord?.punch_in || '-';
-        const isPunchOut = staff.todayRecord?.punch_out || '-';
-        let status = 'ABSENT';
-        if (staff.todayRecord) {
-          status = staff.todayRecord.status || 'ABSENT';
-          if (status === 'PRESENT' && staff.todayRecord.punch_in && staff.todayRecord.punch_in > '09:30:00') {
-            status = 'LATE';
-          }
-        }
+        const rawIn = staff.todayRecord?.punch_in;
+        const rawOut = staff.todayRecord?.punch_out;
+        const status = getEvaluatedTodayStatus(staff).toUpperCase();
         const hasSelfie = staff.todayRecord?.selfie_url ? 'Yes' : 'No';
 
         return `
           <tr style="border-bottom: 1px solid #e2e8f0;">
             <td style="padding: 8px; font-weight: bold;">${staff.full_name} <span style="font-size: 10px; color: #64748b;">(${staff.staff_code})</span></td>
             <td style="padding: 8px; color: #475569;">${staff.designation || staff.role_name || 'Staff'}</td>
-            <td style="padding: 8px; font-weight: bold;">${isPunchIn}</td>
-            <td style="padding: 8px;">${isPunchOut}</td>
-            <td style="padding: 8px; text-align: center; font-weight: bold; color: ${status === 'PRESENT' ? '#059669' : status === 'LATE' ? '#d97706' : status === 'HALF_DAY' ? '#6366f1' : '#e11d48'};">${status}</td>
+            <td style="padding: 8px; font-weight: bold;">${formatDisplayTime(rawIn)}</td>
+            <td style="padding: 8px;">${formatDisplayTime(rawOut)}</td>
+            <td style="padding: 8px; text-align: center; font-weight: bold; color: ${status === 'PRESENT' ? '#059669' : status === 'LATE' ? '#d97706' : status === 'HALF DAY' ? '#6366f1' : '#e11d48'};">${status}</td>
             <td style="padding: 8px; text-align: center;">${hasSelfie}</td>
           </tr>
         `;
@@ -724,6 +713,9 @@ export const AdminAttendance: React.FC = () => {
           department_name: sMatch?.departments?.name || 'Academy Counseling',
           role_name: p.designation || 'Staff',
           designation: p.designation || 'Staff',
+          shift_start_time: p.shift_start_time || '09:30:00',
+          shift_end_time: p.shift_end_time || '18:00:00',
+          weekly_off_day: p.weekly_off_day || 'Sunday',
           todayRecord: (resolvedTodayRecord || todayRecord) as Attendance | undefined
         };
       });
@@ -760,47 +752,59 @@ export const AdminAttendance: React.FC = () => {
   const todayStr = selectedRegistryDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const totalStaffCount = staffList.length;
 
-  // Present: strictly present on time (excluding Late and Half Day)
-  const presentCount = staffList.filter(s => {
-    if (!s.todayRecord) return false;
-    const status = s.todayRecord.status;
-    const punchIn = s.todayRecord.punch_in;
-    return status === 'PRESENT' && (!punchIn || punchIn <= '09:30:00');
-  }).length;
+  // Helper to determine accurate evaluated status of a staff member
+  const getEvaluatedTodayStatus = (s: StaffWithAttendance): 'Present' | 'Late' | 'Half Day' | 'Leave' | 'Absent' => {
+    if (!s.todayRecord) return 'Absent';
+    const recStatus = (s.todayRecord.status || 'PRESENT').toUpperCase();
+    const in24 = normalize24HourTime(s.todayRecord.punch_in);
+    const out24 = normalize24HourTime(s.todayRecord.punch_out);
+    const shiftStart = s.shift_start_time || '09:30:00';
+    const shiftEnd = s.shift_end_time || '18:00:00';
 
-  // Late: marked as Late or present with punch_in > 09:30:00
-  const lateCount = staffList.filter(s => {
-    if (!s.todayRecord) return false;
-    const status = s.todayRecord.status;
-    const punchIn = s.todayRecord.punch_in;
-    return status === 'LATE' || (status === 'PRESENT' && punchIn && punchIn > '09:30:00');
-  }).length;
+    if (in24) {
+      const evalStatus = evaluatePunchStatus(in24, shiftStart, out24, shiftEnd, recStatus);
+      if (evalStatus === 'HALF_DAY') return 'Half Day';
+      if (evalStatus === 'LATE') return 'Late';
+      if (evalStatus === 'PRESENT') return 'Present';
+      if (evalStatus === 'LEAVE') return 'Leave';
+      return 'Present';
+    }
+
+    if (recStatus === 'LEAVE') return 'Leave';
+    if (recStatus === 'ABSENT') return 'Absent';
+    return 'Absent';
+  };
+
+  // Present: strictly present on time (excluding Late and Half Day)
+  const presentCount = staffList.filter(s => getEvaluatedTodayStatus(s) === 'Present').length;
+
+  // Late: marked as Late
+  const lateCount = staffList.filter(s => getEvaluatedTodayStatus(s) === 'Late').length;
 
   // Half Day: marked as Half Day
-  const halfDayCount = staffList.filter(s => {
-    if (!s.todayRecord) return false;
-    return s.todayRecord.status === 'HALF_DAY';
-  }).length;
+  const halfDayCount = staffList.filter(s => getEvaluatedTodayStatus(s) === 'Half Day').length;
 
   // On Leave / Absent: staff who haven't punched in yet or are on leave/absent
   const leaveCount = staffList.filter(s => {
-    if (!s.todayRecord) return true;
-    const status = s.todayRecord.status;
-    return status === 'LEAVE' || status === 'ABSENT';
+    const st = getEvaluatedTodayStatus(s);
+    return st === 'Leave' || st === 'Absent';
   }).length;
 
   // Missed Out: staff who missed punch-in or punch-out logs today
   const missedOutCount = staffList.filter(s => {
     if (!s.todayRecord) return false;
     const { punch_in, punch_out } = s.todayRecord;
-    return (punch_in && !punch_out) || (!punch_in && punch_out);
+    const hasIn = punch_in && punch_in !== '-';
+    const hasOut = punch_out && punch_out !== '-';
+    return (hasIn && !hasOut) || (!hasIn && hasOut);
   }).length;
 
   // In Office: total count of everyone inside the office today (Present + Late + Half Day combined who punched in)
   const inOfficeCount = staffList.filter(s => {
     if (!s.todayRecord) return false;
-    const { punch_in, status } = s.todayRecord;
-    return !!punch_in && (status === 'PRESENT' || status === 'LATE' || status === 'HALF_DAY');
+    const hasIn = s.todayRecord.punch_in && s.todayRecord.punch_in !== '-';
+    const st = getEvaluatedTodayStatus(s);
+    return !!hasIn && (st === 'Present' || st === 'Late' || st === 'Half Day');
   }).length;
 
   // Filter & search staff list
@@ -810,27 +814,7 @@ export const AdminAttendance: React.FC = () => {
       staff.staff_code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (staff.department_name && staff.department_name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    // Determine current status of staff member
-    let currentStatus: 'Present' | 'Late' | 'Half Day' | 'Leave' | 'Absent' = 'Absent';
-    if (staff.todayRecord) {
-      const status = staff.todayRecord.status;
-      const punchIn = staff.todayRecord.punch_in;
-
-      if (status === 'PRESENT') {
-        if (punchIn && punchIn > '09:30:00') {
-          currentStatus = 'Late';
-        } else {
-          currentStatus = 'Present';
-        }
-      } else if (status === 'LATE') {
-        currentStatus = 'Late';
-      } else if (status === 'HALF_DAY') {
-        currentStatus = 'Half Day';
-      } else if (status === 'LEAVE') {
-        currentStatus = 'Leave';
-      }
-    }
-
+    const currentStatus = getEvaluatedTodayStatus(staff);
     const matchesFilter = statusFilter === 'All' ? true : currentStatus === statusFilter;
 
     return matchesSearch && matchesFilter;
@@ -1082,32 +1066,30 @@ export const AdminAttendance: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-border text-sm">
                               {filteredStaff.map((staff) => {
-                                const isPunchIn = staff.todayRecord?.punch_in;
-                                const isPunchOut = staff.todayRecord?.punch_out;
+                                const isPunchIn = formatDisplayTime(staff.todayRecord?.punch_in);
+                                const isPunchOut = formatDisplayTime(staff.todayRecord?.punch_out);
                                 const workingHours = staff.todayRecord?.working_hours || '-';
                                 const selfieUrl = staff.todayRecord?.selfie_url;
 
+                                const evaluatedStatus = getEvaluatedTodayStatus(staff);
                                 let displayStatus = 'ABSENT';
                                 let badgeVariant: 'success' | 'warning' | 'info' | 'error' | 'purple' = 'error';
 
-                                if (staff.todayRecord) {
-                                  const status = (staff.todayRecord.status || 'PRESENT').toUpperCase();
-                                  if (status === 'PRESENT') {
-                                    displayStatus = 'PRESENT';
-                                    badgeVariant = 'success';
-                                  } else if (status === 'LATE') {
-                                    displayStatus = 'LATE';
-                                    badgeVariant = 'warning';
-                                  } else if (status === 'HALF_DAY') {
-                                    displayStatus = 'HALF DAY';
-                                    badgeVariant = 'purple';
-                                  } else if (status === 'LEAVE' || status === 'ON LEAVE') {
-                                    displayStatus = 'ON LEAVE';
-                                    badgeVariant = 'info';
-                                  } else {
-                                    displayStatus = status;
-                                    badgeVariant = 'error';
-                                  }
+                                if (evaluatedStatus === 'Present') {
+                                  displayStatus = 'PRESENT';
+                                  badgeVariant = 'success';
+                                } else if (evaluatedStatus === 'Late') {
+                                  displayStatus = 'LATE';
+                                  badgeVariant = 'warning';
+                                } else if (evaluatedStatus === 'Half Day') {
+                                  displayStatus = 'HALF DAY';
+                                  badgeVariant = 'purple';
+                                } else if (evaluatedStatus === 'Leave') {
+                                  displayStatus = 'ON LEAVE';
+                                  badgeVariant = 'info';
+                                } else {
+                                  displayStatus = 'ABSENT';
+                                  badgeVariant = 'error';
                                 }
 
                                 return (
@@ -1222,32 +1204,30 @@ export const AdminAttendance: React.FC = () => {
                         {/* Mobile Cards View */}
                         <div className="grid grid-cols-1 gap-3.5 md:hidden">
                           {filteredStaff.map((staff) => {
-                            const isPunchIn = staff.todayRecord?.punch_in;
-                            const isPunchOut = staff.todayRecord?.punch_out;
+                            const isPunchIn = formatDisplayTime(staff.todayRecord?.punch_in);
+                            const isPunchOut = formatDisplayTime(staff.todayRecord?.punch_out);
                             const workingHours = staff.todayRecord?.working_hours || '-';
                             const selfieUrl = staff.todayRecord?.selfie_url;
 
+                            const evaluatedStatus = getEvaluatedTodayStatus(staff);
                             let displayStatus = 'ABSENT';
                             let badgeVariant: 'success' | 'warning' | 'info' | 'error' | 'purple' = 'error';
 
-                            if (staff.todayRecord) {
-                              const status = (staff.todayRecord.status || 'PRESENT').toUpperCase();
-                              if (status === 'PRESENT') {
-                                displayStatus = 'PRESENT';
-                                badgeVariant = 'success';
-                              } else if (status === 'LATE') {
-                                displayStatus = 'LATE';
-                                badgeVariant = 'warning';
-                              } else if (status === 'HALF_DAY') {
-                                displayStatus = 'HALF DAY';
-                                badgeVariant = 'purple';
-                              } else if (status === 'LEAVE' || status === 'ON LEAVE') {
-                                displayStatus = 'ON LEAVE';
-                                badgeVariant = 'info';
-                              } else {
-                                displayStatus = status;
-                                badgeVariant = 'error';
-                              }
+                            if (evaluatedStatus === 'Present') {
+                              displayStatus = 'PRESENT';
+                              badgeVariant = 'success';
+                            } else if (evaluatedStatus === 'Late') {
+                              displayStatus = 'LATE';
+                              badgeVariant = 'warning';
+                            } else if (evaluatedStatus === 'Half Day') {
+                              displayStatus = 'HALF DAY';
+                              badgeVariant = 'purple';
+                            } else if (evaluatedStatus === 'Leave') {
+                              displayStatus = 'ON LEAVE';
+                              badgeVariant = 'info';
+                            } else {
+                              displayStatus = 'ABSENT';
+                              badgeVariant = 'error';
                             }
 
                             return (
@@ -1493,24 +1473,23 @@ export const AdminAttendance: React.FC = () => {
                           const dayOfWeek = new Date(year, monthIdx - 1, d).getDay(); // 0 is Sunday
 
                           if (matchedLog) {
-                            let effectiveStatus = matchedLog.status;
-                            if (effectiveStatus === 'PRESENT' && matchedLog.punch_in && matchedLog.punch_in > '09:30:00') {
-                              effectiveStatus = 'LATE';
-                            }
+                            const isTodayLog = dateStr === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+                            const effectiveStatus = evaluatePunchStatus(
+                              matchedLog.punch_in,
+                              selectedStaffForDrill?.shift_start_time,
+                              matchedLog.punch_out,
+                              selectedStaffForDrill?.shift_end_time,
+                              matchedLog.status
+                            );
 
                             if (effectiveStatus === 'PRESENT') presentCount++;
                             else if (effectiveStatus === 'LATE') lateCount++;
                             else if (effectiveStatus === 'HALF_DAY') halfDayCount++;
                             else if (effectiveStatus === 'LEAVE' || effectiveStatus === 'ABSENT') leaveCount++;
 
-                            let workingHours = '-';
-                            if (matchedLog.punch_in && matchedLog.punch_out) {
-                              const [inH, inM] = matchedLog.punch_in.split(':').map(Number);
-                              const [outH, outM] = matchedLog.punch_out.split(':').map(Number);
-                              const diffMs = new Date(2000, 0, 1, outH, outM, 0).getTime() - new Date(2000, 0, 1, inH, inM, 0).getTime();
-                              const diffHrs = Math.max(0, diffMs / (1000 * 60 * 60));
-                              workingHours = `${diffHrs.toFixed(1)} hrs`;
-                            }
+                            const workingHours = matchedLog.working_hours && matchedLog.working_hours !== '-' && !matchedLog.working_hours.includes('NaN')
+                              ? matchedLog.working_hours
+                              : calculateWorkingHours(matchedLog.punch_in, matchedLog.punch_out, isTodayLog);
 
                             monthlyLogs.push({
                               date: dateStr,

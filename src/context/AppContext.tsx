@@ -4,7 +4,7 @@ import { supabase, SALES_COLUMNS, monthWindowStart } from '../services/supabase'
 import { formatStaffEmail, ensureStaffAuthUser, normalizePassword } from '../services/staffAuth';
 import { dataCache } from '../services/dataCache';
 import { extensionForBlob } from '../utils/imageUtils';
-import { savePunchMetaToStorage, enrichAttendanceRecords, calculateWorkingHours, fetchStaffAttendanceRecords } from '../utils/attendanceStorage';
+import { savePunchMetaToStorage, enrichAttendanceRecords, calculateWorkingHours, evaluatePunchStatus, fetchStaffAttendanceRecords } from '../utils/attendanceStorage';
 import { getLinkedStaffIds } from '../utils/staffAliases';
 
 export type TabType = 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_reports' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets';
@@ -159,6 +159,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 
 interface LocalPunchData {
+  id?: string;
   punch_in?: string;
   punch_out?: string;
   status?: string;
@@ -175,20 +176,6 @@ const getStoredPunch = (staffId: string, dateStr: string): LocalPunchData | null
   } catch {
     return null;
   }
-};
-
-const saveStoredPunch = (staffId: string, dateStr: string, data: Partial<LocalPunchData>, linkedIds: string[] = []) => {
-  try {
-    const existing = getStoredPunch(staffId, dateStr) || {};
-    const updated = { ...existing, ...data };
-    localStorage.setItem(`staff_punch_${staffId}_${dateStr}`, JSON.stringify(updated));
-    linkedIds.forEach(id => {
-      try {
-        localStorage.setItem(`staff_punch_${id}_${dateStr}`, JSON.stringify(updated));
-      } catch {}
-    });
-    savePunchMetaToStorage(staffId, dateStr, updated as any, linkedIds).catch(() => {});
-  } catch {}
 };
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -603,7 +590,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (activeId) {
         const local = getStoredPunch(activeId, todayStr);
         if (local && local.punch_in) {
-          // Keep local punch intact, avoid wiping to null
+          setTodayAttendance({
+            id: local.id || `local-${todayStr}`,
+            staff_id: activeId,
+            attendance_date: todayStr,
+            punch_in: local.punch_in,
+            punch_out: local.punch_out,
+            status: (local.status || 'PRESENT') as any,
+            selfie_url: local.selfie_url,
+            working_hours: local.working_hours,
+            lat: local.lat,
+            lng: local.lng
+          });
           return;
         }
       }
@@ -1077,7 +1075,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const punchIn = async (selfieUrl?: string, lat?: number, lng?: number, status?: string) => {
     if (!activeStaff) return;
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
+    const timeStr = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false });
 
     if (todayAttendance?.punch_in) return;
 
@@ -1090,7 +1088,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { data: allProfiles } = await supabase.from('staff_profiles').select('*');
     const linkedIds = getLinkedStaffIds(activeStaff.id || activeStaff.full_name, allProfiles || []);
 
-    saveStoredPunch(activeStaff.id, todayStr, {
+    await savePunchMetaToStorage(activeStaff.id, todayStr, {
       punch_in: timeStr,
       status: displayStatus,
       selfie_url: selfieUrl || activeStaff.avatar_url,
@@ -1165,15 +1163,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const punchOut = async (status?: string) => {
     if (!activeStaff || !todayAttendance) return;
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const timeStr = new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true });
-    const displayStatus = status ? status.toUpperCase() : (todayAttendance.status || 'PRESENT');
+    const timeStr = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour12: false });
+    const evaluatedStatus = evaluatePunchStatus(
+      todayAttendance.punch_in,
+      activeStaff.shift_start_time,
+      timeStr,
+      activeStaff.shift_end_time,
+      status || todayAttendance.status
+    );
+    const displayStatus = evaluatedStatus;
 
     const { data: allProfiles } = await supabase.from('staff_profiles').select('*');
     const linkedIds = getLinkedStaffIds(activeStaff.id || activeStaff.full_name, allProfiles || []);
 
     const workingHours = calculateWorkingHours(todayAttendance.punch_in, timeStr, true);
 
-    saveStoredPunch(activeStaff.id, todayStr, {
+    await savePunchMetaToStorage(activeStaff.id, todayStr, {
       punch_out: timeStr,
       status: displayStatus,
       working_hours: workingHours
@@ -1181,7 +1186,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     try {
       const allIds = Array.from(new Set([activeStaff.id, ...linkedIds].filter(Boolean)));
-      const patchQuery = todayAttendance.id && !todayAttendance.id.startsWith('local-')
+      const patchQuery = todayAttendance.id && !todayAttendance.id.startsWith('local-') && !todayAttendance.id.startsWith('att-')
         ? `id=eq.${todayAttendance.id}`
         : `staff_id=in.(${allIds.join(',')})&attendance_date=eq.${todayStr}`;
 
@@ -1191,7 +1196,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         body: JSON.stringify({ status: 'present' })
       }).catch(() => {});
 
-      if (todayAttendance.id && !todayAttendance.id.startsWith('local-')) {
+      if (todayAttendance.id && !todayAttendance.id.startsWith('local-') && !todayAttendance.id.startsWith('att-')) {
         await supabase
           .from('staff_attendance')
           .update({ status: 'present' })
@@ -1201,25 +1206,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Punch out update notice:', err);
     }
 
-    setAttendance((prev) =>
-      prev.map((item) =>
-        item.id === todayAttendance.id || (item.staff_id === activeStaff.id && item.attendance_date === todayStr)
-          ? {
-              ...item,
-              punch_out: timeStr,
-              working_hours: workingHours,
-              status: displayStatus as any
-            }
-          : item
-      )
-    );
-
-    setTodayAttendance((prev) => prev ? {
-      ...prev,
+    const updatedToday: Attendance = {
+      ...todayAttendance,
       punch_out: timeStr,
       working_hours: workingHours,
       status: displayStatus as any
-    } : null);
+    };
+
+    setAttendance((prev) =>
+      prev.map((item) =>
+        item.id === todayAttendance.id || (item.staff_id === activeStaff.id && item.attendance_date === todayStr)
+          ? updatedToday
+          : item
+      )
+    );
+    setTodayAttendance(updatedToday);
 
     invalidateTables('staff_attendance');
     window.dispatchEvent(new CustomEvent('attendance_data_changed'));

@@ -1,3 +1,17 @@
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+async function getRawBody(readable) {
+  const chunks = [];
+  for await (const chunk of readable) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -52,6 +66,12 @@ export default async function handler(req, res) {
     if (req.headers['prefer']) {
       headers['Prefer'] = req.headers['prefer'];
     }
+    if (req.headers['x-upsert']) {
+      headers['x-upsert'] = req.headers['x-upsert'];
+    }
+    if (req.headers['cache-control']) {
+      headers['cache-control'] = req.headers['cache-control'];
+    }
 
     const fetchOptions = {
       method: req.method,
@@ -59,15 +79,15 @@ export default async function handler(req, res) {
     };
 
     if (req.method !== 'GET' && req.method !== 'HEAD') {
-      if (typeof req.body === 'string') {
-        fetchOptions.body = req.body;
-      } else if (req.body && Object.keys(req.body).length > 0) {
-        fetchOptions.body = JSON.stringify(req.body);
+      const rawBody = await getRawBody(req);
+      if (rawBody.length > 0) {
+        fetchOptions.body = rawBody;
       }
     }
 
     const response = await fetch(fullUrl, fetchOptions);
-    const data = await response.text();
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
     res.status(response.status);
     const contentType = response.headers.get('content-type');
@@ -75,7 +95,7 @@ export default async function handler(req, res) {
       res.setHeader('Content-Type', contentType);
     }
 
-    return res.send(data);
+    return res.send(buffer);
   } catch (error) {
     console.error('Vercel Supabase proxy error:', error);
     return res.status(500).json({ error: error.message || 'Supabase proxy request failed' });

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { enrichAttendanceRecords, calculateWorkingHours, fetchStaffAttendanceRecords, getStoredPunchLocal } from '../utils/attendanceStorage';
+import { enrichAttendanceRecords, calculateWorkingHours, calculateWorkingMinutes, evaluatePunchStatus, fetchStaffAttendanceRecords, getStoredPunchLocal, savePunchMetaToStorage, normalize24HourTime, formatDisplayTime } from '../utils/attendanceStorage';
 import { getLinkedStaffIds } from '../utils/staffAliases';
 import { Card } from './Card';
 import { Button } from './Button';
@@ -140,76 +140,57 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
     if (!editingAttendance) return;
     setIsUpdating(true);
     try {
-      const dbStatus = editAttStatus.toLowerCase();
+      const formattedIn = editClockIn.length === 5 ? `${editClockIn}:00` : editClockIn;
+      const formattedOut = editClockOut.length === 5 ? `${editClockOut}:00` : editClockOut;
+      const targetDate = editingAttendance.date;
+      const targetDbStatus = editAttStatus === 'LEAVE' ? 'leave' : 'present';
+
+      // 1. Save metadata (punch_in, punch_out, status, working_hours) across all linked alias IDs
+      const { data: allProfiles } = await supabase.from('staff_profiles').select('*');
+      const linkedIds = getLinkedStaffIds(staffId || fullName, allProfiles || []);
+
+      await savePunchMetaToStorage(
+        staffId,
+        targetDate,
+        {
+          punch_in: formattedIn,
+          punch_out: formattedOut,
+          status: editAttStatus,
+          working_hours: calculateWorkingHours(formattedIn, formattedOut)
+        },
+        linkedIds
+      );
+
+      // 2. Insert or update row in staff_attendance with DB-allowed status ('present' or 'leave')
       if (editingAttendance.isVirtual) {
-        // Insert a new attendance row for that date
         try {
-          let proxyRes = await fetch('/supabase-admin/rest/v1/attendance', {
+          const minimalPayload = {
+            staff_id: staffId,
+            attendance_date: targetDate,
+            status: targetDbStatus
+          };
+          const proxyRes = await fetch('/supabase-admin/rest/v1/staff_attendance', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify([{
-              staff_id: staffId,
-              attendance_date: editingAttendance.date,
-              status: dbStatus
-            }])
+            headers: { 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+            body: JSON.stringify([minimalPayload])
           });
           if (!proxyRes.ok) {
-            proxyRes = await fetch('/supabase-admin/rest/v1/staff_attendance', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify([{
-                staff_id: staffId,
-                attendance_date: editingAttendance.date,
-                status: dbStatus
-              }])
-            });
-          }
-          if (!proxyRes.ok) {
-            const { error } = await supabase
-              .from('attendance')
-              .insert({
-                staff_id: staffId,
-                attendance_date: editingAttendance.date,
-                status: dbStatus
-              });
-            if (error) {
-              await supabase
-                .from('staff_attendance')
-                .insert({
-                  staff_id: staffId,
-                  attendance_date: editingAttendance.date,
-                  status: dbStatus
-                });
-            }
+            await supabase.from('staff_attendance').insert(minimalPayload);
           }
         } catch (e) {
           console.warn('Attendance insert error:', e);
         }
       } else {
-        // Update the existing row
         try {
-          let proxyPatch = await fetch(`/supabase-admin/rest/v1/attendance?id=eq.${editingAttendance.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: dbStatus })
-          });
-          if (!proxyPatch.ok) {
-            proxyPatch = await fetch(`/supabase-admin/rest/v1/staff_attendance?id=eq.${editingAttendance.id}`, {
+          const rowId = editingAttendance.id;
+          if (rowId && !String(rowId).startsWith('local-')) {
+            const proxyPatch = await fetch(`/supabase-admin/rest/v1/staff_attendance?id=eq.${rowId}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ status: dbStatus })
+              body: JSON.stringify({ status: targetDbStatus })
             });
-          }
-          if (!proxyPatch.ok) {
-            const { error } = await supabase
-              .from('attendance')
-              .update({ status: dbStatus })
-              .eq('id', editingAttendance.id);
-            if (error) {
-              await supabase
-                .from('staff_attendance')
-                .update({ status: dbStatus })
-                .eq('id', editingAttendance.id);
+            if (!proxyPatch.ok) {
+              await supabase.from('staff_attendance').update({ status: targetDbStatus }).eq('id', rowId);
             }
           }
         } catch (e) {
@@ -270,7 +251,7 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
           attendance_date: dateStr,
           punch_in: local.punch_in || '-',
           punch_out: local.punch_out || '-',
-          status: ((local.status || 'PRESENT') as any).toUpperCase(),
+          status: local.status || 'PRESENT',
           selfie_url: local.selfie_url || null,
           working_hours: local.working_hours || calculateWorkingHours(local.punch_in, local.punch_out, isTodayLog)
         };
@@ -278,12 +259,20 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
     }
     
     if (matchedLog) {
-      if (matchedLog.status === 'PRESENT') presentCount++;
-      else if (matchedLog.status === 'LATE') lateCount++;
-      else if (matchedLog.status === 'HALF_DAY') halfDayCount++;
-      else if (matchedLog.status === 'LEAVE') leaveCount++;
+      const evalStatus = evaluatePunchStatus(
+        matchedLog.punch_in,
+        profileDetails?.shift_start_time,
+        matchedLog.punch_out,
+        profileDetails?.shift_end_time,
+        matchedLog.status
+      );
+
+      if (evalStatus === 'PRESENT') presentCount++;
+      else if (evalStatus === 'LATE') lateCount++;
+      else if (evalStatus === 'HALF_DAY') halfDayCount++;
+      else if (evalStatus === 'LEAVE') leaveCount++;
       
-      let workingHours = matchedLog.working_hours && matchedLog.working_hours !== '-' 
+      const workingHours = matchedLog.working_hours && matchedLog.working_hours !== '-' && !matchedLog.working_hours.includes('NaN')
         ? matchedLog.working_hours 
         : calculateWorkingHours(matchedLog.punch_in, matchedLog.punch_out, isTodayLog);
 
@@ -292,7 +281,7 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
         date: dateStr,
         punch_in: matchedLog.punch_in || '-',
         punch_out: matchedLog.punch_out || '-',
-        status: matchedLog.status,
+        status: evalStatus,
         selfie_url: matchedLog.selfie_url,
         working_hours: workingHours,
         isVirtual: false
@@ -311,16 +300,28 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
           isVirtual: true
         });
       } else {
-        leaveCount++;
-        monthlyLogs.push({
-          date: dateStr,
-          punch_in: '-',
-          punch_out: '-',
-          status: 'LEAVE',
-          selfie_url: null,
-          working_hours: '-',
-          isVirtual: true
-        });
+        if (isTodayLog) {
+          monthlyLogs.push({
+            date: dateStr,
+            punch_in: '-',
+            punch_out: '-',
+            status: 'PENDING',
+            selfie_url: null,
+            working_hours: '-',
+            isVirtual: true
+          });
+        } else {
+          leaveCount++;
+          monthlyLogs.push({
+            date: dateStr,
+            punch_in: '-',
+            punch_out: '-',
+            status: 'LEAVE',
+            selfie_url: null,
+            working_hours: '-',
+            isVirtual: true
+          });
+        }
       }
     }
   }
@@ -342,8 +343,8 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       monthlyLogs.slice().reverse().forEach((log: any) => {
         csvRows.push([
           log.date, 
-          log.punch_in || '-', 
-          log.punch_out || '-', 
+          formatDisplayTime(log.punch_in), 
+          formatDisplayTime(log.punch_out), 
           log.working_hours || '-', 
           log.status || 'ABSENT',
           log.selfie_url ? 'Yes' : 'No'
@@ -378,8 +379,8 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
         return `
           <tr style="border-bottom: 1px solid #e2e8f0;">
             <td style="padding: 8px; font-weight: bold;">${log.date}</td>
-            <td style="padding: 8px;">${log.punch_in || '-'}</td>
-            <td style="padding: 8px;">${log.punch_out || '-'}</td>
+            <td style="padding: 8px;">${formatDisplayTime(log.punch_in)}</td>
+            <td style="padding: 8px;">${formatDisplayTime(log.punch_out)}</td>
             <td style="padding: 8px;">${log.working_hours || '-'}</td>
             <td style="padding: 8px; text-align: center; font-weight: bold; color: ${log.status === 'PRESENT' ? '#059669' : log.status === 'LATE' ? '#4f46e5' : log.status === 'HALF_DAY' ? '#6366f1' : '#e11d48'};">${log.status || 'ABSENT'}</td>
             <td style="padding: 8px; text-align: center;">${log.selfie_url ? 'Yes' : 'No'}</td>
@@ -529,15 +530,14 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
             <span className="text-[9px] font-bold text-muted-foreground uppercase">Worked Hours</span>
             <p className="text-sm font-extrabold text-foreground mt-1.5 truncate">
               {(() => {
-                const totalMins = attendance.reduce((acc, curr) => {
-                  if (curr.attendance_date.slice(0, 7) === selectedAttMonth && curr.punch_in && curr.punch_out) {
-                    const [inH, inM] = curr.punch_in.split(':').map(Number);
-                    const [outH, outM] = curr.punch_out.split(':').map(Number);
-                    return acc + ((outH * 60 + outM) - (inH * 60 + inM));
+                const totalMins = monthlyLogs.reduce((acc, curr) => {
+                  if (curr.punch_in && curr.punch_in !== '-' && curr.punch_out && curr.punch_out !== '-') {
+                    return acc + calculateWorkingMinutes(curr.punch_in, curr.punch_out);
                   }
                   return acc;
                 }, 0);
-                return `${(totalMins / 60).toFixed(1)} hrs`;
+                const totalHrs = totalMins / 60;
+                return !isNaN(totalHrs) && isFinite(totalHrs) && totalHrs > 0 ? `${totalHrs.toFixed(1)} hrs` : '0.0 hrs';
               })()}
             </p>
           </Card>
@@ -612,8 +612,8 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
                     )}
                   </td>
                   <td className="py-2.5 px-3 text-muted-foreground">{log.date}</td>
-                  <td className="py-2.5 px-3 text-foreground font-bold">{log.punch_in}</td>
-                  <td className="py-2.5 px-3 text-muted-foreground">{log.punch_out}</td>
+                  <td className="py-2.5 px-3 text-foreground font-bold">{formatDisplayTime(log.punch_in)}</td>
+                  <td className="py-2.5 px-3 text-muted-foreground">{formatDisplayTime(log.punch_out)}</td>
                   <td className="py-2.5 px-3 text-muted-foreground">{log.working_hours}</td>
                   <td className="py-2.5 px-3 text-center">
                     {log.status === 'HOLIDAY' ? (
@@ -625,11 +625,12 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
                         variant={
                           log.status === 'PRESENT' ? 'success' : 
                           log.status === 'LATE' ? 'warning' : 
-                          log.status === 'HALF_DAY' ? 'indigo' : 'error'
+                          log.status === 'HALF_DAY' ? 'indigo' : 
+                          log.status === 'PENDING' ? 'info' : 'error'
                         } 
                         className="text-[8px] font-bold uppercase tracking-wider"
                       >
-                        {log.status}
+                        {log.status === 'PENDING' ? 'NOT CHECKED IN' : log.status}
                       </Badge>
                     )}
                   </td>
@@ -641,15 +642,17 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
                           setEditingAttendance(log);
                           setEditAttStatus(log.status === 'HOLIDAY' || log.status === 'LEAVE' ? 'PRESENT' : log.status);
 
-                          let defaultIn = profileDetails?.shift_start_time || '09:30';
+                          let defaultIn = profileDetails?.shift_start_time?.slice(0, 5) || '09:30';
                           if (log.punch_in && log.punch_in !== '-') {
-                            defaultIn = log.punch_in.length >= 5 ? log.punch_in.slice(0, 5) : log.punch_in;
+                            const norm = normalize24HourTime(log.punch_in);
+                            defaultIn = norm ? norm.slice(0, 5) : defaultIn;
                           }
                           setEditClockIn(defaultIn);
 
-                          let defaultOut = profileDetails?.shift_end_time || '18:30';
+                          let defaultOut = profileDetails?.shift_end_time?.slice(0, 5) || '18:30';
                           if (log.punch_out && log.punch_out !== '-') {
-                            defaultOut = log.punch_out.length >= 5 ? log.punch_out.slice(0, 5) : log.punch_out;
+                            const norm = normalize24HourTime(log.punch_out);
+                            defaultOut = norm ? norm.slice(0, 5) : defaultOut;
                           }
                           setEditClockOut(defaultOut);
                         }}

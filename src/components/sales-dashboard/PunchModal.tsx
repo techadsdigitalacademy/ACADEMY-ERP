@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../services/supabase';
 import { compressSelfieFromVideo, extensionForBlob } from '../../utils/imageUtils';
+import { evaluatePunchStatus } from '../../utils/attendanceStorage';
 import { Card } from '../Card';
 import { X, Camera } from 'lucide-react';
 
@@ -10,7 +11,7 @@ interface PunchModalProps {
   punchType: 'IN' | 'OUT';
   activeStaff: any;
   punchIn: (photoUrl: string, lat: number, lng: number, status: string) => Promise<void>;
-  punchOut: (status: string) => Promise<void>;
+  punchOut: (status?: string) => Promise<void>;
 }
 
 export const PunchModal: React.FC<PunchModalProps> = ({
@@ -141,82 +142,71 @@ export const PunchModal: React.FC<PunchModalProps> = ({
 
       let selfiePublicUrl = '';
       try {
-        const { error: uploadErr } = await supabase.storage
-          .from('attendance')
-          .upload(fileName, blob, {
-            contentType: blob.type || 'image/webp',
-            cacheControl: '31536000',
-            upsert: true
-          });
+        const proxyRes = await fetch(`/supabase-admin/storage/v1/object/attendance/${fileName}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': blob.type || 'image/webp',
+            'x-upsert': 'true'
+          },
+          body: blob
+        });
 
-        if (uploadErr) throw uploadErr;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('attendance')
-          .getPublicUrl(fileName);
-        selfiePublicUrl = publicUrl;
-      } catch (storageErr) {
-        console.warn('Direct selfie upload error, attempting proxy upload fallback:', storageErr);
+        if (proxyRes.ok) {
+          const { data: { publicUrl } } = supabase.storage
+            .from('attendance')
+            .getPublicUrl(fileName);
+          selfiePublicUrl = publicUrl;
+        } else {
+          throw new Error(`Proxy upload failed with status ${proxyRes.status}`);
+        }
+      } catch (proxyErr) {
+        console.warn('Proxy upload error, attempting direct upload fallback:', proxyErr);
         try {
-          const proxyRes = await fetch(`/supabase-admin/storage/v1/object/attendance/${fileName}`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': blob.type || 'image/webp',
-              'x-upsert': 'true'
-            },
-            body: blob
-          });
+          const { error: uploadErr } = await supabase.storage
+            .from('attendance')
+            .upload(fileName, blob, {
+              contentType: blob.type || 'image/webp',
+              cacheControl: '31536000',
+              upsert: true
+            });
 
-          if (proxyRes.ok) {
+          if (!uploadErr) {
             const { data: { publicUrl } } = supabase.storage
               .from('attendance')
               .getPublicUrl(fileName);
             selfiePublicUrl = publicUrl;
-          } else {
-            console.warn('Proxy selfie upload fallback notice, proceeding with staff avatar.');
-            selfiePublicUrl = activeStaff?.avatar_url || '';
           }
-        } catch (proxyErr) {
-          console.warn('Proxy upload network error, falling back to staff avatar:', proxyErr);
-          selfiePublicUrl = activeStaff?.avatar_url || '';
+        } catch (directErr) {
+          console.warn('Direct upload fallback notice:', directErr);
         }
+      }
+
+      if (!selfiePublicUrl) {
+        selfiePublicUrl = activeStaff?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256&auto=format&fit=crop';
       }
 
       // 3. Perform Time Calculations
       const now = new Date();
       const currentHour = now.getHours();
       const currentMinute = now.getMinutes();
-      const currentTimeVal = currentHour * 60 + currentMinute; // minutes since midnight
 
       if (punchType === 'IN') {
-        let status: 'PRESENT' | 'LATE' | 'HALF_DAY' = 'PRESENT';
-        
-        // Resolve dynamic shift start time
-        let shiftStartMin = 570; // fallback to 9:30 AM (9 * 60 + 30)
-        if (activeStaff?.shift_start_time) {
-          const parts = activeStaff.shift_start_time.split(':');
-          if (parts.length >= 2) {
-            shiftStartMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-          }
-        }
-        
-        // Allowed late buffer (2 hours). e.g., 9:30 to 11:30 is LATE. After 11:30 is HALF DAY.
-        const lateThresholdMin = shiftStartMin + 120; 
-
-        if (currentTimeVal > lateThresholdMin) {
-          status = 'HALF_DAY';
-        } else if (currentTimeVal > shiftStartMin + 5) {
-          status = 'LATE'; // +5 mins grace period
-        }
+        const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}:00`;
+        const evaluated = evaluatePunchStatus(
+          currentTimeStr,
+          activeStaff?.shift_start_time,
+          undefined,
+          activeStaff?.shift_end_time
+        );
+        const status = evaluated === 'ABSENT' ? 'PRESENT' : evaluated;
 
         if (!userCoords) throw new Error('Location unavailable — cannot record punch.');
         await punchIn(selfiePublicUrl, userCoords.lat, userCoords.lng, status);
         alert(`Successfully punched in! Status: ${status}`);
       } else {
         // Punch Out
-        let status: 'PRESENT' | 'LATE' | 'HALF_DAY' = 'PRESENT';
-        await punchOut(status);
-        alert(`Successfully punched out! Status: ${status}`);
+        await punchOut();
+        alert(`Successfully punched out!`);
       }
 
       handleClose();

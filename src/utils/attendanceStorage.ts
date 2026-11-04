@@ -1,14 +1,15 @@
 import { supabase } from '../services/supabase';
 
 export interface PunchMeta {
+  id?: string;
   staff_id: string;
   attendance_date: string;
-  punch_in?: string | null;
-  punch_out?: string | null;
+  punch_in?: string | null;  // Stored in 24-hour format "HH:MM:SS" (e.g. "09:30:15")
+  punch_out?: string | null; // Stored in 24-hour format "HH:MM:SS" (e.g. "18:30:00")
   selfie_url?: string | null;
   lat?: number | null;
   lng?: number | null;
-  status?: string | null;
+  status?: string | null;    // Stored in uppercase: "PRESENT" | "LATE" | "HALF_DAY" | "LEAVE"
   working_hours?: string | null;
 }
 
@@ -16,97 +17,235 @@ const memoryPunchCache = new Map<string, PunchMeta>();
 const storageFileCache = new Map<string, string[]>(); // staffId -> list of file names in attendance bucket
 
 /**
- * Format timestamp or time string cleanly in Indian Standard Time (IST)
+ * Normalize any time input (12h, 24h, ISO timestamp) into canonical 24-hour time "HH:MM:SS"
  */
-export function formatISTTime(raw?: string | null): string {
-  if (!raw || raw === '-') return '-';
+export function normalize24HourTime(raw?: string | null): string | null {
+  if (!raw || raw === '-') return null;
+  const str = String(raw).trim();
 
-  // If already in 12-hour format like "09:30 AM" or "4:41 PM", return as is
-  if (/^\d{1,2}:\d{2}(?::\d{2})?\s*(am|pm)$/i.test(raw.trim())) {
-    return raw.trim();
-  }
-
-  // If ISO date string e.g. "2026-11-02T11:11:41.511913+00:00"
-  if (raw.includes('T') || (raw.includes('-') && raw.length >= 19)) {
+  // If ISO date string e.g. "2026-11-04T09:30:15.511913+00:00"
+  if (str.includes('T')) {
     try {
-      const d = new Date(raw);
+      const d = new Date(str);
       if (!isNaN(d.getTime())) {
-        return d.toLocaleTimeString('en-IN', {
+        return d.toLocaleTimeString('en-GB', {
           timeZone: 'Asia/Kolkata',
+          hour12: false,
           hour: '2-digit',
           minute: '2-digit',
-          hour12: true
+          second: '2-digit'
         });
       }
     } catch (_) {}
   }
 
-  // If 24-hour time e.g. "09:30:00" or "16:41:00"
-  const parts = raw.split(':');
+  // 12-hour format e.g. "09:30 AM", "4:41 PM", "12:05 pm"
+  const match12 = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)$/i);
+  if (match12) {
+    let hours = parseInt(match12[1], 10);
+    const mins = match12[2];
+    const secs = match12[3] || '00';
+    const mod = match12[4].toLowerCase();
+    if (mod === 'pm' && hours < 12) hours += 12;
+    if (mod === 'am' && hours === 12) hours = 0;
+    return `${String(hours).padStart(2, '0')}:${mins}:${secs}`;
+  }
+
+  // 24-hour format e.g. "09:30:00" or "09:30"
+  const match24 = str.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (match24) {
+    const hours = parseInt(match24[1], 10);
+    const mins = match24[2];
+    const secs = match24[3] || '00';
+    return `${String(hours).padStart(2, '0')}:${mins}:${secs}`;
+  }
+
+  return str;
+}
+
+/**
+ * Format any time string into a clean, human-readable 12-hour string (e.g. "09:30 AM") for UI display only
+ */
+export function formatDisplayTime(raw?: string | null): string {
+  if (!raw || raw === '-') return '-';
+  const str = String(raw).trim();
+
+  // If already in clean 12-hour format like "09:30 AM", uppercase and return
+  if (/^\d{1,2}:\d{2}(?::\d{2})?\s*(am|pm)$/i.test(str)) {
+    return str.toUpperCase();
+  }
+
+  const t24 = normalize24HourTime(str);
+  if (!t24) return str;
+
+  const parts = t24.split(':');
   if (parts.length >= 2) {
     let hours = parseInt(parts[0], 10);
     const mins = parts[1].padStart(2, '0');
     if (!isNaN(hours)) {
       const ampm = hours >= 12 ? 'PM' : 'AM';
       hours = hours % 12;
-      hours = hours ? hours : 12; // '0' becomes '12'
+      hours = hours ? hours : 12;
       return `${String(hours).padStart(2, '0')}:${mins} ${ampm}`;
     }
   }
 
-  return raw;
+  return str;
 }
 
 /**
- * Parse time string (12h or 24h) to Date object on today's reference date
+ * Backward compatibility alias for views calling formatISTTime
  */
-export function parseTimeToDate(timeStr?: string | null): Date | null {
-  if (!timeStr || timeStr === '-') return null;
-  const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-  // ISO string check
-  if (timeStr.includes('T')) {
-    const parsedIso = new Date(timeStr);
-    return isNaN(parsedIso.getTime()) ? null : parsedIso;
-  }
-
-  const match12 = timeStr.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$/i);
-  if (match12) {
-    let hours = parseInt(match12[1], 10);
-    const minutes = parseInt(match12[2], 10);
-    const seconds = match12[3] ? parseInt(match12[3], 10) : 0;
-    const modifier = match12[4] ? match12[4].toLowerCase() : null;
-
-    if (modifier === 'pm' && hours < 12) hours += 12;
-    if (modifier === 'am' && hours === 12) hours = 0;
-
-    d.setHours(hours, minutes, seconds, 0);
-    return d;
-  }
-
-  return null;
+export function formatISTTime(raw?: string | null): string {
+  return formatDisplayTime(raw);
 }
 
 /**
- * Calculate working hours between punch in and punch out or elapsed time in office
+ * Evaluate punch status based on shift timings and working hours:
+ * - On time or within 15 mins grace period: PRESENT
+ * - Late arrival (up to 2.5 hours after shift start or up to 2:00 PM): LATE
+ * - Afternoon shifts (starts >= 12:00 PM): evaluated relative to afternoon shift start
+ * - Afternoon clock-in for morning shift: evaluated as LATE/PRESENT; only marked HALF_DAY if worked 2.5h-5h
+ * - Punch-in days are NEVER marked as LEAVE or ABSENT
+ */
+export function evaluatePunchStatus(
+  punchInTime?: string | null,
+  shiftStartTime?: string | null,
+  punchOutTime?: string | null,
+  shiftEndTime?: string | null,
+  existingStatus?: string | null
+): 'PRESENT' | 'LATE' | 'HALF_DAY' | 'LEAVE' | 'ABSENT' {
+  if (!punchInTime || punchInTime === '-' || punchInTime.trim() === '') {
+    if (existingStatus && existingStatus.toUpperCase() === 'LEAVE') return 'LEAVE';
+    return 'ABSENT';
+  }
+
+  const cleanExisting = existingStatus ? String(existingStatus).toUpperCase().trim() : '';
+
+  const in24 = normalize24HourTime(punchInTime);
+  if (!in24) return 'PRESENT';
+
+  const [pH, pM] = in24.split(':').map(Number);
+  if (isNaN(pH) || isNaN(pM)) return 'PRESENT';
+  const punchMin = pH * 60 + pM;
+
+  // Resolve shift start time (default 09:30 AM)
+  const s24 = normalize24HourTime(shiftStartTime) || '09:30:00';
+  const [sH, sM] = s24.split(':').map(Number);
+  const shiftMin = !isNaN(sH) && !isNaN(sM) ? sH * 60 + sM : 570;
+
+  // Resolve shift end time (default 18:00 / 06:00 PM)
+  const e24 = normalize24HourTime(shiftEndTime) || '18:00:00';
+  const [eH, eM] = e24.split(':').map(Number);
+  const endMin = !isNaN(eH) && !isNaN(eM) ? eH * 60 + eM : 1080;
+  const shiftDurationMin = Math.max(240, endMin - shiftMin);
+
+  // Calculate actual worked minutes if punch-out is available
+  let workedMinutes = 0;
+  if (punchOutTime && punchOutTime !== '-' && punchOutTime.trim() !== '') {
+    const out24 = normalize24HourTime(punchOutTime);
+    if (out24) {
+      const [oH, oM] = out24.split(':').map(Number);
+      if (!isNaN(oH) && !isNaN(oM)) {
+        let diff = (oH * 60 + oM) - punchMin;
+        if (diff < 0) diff += 24 * 60; // Cross-midnight
+        workedMinutes = diff;
+      }
+    }
+  }
+
+  // 1. If staff worked 5+ hours (or >= 60% of shift), they are FULLY PRESENT regardless of punch-in hour
+  const fullDayThreshold = Math.min(300, Math.round(shiftDurationMin * 0.6));
+  if (workedMinutes >= fullDayThreshold) {
+    return 'PRESENT';
+  }
+
+  // 2. Afternoon/Evening Shift (Shift starts at or after 12:00 PM)
+  if (shiftMin >= 720) {
+    if (punchMin <= shiftMin + 15) return 'PRESENT';
+    if (punchMin <= shiftMin + 120) return 'LATE';
+    return 'PRESENT';
+  }
+
+  // 3. Morning Shift (Starts before 12:00 PM, e.g. 09:00 or 09:30 AM):
+  // - On-time window with 15-minute grace period
+  if (punchMin <= shiftMin + 15) {
+    return 'PRESENT';
+  }
+
+  // - Late arrival window: up to 2.5 hours after shift start (e.g. up to 12:00 PM)
+  if (punchMin <= shiftMin + 150) {
+    return 'LATE';
+  }
+
+  // 4. Afternoon punches (clock-in after 12:00 PM):
+  // - If clocked out and worked between 2.5h and 5h -> HALF_DAY
+  if (workedMinutes >= 150 && workedMinutes < 300) {
+    return 'HALF_DAY';
+  }
+
+  // - If clock-in is in early afternoon (between 12:00 PM and 02:00 PM), mark as LATE (employee attended)
+  if (punchMin <= 840) {
+    return 'LATE';
+  }
+
+  // - If existing record was already marked PRESENT in database/punch, preserve PRESENT
+  if (cleanExisting === 'PRESENT') {
+    return 'PRESENT';
+  }
+
+  return 'PRESENT';
+}
+
+/**
+ * Calculate total working minutes between punch-in and punch-out as a safe number (never NaN)
+ */
+export function calculateWorkingMinutes(
+  punchIn?: string | null,
+  punchOut?: string | null
+): number {
+  if (!punchIn || punchIn === '-' || !punchOut || punchOut === '-') return 0;
+  const in24 = normalize24HourTime(punchIn);
+  const out24 = normalize24HourTime(punchOut);
+  if (!in24 || !out24) return 0;
+
+  const [inH, inM] = in24.split(':').map(Number);
+  const [outH, outM] = out24.split(':').map(Number);
+  if (isNaN(inH) || isNaN(inM) || isNaN(outH) || isNaN(outM)) return 0;
+
+  let diff = (outH * 60 + outM) - (inH * 60 + inM);
+  if (diff < 0) diff += 24 * 60; // Cross-midnight
+  return diff > 0 && !isNaN(diff) ? diff : 0;
+}
+
+/**
+ * Calculate working hours between punch-in and punch-out or elapsed time in office
+ * Guaranteed to never return 'NaN hrs' or malformed strings
  */
 export function calculateWorkingHours(
   punchIn?: string | null,
   punchOut?: string | null,
   isToday: boolean = false
 ): string {
-  if (!punchIn || punchIn === '-') return '-';
+  if (!punchIn || punchIn === '-' || punchIn.trim() === '') return '-';
+  const in24 = normalize24HourTime(punchIn);
+  if (!in24) return '-';
 
-  const inDate = parseTimeToDate(punchIn);
-  if (!inDate) return '-';
+  const [inH, inM, inS] = in24.split(':').map(Number);
+  if (isNaN(inH) || isNaN(inM)) return '-';
+  const inMs = (inH * 3600 + inM * 60 + (inS || 0)) * 1000;
 
-  if (punchOut && punchOut !== '-') {
-    const outDate = parseTimeToDate(punchOut);
-    if (!outDate) return '-';
-    const diffMs = outDate.getTime() - inDate.getTime();
-    if (diffMs <= 0) return '0.0 hrs';
+  if (punchOut && punchOut !== '-' && punchOut.trim() !== '') {
+    const out24 = normalize24HourTime(punchOut);
+    if (!out24) return '-';
+    const [outH, outM, outS] = out24.split(':').map(Number);
+    if (isNaN(outH) || isNaN(outM)) return '-';
+    let outMs = (outH * 3600 + outM * 60 + (outS || 0)) * 1000;
+    let diffMs = outMs - inMs;
+    if (diffMs < 0) diffMs += 24 * 3600 * 1000; // Cross-midnight
+    if (diffMs <= 0 || isNaN(diffMs)) return '0.0 hrs';
     const diffHrs = diffMs / (1000 * 60 * 60);
+    if (isNaN(diffHrs) || !isFinite(diffHrs)) return '0.0 hrs';
     const hours = Math.floor(diffHrs);
     const mins = Math.round((diffHrs - hours) * 60);
     return mins > 0 ? `${hours}h ${mins}m` : `${hours} hrs`;
@@ -114,20 +253,25 @@ export function calculateWorkingHours(
 
   if (isToday) {
     const now = new Date();
-    const diffMs = now.getTime() - inDate.getTime();
-    if (diffMs > 0) {
+    const nowMs = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()) * 1000;
+    let diffMs = nowMs - inMs;
+    if (diffMs < 0) diffMs += 24 * 3600 * 1000;
+    if (diffMs > 0 && !isNaN(diffMs)) {
       const diffHrs = diffMs / (1000 * 60 * 60);
-      const hours = Math.floor(diffHrs);
-      const mins = Math.round((diffHrs - hours) * 60);
-      return `${hours}h ${mins}m (In Office)`;
+      if (!isNaN(diffHrs) && isFinite(diffHrs)) {
+        const hours = Math.floor(diffHrs);
+        const mins = Math.round((diffHrs - hours) * 60);
+        return `${hours}h ${mins}m (In Office)`;
+      }
     }
+    return '0.0 hrs (In Office)';
   }
 
   return '-';
 }
 
 /**
- * Save punch metadata to localStorage and Supabase Storage across target ID and linked alias IDs
+ * Save punch metadata to localStorage, in-memory cache, and Supabase Storage across target ID and linked alias IDs
  */
 export async function savePunchMetaToStorage(
   staffId: string,
@@ -139,6 +283,13 @@ export async function savePunchMetaToStorage(
 
   const allIds = Array.from(new Set([staffId, ...linkedIds].filter(Boolean)));
 
+  const normalizedData: Partial<PunchMeta> = {
+    ...data,
+    punch_in: data.punch_in ? (normalize24HourTime(data.punch_in) || data.punch_in) : data.punch_in,
+    punch_out: data.punch_out ? (normalize24HourTime(data.punch_out) || data.punch_out) : data.punch_out,
+    status: data.status ? String(data.status).toUpperCase() : undefined
+  };
+
   for (const id of allIds) {
     const key = `${id}_${dateStr}`;
     const existing = getStoredPunchLocal(id, dateStr) || {};
@@ -146,18 +297,24 @@ export async function savePunchMetaToStorage(
       staff_id: id,
       attendance_date: dateStr,
       ...existing,
-      ...data
+      ...normalizedData
     };
 
+    if (merged.punch_in && merged.punch_out && !merged.working_hours) {
+      merged.working_hours = calculateWorkingHours(merged.punch_in, merged.punch_out);
+    }
+
+    // 1. Update in-memory cache
     memoryPunchCache.set(key, merged);
 
+    // 2. Update localStorage
     try {
       localStorage.setItem(`staff_punch_${id}_${dateStr}`, JSON.stringify(merged));
     } catch (_) {}
 
-    // Save to Supabase Storage via admin proxy to avoid RLS block
+    // 3. Save to Supabase Storage via admin proxy (with direct fallback)
     const fileName = `${id}/${dateStr}.json`;
-    const jsonBlob = JSON.stringify(merged);
+    const jsonBlob = new Blob([JSON.stringify(merged)], { type: 'application/json' });
 
     try {
       const proxyRes = await fetch(`/supabase-admin/storage/v1/object/attendance/${fileName}`, {
@@ -184,19 +341,36 @@ export async function savePunchMetaToStorage(
 }
 
 /**
- * Read punch from localStorage, checking primary ID and any alias IDs
+ * Backward compatibility alias for savePunchMetaToStorage
  */
-export function getStoredPunchLocal(staffId: string, dateStr: string, linkedIds: string[] = []): PunchMeta | null {
-  const idsToCheck = [staffId, ...linkedIds].filter(Boolean);
+export const saveStoredPunch = savePunchMetaToStorage;
+
+/**
+ * Read punch from localStorage or memory cache, checking primary ID and any alias IDs
+ */
+export function getStoredPunchLocal(
+  staffId: string,
+  dateStr: string,
+  linkedIds: string[] = []
+): PunchMeta | null {
+  const idsToCheck = Array.from(new Set([staffId, ...linkedIds].filter(Boolean)));
 
   for (const id of idsToCheck) {
     const key = `${id}_${dateStr}`;
-    if (memoryPunchCache.has(key)) return memoryPunchCache.get(key)!;
+    if (memoryPunchCache.has(key)) {
+      return memoryPunchCache.get(key)!;
+    }
 
     try {
       const raw = localStorage.getItem(`staff_punch_${id}_${dateStr}`);
       if (raw) {
         const parsed = JSON.parse(raw);
+        if (parsed.punch_in) {
+          parsed.punch_in = normalize24HourTime(parsed.punch_in) || parsed.punch_in;
+        }
+        if (parsed.punch_out) {
+          parsed.punch_out = normalize24HourTime(parsed.punch_out) || parsed.punch_out;
+        }
         memoryPunchCache.set(key, parsed);
         return parsed;
       }
@@ -205,6 +379,11 @@ export function getStoredPunchLocal(staffId: string, dateStr: string, linkedIds:
 
   return null;
 }
+
+/**
+ * Backward compatibility alias for getStoredPunchLocal
+ */
+export const getStoredPunch = getStoredPunchLocal;
 
 /**
  * Helper to discover punch-in/out selfie photo directly from Supabase Storage bucket
@@ -295,26 +474,37 @@ export async function getPunchMeta(
 
     if (meta) {
       const local = getStoredPunchLocal(id, dateStr);
-      const combined = { ...(local || {}), ...meta };
+      const combined: PunchMeta = {
+        ...(local || {}),
+        ...meta,
+        punch_in: normalize24HourTime(meta.punch_in || local?.punch_in) || meta.punch_in,
+        punch_out: normalize24HourTime(meta.punch_out || local?.punch_out) || meta.punch_out,
+        status: (meta.status || local?.status || 'PRESENT').toUpperCase()
+      };
+
       memoryPunchCache.set(key, combined);
       try {
         localStorage.setItem(`staff_punch_${id}_${dateStr}`, JSON.stringify(combined));
       } catch (_) {}
+
       return combined;
     }
   }
 
-  // 3. Fallback: Check if an image exists in storage bucket for this date across IDs
+  // 3. Fallback: discover selfie from storage if JSON is not present
   for (const id of idsToCheck) {
-    const selfieUrl = await findStorageSelfieForDate(id, dateStr);
-    if (selfieUrl) {
-      const local = getStoredPunchLocal(id, dateStr) || {
+    const discoveredSelfie = await findStorageSelfieForDate(id, dateStr);
+    if (discoveredSelfie) {
+      const local = getStoredPunchLocal(id, dateStr);
+      const fallbackMeta: PunchMeta = {
         staff_id: id,
-        attendance_date: dateStr
+        attendance_date: dateStr,
+        selfie_url: discoveredSelfie,
+        status: local?.status || 'PRESENT',
+        punch_in: local?.punch_in || null,
+        punch_out: local?.punch_out || null
       };
-      const updated = { ...local, selfie_url: selfieUrl };
-      memoryPunchCache.set(`${id}_${dateStr}`, updated);
-      return updated;
+      return fallbackMeta;
     }
   }
 
@@ -461,7 +651,6 @@ export async function enrichAttendanceRecords(
         linkedIds = (aliasMap as any)[staffId];
       }
     }
-    // Also include any staff_ids from the grouped records
     dayRecords.forEach(r => {
       if (r.staff_id && !linkedIds.includes(r.staff_id)) {
         linkedIds.push(r.staff_id);
@@ -470,29 +659,43 @@ export async function enrichAttendanceRecords(
 
     const meta = await getPunchMeta(staffId, dateStr, linkedIds);
 
-    // Punch IN: earliest record timestamp or metadata
-    let rawIn = meta?.punch_in || primaryRec.punch_in;
-    if (!rawIn && primaryRec.created_at) {
-      rawIn = formatISTTime(primaryRec.created_at);
+    // Punch IN: earliest record timestamp or metadata in 24-hr format "HH:MM:SS"
+    let in24: string | null = null;
+    if (meta?.punch_in) {
+      in24 = normalize24HourTime(meta.punch_in);
+    } else if (primaryRec.punch_in) {
+      in24 = normalize24HourTime(primaryRec.punch_in);
+    } else if (primaryRec.created_at) {
+      in24 = normalize24HourTime(primaryRec.created_at);
     }
 
-    // Punch OUT: latest record timestamp (if different from primary) or metadata
-    let rawOut = meta?.punch_out || primaryRec.punch_out || null;
-    if (!rawOut && latestRec && latestRec.id !== primaryRec.id && latestRec.created_at) {
-      rawOut = formatISTTime(latestRec.created_at);
+    // Punch OUT: latest record timestamp (if different from primary) or metadata in 24-hr format "HH:MM:SS"
+    let out24: string | null = null;
+    if (meta?.punch_out) {
+      out24 = normalize24HourTime(meta.punch_out);
+    } else if (primaryRec.punch_out) {
+      out24 = normalize24HourTime(primaryRec.punch_out);
+    } else if (latestRec && latestRec.id !== primaryRec.id && latestRec.created_at) {
+      out24 = normalize24HourTime(latestRec.created_at);
     }
 
-    const formattedIn = formatISTTime(rawIn);
-    const formattedOut = rawOut ? formatISTTime(rawOut) : null;
     const isToday = dateStr === todayStr;
-    const hoursWorked = calculateWorkingHours(formattedIn, formattedOut, isToday);
+    const hoursWorked = calculateWorkingHours(in24, out24, isToday);
 
-    const resolvedStatus = (meta?.status || primaryRec.status || 'present').toUpperCase();
+    // Resolved Status: evaluate status accurately based on shift timings and punch times
+    const existingStatus = meta?.status || primaryRec.status;
+    const resolvedStatus = evaluatePunchStatus(
+      in24,
+      primaryRec.shift_start_time || '09:30:00',
+      out24,
+      primaryRec.shift_end_time || '18:00:00',
+      existingStatus
+    );
 
     enrichedResults.push({
       ...primaryRec,
-      punch_in: formattedIn || '-',
-      punch_out: formattedOut || '-',
+      punch_in: in24 || '-',
+      punch_out: out24 || '-',
       working_hours: hoursWorked,
       selfie_url: meta?.selfie_url || primaryRec.selfie_url || null,
       lat: meta?.lat ?? primaryRec.lat ?? null,
