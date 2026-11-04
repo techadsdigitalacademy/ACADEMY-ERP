@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { enrichAttendanceRecords, calculateWorkingHours, calculateWorkingMinutes, evaluatePunchStatus, fetchStaffAttendanceRecords, getStoredPunchLocal, savePunchMetaToStorage, normalize24HourTime, formatDisplayTime } from '../utils/attendanceStorage';
+import { enrichAttendanceRecords, calculateWorkingHours, calculateWorkingMinutes, evaluatePunchStatus, fetchStaffAttendanceRecords, getStoredPunchLocal, getPunchMeta, savePunchMetaToStorage, normalize24HourTime, formatDisplayTime } from '../utils/attendanceStorage';
 import { getLinkedStaffIds } from '../utils/staffAliases';
+import { fetchCompanyHolidays } from '../utils/holidayStorage';
+import type { CompanyHoliday } from '../utils/holidayStorage';
 import { Card } from './Card';
 import { Button } from './Button';
 import { Badge } from './Badge';
@@ -28,7 +30,7 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   onOverrideSuccess
 }) => {
   const [attendance, setAttendance] = useState<Attendance[]>([]);
-  const [holidays, setHolidays] = useState<any[]>([]);
+  const [holidays, setHolidays] = useState<CompanyHoliday[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedAttMonth, setSelectedAttMonth] = useState<string>(new Date().toISOString().slice(0, 7));
   const [enlargedSelfie, setEnlargedSelfie] = useState<string | null>(null);
@@ -49,8 +51,9 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   const fetchAttendanceForMonth = async () => {
     try {
       const [y, m] = selectedAttMonth.split('-').map(Number);
+      const daysInM = new Date(y, m, 0).getDate();
       const monthStart = `${selectedAttMonth}-01`;
-      const monthEnd = `${selectedAttMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+      const monthEnd = `${selectedAttMonth}-${String(daysInM).padStart(2, '0')}`;
 
       // Fetch all staff profiles to resolve alias IDs for this staff member
       const { data: allProfiles } = await supabase.from('staff_profiles').select('*');
@@ -67,6 +70,33 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       aliasMap.set(staffId, idsToQuery);
 
       const enriched = await enrichAttendanceRecords(data || [], aliasMap);
+
+      // Pre-check any missing days in the month against Supabase Storage so cross-device punches never get lost
+      const enrichedMap = new Map(enriched.map(r => [r.attendance_date, r]));
+      const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      for (let d = 1; d <= daysInM; d++) {
+        const dStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        if (!enrichedMap.has(dStr)) {
+          const meta = await getPunchMeta(staffId, dStr, idsToQuery);
+          if (meta && (meta.punch_in || meta.selfie_url)) {
+            const synthesized = {
+              id: `storage-${dStr}`,
+              staff_id: staffId,
+              attendance_date: dStr,
+              punch_in: meta.punch_in || '-',
+              punch_out: meta.punch_out || '-',
+              status: meta.status || 'PRESENT',
+              selfie_url: meta.selfie_url || null,
+              lat: meta.lat ?? null,
+              lng: meta.lng ?? null,
+              working_hours: meta.working_hours || calculateWorkingHours(meta.punch_in, meta.punch_out, dStr === todayStr)
+            };
+            enriched.push(synthesized);
+            enrichedMap.set(dStr, synthesized);
+          }
+        }
+      }
+
       setAttendance(enriched);
     } catch (err: any) {
       console.error('Error fetching attendance logs:', err.message);
@@ -113,12 +143,9 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
         }
       }
 
-      // 2. Holidays
-      const { data: holData, error: holErr } = await supabase
-        .from('holidays')
-        .select('*');
-      if (holErr) throw holErr;
-      setHolidays(holData || []);
+      // 2. Office Holidays
+      const holList = await fetchCompanyHolidays();
+      setHolidays(holList || []);
     } catch (err: any) {
       console.error('Error fetching attendance logs:', err.message);
     } finally {
@@ -129,6 +156,14 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   useEffect(() => {
     fetchLogs();
   }, [staffId]);
+
+  useEffect(() => {
+    const onHolidaysChanged = () => {
+      fetchCompanyHolidays().then(setHolidays);
+    };
+    window.addEventListener('company_holidays_changed', onHolidaysChanged);
+    return () => window.removeEventListener('company_holidays_changed', onHolidaysChanged);
+  }, []);
 
   useEffect(() => {
     fetchAttendanceForMonth();
@@ -219,15 +254,12 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   let leaveCount = 0;
   let holidayCount = 0;
 
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  const currentMonth = today.getMonth() + 1; // 1-indexed
-  const todayDate = today.getDate();
+  const [currY, currM, currD] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).split('-').map(Number);
 
   let maxDay = daysInMonth;
-  if (year === currentYear && monthIdx === currentMonth) {
-    maxDay = todayDate;
-  } else if (year > currentYear || (year === currentYear && monthIdx > currentMonth)) {
+  if (year === currY && monthIdx === currM) {
+    maxDay = currD;
+  } else if (year > currY || (year === currY && monthIdx > currM)) {
     maxDay = 0;
   }
 

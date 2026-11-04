@@ -300,6 +300,12 @@ export async function savePunchMetaToStorage(
       ...normalizedData
     };
 
+    // If punch_out was explicitly passed as null/undefined (e.g. on Punch In), ensure it is wiped clean
+    if ('punch_out' in data && (data.punch_out === null || data.punch_out === undefined || data.punch_out === '')) {
+      delete merged.punch_out;
+      delete merged.working_hours;
+    }
+
     if (merged.punch_in && merged.punch_out && !merged.working_hours) {
       merged.working_hours = calculateWorkingHours(merged.punch_in, merged.punch_out);
     }
@@ -637,7 +643,6 @@ export async function enrichAttendanceRecords(
     });
 
     const primaryRec = dayRecords[0];
-    const latestRec = dayRecords.length > 1 ? dayRecords[dayRecords.length - 1] : null;
 
     const staffId = primaryRec.staff_id;
     const dateStr = primaryRec.attendance_date ? String(primaryRec.attendance_date).substring(0, 10) : '';
@@ -669,14 +674,13 @@ export async function enrichAttendanceRecords(
       in24 = normalize24HourTime(primaryRec.created_at);
     }
 
-    // Punch OUT: latest record timestamp (if different from primary) or metadata in 24-hr format "HH:MM:SS"
+    // Punch OUT: ONLY when explicitly recorded via user's Punch Out button action.
+    // NEVER synthesize or guess punch_out from duplicate staff_attendance rows.
     let out24: string | null = null;
-    if (meta?.punch_out) {
+    if (meta?.punch_out && meta.punch_out !== '-') {
       out24 = normalize24HourTime(meta.punch_out);
-    } else if (primaryRec.punch_out) {
+    } else if (primaryRec.punch_out && primaryRec.punch_out !== '-') {
       out24 = normalize24HourTime(primaryRec.punch_out);
-    } else if (latestRec && latestRec.id !== primaryRec.id && latestRec.created_at) {
-      out24 = normalize24HourTime(latestRec.created_at);
     }
 
     const isToday = dateStr === todayStr;

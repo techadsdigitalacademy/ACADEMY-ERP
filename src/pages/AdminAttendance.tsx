@@ -8,6 +8,9 @@ import { supabase, STAFF_PROFILE_COLUMNS } from '../services/supabase';
 import { dataCache } from '../services/dataCache';
 import { enrichAttendanceRecords, fetchStaffAttendanceRecords, getStoredPunchLocal, normalize24HourTime, formatDisplayTime, evaluatePunchStatus, calculateWorkingHours } from '../utils/attendanceStorage';
 import { deduplicateStaffProfiles, getLinkedStaffIds } from '../utils/staffAliases';
+import { fetchCompanyHolidays } from '../utils/holidayStorage';
+import type { CompanyHoliday } from '../utils/holidayStorage';
+import { HolidayManagementModal } from '../components/HolidayManagementModal';
 import { MetricCardsSkeleton, TableSkeleton } from '../components/Skeleton';
 import type { Staff, Attendance } from '../types';
 import {
@@ -51,11 +54,13 @@ export const AdminAttendance: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [staffList, setStaffList] = useState<StaffWithAttendance[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Present' | 'Late' | 'Half Day' | 'Leave' | 'Absent'>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Present' | 'Late' | 'Half Day' | 'Leave' | 'Absent' | 'Holiday'>('All');
   const [selectedRegistryDate, setSelectedRegistryDate] = useState<string>(() => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
   const [adminTab, setAdminTab] = useState<'registry' | 'reports'>('registry');
   const [masterStaffList, setMasterStaffList] = useState<any[]>([]);
   const [enlargedSelfie, setEnlargedSelfie] = useState<string | null>(null);
+  const [holidays, setHolidays] = useState<CompanyHoliday[]>([]);
+  const [isHolidayModalOpen, setIsHolidayModalOpen] = useState<boolean>(false);
 
   const handleExportStaffAttendanceExcel = (staff: any, month: string, logs: any[], present: number, late: number, halfDay: number, leave: number, holiday: number, attPct: number) => {
     try {
@@ -731,6 +736,7 @@ export const AdminAttendance: React.FC = () => {
 
   useEffect(() => {
     loadAttendanceData(true);
+    fetchCompanyHolidays().then(setHolidays);
 
     const handleStaffChanged = () => {
       loadAttendanceData(true);
@@ -738,13 +744,19 @@ export const AdminAttendance: React.FC = () => {
     const handleAttendanceChanged = () => {
       loadAttendanceData(true);
     };
+    const handleHolidaysChanged = () => {
+      fetchCompanyHolidays().then(setHolidays);
+      loadAttendanceData(true);
+    };
 
     window.addEventListener('staff_profiles_changed', handleStaffChanged);
     window.addEventListener('attendance_data_changed', handleAttendanceChanged);
+    window.addEventListener('company_holidays_changed', handleHolidaysChanged);
 
     return () => {
       window.removeEventListener('staff_profiles_changed', handleStaffChanged);
       window.removeEventListener('attendance_data_changed', handleAttendanceChanged);
+      window.removeEventListener('company_holidays_changed', handleHolidaysChanged);
     };
   }, [selectedRegistryDate]);
 
@@ -753,8 +765,16 @@ export const AdminAttendance: React.FC = () => {
   const totalStaffCount = staffList.length;
 
   // Helper to determine accurate evaluated status of a staff member
-  const getEvaluatedTodayStatus = (s: StaffWithAttendance): 'Present' | 'Late' | 'Half Day' | 'Leave' | 'Absent' => {
-    if (!s.todayRecord) return 'Absent';
+  const getEvaluatedTodayStatus = (s: StaffWithAttendance): 'Present' | 'Late' | 'Half Day' | 'Leave' | 'Absent' | 'Holiday' => {
+    const isOfficeHoliday = holidays.some(h => h.holiday_date === todayStr);
+    const userWeeklyOff = s.weekly_off_day || 'Sunday';
+    const dayName = new Date(`${todayStr}T12:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Kolkata' });
+    const isWeeklyOff = dayName.toLowerCase() === userWeeklyOff.toLowerCase();
+
+    if (!s.todayRecord) {
+      if (isOfficeHoliday || isWeeklyOff) return 'Holiday';
+      return 'Absent';
+    }
     const recStatus = (s.todayRecord.status || 'PRESENT').toUpperCase();
     const in24 = normalize24HourTime(s.todayRecord.punch_in);
     const out24 = normalize24HourTime(s.todayRecord.punch_out);
@@ -771,7 +791,11 @@ export const AdminAttendance: React.FC = () => {
     }
 
     if (recStatus === 'LEAVE') return 'Leave';
-    if (recStatus === 'ABSENT') return 'Absent';
+    if (recStatus === 'ABSENT') {
+      if (isOfficeHoliday || isWeeklyOff) return 'Holiday';
+      return 'Absent';
+    }
+    if (isOfficeHoliday || isWeeklyOff) return 'Holiday';
     return 'Absent';
   };
 
@@ -784,11 +808,14 @@ export const AdminAttendance: React.FC = () => {
   // Half Day: marked as Half Day
   const halfDayCount = staffList.filter(s => getEvaluatedTodayStatus(s) === 'Half Day').length;
 
-  // On Leave / Absent: staff who haven't punched in yet or are on leave/absent
+  // On Leave / Absent: staff who haven't punched in yet or are on leave/absent (excluding holidays)
   const leaveCount = staffList.filter(s => {
     const st = getEvaluatedTodayStatus(s);
     return st === 'Leave' || st === 'Absent';
   }).length;
+
+  // Holiday: staff on declared office holiday or weekly off
+  const todayHolidayCount = staffList.filter(s => getEvaluatedTodayStatus(s) === 'Holiday').length;
 
   // Missed Out: staff who missed punch-in or punch-out logs today
   const missedOutCount = staffList.filter(s => {
@@ -886,8 +913,8 @@ export const AdminAttendance: React.FC = () => {
             </div>
           ) : (
             <>
-              {/* Summary Stats Grid (Total Staff, Present, Late, Half Day, On Leave / Absent, Missed Out, In Office) */}
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
+              {/* Summary Stats Grid (Total Staff, Present, Late, Half Day, On Leave / Absent, Missed Out, In Office, Holiday) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2.5">
                 {/* Total Staff */}
                 <Card variant="glass" className="p-3 flex flex-col justify-between border-border min-h-[80px]">
                   <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Total Staff</span>
@@ -916,6 +943,12 @@ export const AdminAttendance: React.FC = () => {
                 <Card variant="glass" className="p-3 flex flex-col justify-between border-border min-h-[80px]">
                   <span className="text-[9px] font-bold text-primary uppercase tracking-wider">On Leave / Absent</span>
                   <p className="text-xl font-extrabold text-primary mt-1">{leaveCount}</p>
+                </Card>
+
+                {/* Holiday */}
+                <Card variant="glass" glowColor="indigo" className="p-3 flex flex-col justify-between border-primary/20 min-h-[80px]">
+                  <span className="text-[9px] font-bold text-primary uppercase tracking-wider">Holiday</span>
+                  <p className="text-xl font-extrabold text-primary mt-1">{todayHolidayCount}</p>
                 </Card>
 
                 {/* Missed Out */}
@@ -965,6 +998,14 @@ export const AdminAttendance: React.FC = () => {
                       Daily Staff Registry
                     </h2>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setIsHolidayModalOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-soft hover:bg-primary/20 text-primary border border-primary/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                        title="Manage Company Office Holidays"
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>Manage Holidays</span>
+                      </button>
                       <button
                         onClick={handleExportDailyRegistryExcel}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
@@ -1028,7 +1069,7 @@ export const AdminAttendance: React.FC = () => {
                       <div className="text-muted-foreground mr-1 p-2 bg-muted-2 rounded-md border border-border shrink-0">
                         <Filter className="w-3.5 h-3.5" />
                       </div>
-                      {(['All', 'Present', 'Late', 'Half Day', 'Leave', 'Absent'] as const).map(filter => (
+                      {(['All', 'Present', 'Late', 'Half Day', 'Leave', 'Absent', 'Holiday'] as const).map(filter => (
                         <button
                           key={filter}
                           onClick={() => setStatusFilter(filter)}
@@ -1073,7 +1114,7 @@ export const AdminAttendance: React.FC = () => {
 
                                 const evaluatedStatus = getEvaluatedTodayStatus(staff);
                                 let displayStatus = 'ABSENT';
-                                let badgeVariant: 'success' | 'warning' | 'info' | 'error' | 'purple' = 'error';
+                                let badgeVariant: 'success' | 'warning' | 'info' | 'error' | 'purple' | 'indigo' = 'error';
 
                                 if (evaluatedStatus === 'Present') {
                                   displayStatus = 'PRESENT';
@@ -1087,6 +1128,9 @@ export const AdminAttendance: React.FC = () => {
                                 } else if (evaluatedStatus === 'Leave') {
                                   displayStatus = 'ON LEAVE';
                                   badgeVariant = 'info';
+                                } else if (evaluatedStatus === 'Holiday') {
+                                  displayStatus = 'HOLIDAY';
+                                  badgeVariant = 'indigo';
                                 } else {
                                   displayStatus = 'ABSENT';
                                   badgeVariant = 'error';
@@ -1211,7 +1255,7 @@ export const AdminAttendance: React.FC = () => {
 
                             const evaluatedStatus = getEvaluatedTodayStatus(staff);
                             let displayStatus = 'ABSENT';
-                            let badgeVariant: 'success' | 'warning' | 'info' | 'error' | 'purple' = 'error';
+                            let badgeVariant: 'success' | 'warning' | 'info' | 'error' | 'purple' | 'indigo' = 'error';
 
                             if (evaluatedStatus === 'Present') {
                               displayStatus = 'PRESENT';
@@ -1225,6 +1269,9 @@ export const AdminAttendance: React.FC = () => {
                             } else if (evaluatedStatus === 'Leave') {
                               displayStatus = 'ON LEAVE';
                               badgeVariant = 'info';
+                            } else if (evaluatedStatus === 'Holiday') {
+                              displayStatus = 'HOLIDAY';
+                              badgeVariant = 'indigo';
                             } else {
                               displayStatus = 'ABSENT';
                               badgeVariant = 'error';
@@ -1448,15 +1495,12 @@ export const AdminAttendance: React.FC = () => {
                         const [year, monthIdx] = drillMonth.split('-').map(Number);
                         const daysInMonth = new Date(year, monthIdx, 0).getDate();
 
-                        const todayObj = new Date();
-                        const currentYear = todayObj.getFullYear();
-                        const currentMonth = todayObj.getMonth() + 1;
-                        const todayDate = todayObj.getDate();
+                        const [currY, currM, currD] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).split('-').map(Number);
 
                         let maxDay = daysInMonth;
-                        if (year === currentYear && monthIdx === currentMonth) {
-                          maxDay = todayDate;
-                        } else if (year > currentYear || (year === currentYear && monthIdx > currentMonth)) {
+                        if (year === currY && monthIdx === currM) {
+                          maxDay = currD;
+                        } else if (year > currY || (year === currY && monthIdx > currM)) {
                           maxDay = 0;
                         }
 
@@ -1466,11 +1510,15 @@ export const AdminAttendance: React.FC = () => {
                         let halfDayCount = 0;
                         let leaveCount = 0;
                         let holidayCount = 0;
+                        const staffWeeklyOff = selectedStaffForDrill?.weekly_off_day || 'Sunday';
 
                         for (let d = 1; d <= maxDay; d++) {
                           const dateStr = `${year}-${String(monthIdx).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                           const matchedLog = drillLogs.find(a => a.attendance_date === dateStr);
-                          const dayOfWeek = new Date(year, monthIdx - 1, d).getDay(); // 0 is Sunday
+                          const dateObj = new Date(year, monthIdx - 1, d);
+                          const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+                          const isWeeklyOff = dayName.toLowerCase() === staffWeeklyOff.toLowerCase();
+                          const matchHoliday = holidays.find(h => h.holiday_date === dateStr);
 
                           if (matchedLog) {
                             const isTodayLog = dateStr === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
@@ -1500,13 +1548,14 @@ export const AdminAttendance: React.FC = () => {
                               working_hours: workingHours
                             });
                           } else {
-                            if (dayOfWeek === 0) {
+                            if (isWeeklyOff || matchHoliday) {
                               holidayCount++;
                               monthlyLogs.push({
                                 date: dateStr,
                                 punch_in: '-',
                                 punch_out: '-',
                                 status: 'HOLIDAY',
+                                holiday_name: matchHoliday ? matchHoliday.holiday_name : `${staffWeeklyOff} Holiday`,
                                 selfie_url: null,
                                 working_hours: '-'
                               });
@@ -1684,6 +1733,15 @@ export const AdminAttendance: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Admin Holiday Management Modal */}
+      <HolidayManagementModal
+        isOpen={isHolidayModalOpen}
+        onClose={() => setIsHolidayModalOpen(false)}
+        holidays={holidays}
+        onHolidaysUpdated={(updated) => setHolidays(updated)}
+        adminName={activeStaff?.full_name}
+      />
 
       {/* Mobile Sticky Bottom Tab Bar Navigation (Hidden on desktop) */}
       <nav className="fixed bottom-0 left-0 right-0 bg-card border border-border border-t border-border py-2.5 px-6 z-40 md:hidden">

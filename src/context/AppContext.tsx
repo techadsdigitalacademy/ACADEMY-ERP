@@ -4,7 +4,7 @@ import { supabase, SALES_COLUMNS, monthWindowStart } from '../services/supabase'
 import { formatStaffEmail, ensureStaffAuthUser, normalizePassword } from '../services/staffAuth';
 import { dataCache } from '../services/dataCache';
 import { extensionForBlob } from '../utils/imageUtils';
-import { savePunchMetaToStorage, enrichAttendanceRecords, calculateWorkingHours, evaluatePunchStatus, fetchStaffAttendanceRecords } from '../utils/attendanceStorage';
+import { savePunchMetaToStorage, enrichAttendanceRecords, calculateWorkingHours, evaluatePunchStatus, fetchStaffAttendanceRecords, getPunchMeta } from '../utils/attendanceStorage';
 import { getLinkedStaffIds } from '../utils/staffAliases';
 
 export type TabType = 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_reports' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets';
@@ -18,11 +18,11 @@ interface AppContextType {
   setSelectedMonth: (month: string) => void;
   theme: 'dark' | 'light';
   toggleTheme: () => void;
-  addSale: (saleData: { 
-    clientName: string; 
-    servicePackage: string; 
-    paymentType: 'Full' | 'Advance' | 'Clearance'; 
-    packageAmount: number; 
+  addSale: (saleData: {
+    clientName: string;
+    servicePackage: string;
+    paymentType: 'Full' | 'Advance' | 'Clearance';
+    packageAmount: number;
     receivedAmount: number;
     paymentMethod?: string;
     paymentProofUrl?: string;
@@ -213,7 +213,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
         }
       }
-    } catch {}
+    } catch { }
     return null;
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -249,7 +249,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     try {
       localStorage.setItem('tech_ads_theme', theme);
-    } catch (e) {}
+    } catch (e) { }
   }, [theme]);
 
   const toggleTheme = () => {
@@ -286,7 +286,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const desigLower = String(staffProfileCheck?.designation || activeStaff?.designation || '').toLowerCase();
       const roleLower = String(roleName || '').toLowerCase();
 
-      const isAdminUser = 
+      const isAdminUser =
         nameUpper.includes('SHIBILI') ||
         nameUpper.includes('ASHIF') ||
         desigLower.includes('owner') ||
@@ -355,27 +355,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (todayRec) {
           setTodayAttendance(todayRec);
         } else {
-          // Check local punch before resetting to null
-          const localPunch = getStoredPunch(staffId, todayStr);
-          if (localPunch && localPunch.punch_in) {
+          // Check Supabase Storage and local punch across staff and linked IDs
+          const remotePunch = await getPunchMeta(staffId, todayStr, idsToQuery);
+          if (remotePunch && remotePunch.punch_in) {
             const localToday: Attendance = {
-              id: `local-${todayStr}`,
+              id: `storage-${todayStr}`,
               staff_id: staffId,
               attendance_date: todayStr,
-              punch_in: localPunch.punch_in,
-              punch_out: localPunch.punch_out,
-              status: (localPunch.status || 'PRESENT') as any,
-              selfie_url: localPunch.selfie_url,
-              working_hours: localPunch.working_hours,
-              lat: localPunch.lat,
-              lng: localPunch.lng
+              punch_in: remotePunch.punch_in,
+              punch_out: remotePunch.punch_out || undefined,
+              status: (remotePunch.status || 'PRESENT') as any,
+              selfie_url: remotePunch.selfie_url || undefined,
+              working_hours: remotePunch.working_hours || undefined,
+              lat: remotePunch.lat ?? undefined,
+              lng: remotePunch.lng ?? undefined
             };
             setTodayAttendance(localToday);
             if (!enriched.some((a: any) => a.attendance_date === todayStr)) {
               enriched.unshift(localToday);
             }
           } else {
-            setTodayAttendance(null);
+            setTodayAttendance((prev) => {
+              if (prev && prev.attendance_date === todayStr && prev.punch_in) {
+                return prev;
+              }
+              return null;
+            });
           }
         }
 
@@ -498,13 +503,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           if (staffRecord) {
             if (staffRecord.departments) {
-              deptName = Array.isArray(staffRecord.departments) 
-                ? staffRecord.departments[0]?.name 
+              deptName = Array.isArray(staffRecord.departments)
+                ? staffRecord.departments[0]?.name
                 : staffRecord.departments.name;
             }
             if (staffRecord.roles) {
-              rName = Array.isArray(staffRecord.roles) 
-                ? staffRecord.roles[0]?.role_name 
+              rName = Array.isArray(staffRecord.roles)
+                ? staffRecord.roles[0]?.role_name
                 : staffRecord.roles.role_name;
             }
           }
@@ -531,16 +536,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const rNameLower = rName.toLowerCase();
           const userLower = (profile.username || '').toLowerCase();
 
-          const isAdmin = desig.includes('admin') || 
-                          desig.includes('director') || 
-                          desig.includes('coordinator') ||
-                          desig.includes('owner') ||
-                          desig.includes('partner') ||
-                          rNameLower.includes('admin') ||
-                          rNameLower.includes('director') ||
-                          rNameLower.includes('partner') ||
-                          rNameLower.includes('owner') ||
-                          userLower === 'admin';
+          const isAdmin = desig.includes('admin') ||
+            desig.includes('director') ||
+            desig.includes('coordinator') ||
+            desig.includes('owner') ||
+            desig.includes('partner') ||
+            rNameLower.includes('admin') ||
+            rNameLower.includes('director') ||
+            rNameLower.includes('partner') ||
+            rNameLower.includes('owner') ||
+            userLower === 'admin';
 
           setActiveStaff(activeUser);
           setIsAdminMode(isAdmin);
@@ -581,6 +586,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Update today's attendance state whenever attendance array updates
   useEffect(() => {
+    if (isLoading) return; // Prevent clearing today's punch state during initial boot / auth load
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const todayRecord = attendance.find((a) => a.attendance_date === todayStr);
     if (todayRecord) {
@@ -605,9 +611,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return;
         }
       }
-      setTodayAttendance(null);
+      setTodayAttendance((prev) => {
+        if (prev && prev.attendance_date === todayStr && prev.punch_in) {
+          return prev;
+        }
+        return null;
+      });
     }
-  }, [attendance, activeStaff?.id]);
+  }, [attendance, activeStaff?.id, isLoading]);
 
   // Real-time synchronization across clients & tabs.
   //
@@ -708,7 +719,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     console.log('Incoming Login Attempt:', { username });
     try {
       setDbError(null);
-      
+
       const cleanUser = username.trim();
       const cleanPass = pass.trim();
       if (!cleanUser || !cleanPass) return false;
@@ -729,7 +740,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // Prioritize exact/case-insensitive username match, then handle, then full_name
         profile = matchedProfiles.find(
           (p) => (p.username && p.username.trim().toLowerCase() === cleanUser.toLowerCase()) ||
-                 (p.username && p.username.trim().toLowerCase() === userHandle.toLowerCase())
+            (p.username && p.username.trim().toLowerCase() === userHandle.toLowerCase())
         ) || matchedProfiles.find(
           (p) => p.full_name && p.full_name.trim().toLowerCase() === cleanUser.toLowerCase()
         ) || matchedProfiles[0];
@@ -846,13 +857,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (staffRecord) {
         if (staffRecord.departments) {
-          deptName = Array.isArray(staffRecord.departments) 
-            ? staffRecord.departments[0]?.name 
+          deptName = Array.isArray(staffRecord.departments)
+            ? staffRecord.departments[0]?.name
             : staffRecord.departments.name;
         }
         if (staffRecord.roles) {
-          rName = Array.isArray(staffRecord.roles) 
-            ? staffRecord.roles[0]?.role_name 
+          rName = Array.isArray(staffRecord.roles)
+            ? staffRecord.roles[0]?.role_name
             : staffRecord.roles.role_name;
         }
       }
@@ -879,16 +890,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const rNameLower = rName.toLowerCase();
       const userLower = (profile.username || '').toLowerCase();
 
-      const isAdmin = desig.includes('admin') || 
-                      desig.includes('director') || 
-                      desig.includes('coordinator') ||
-                      desig.includes('owner') ||
-                      desig.includes('partner') ||
-                      rNameLower.includes('admin') ||
-                      rNameLower.includes('director') ||
-                      rNameLower.includes('partner') ||
-                      rNameLower.includes('owner') ||
-                      userLower === 'admin';
+      const isAdmin = desig.includes('admin') ||
+        desig.includes('director') ||
+        desig.includes('coordinator') ||
+        desig.includes('owner') ||
+        desig.includes('partner') ||
+        rNameLower.includes('admin') ||
+        rNameLower.includes('director') ||
+        rNameLower.includes('partner') ||
+        rNameLower.includes('owner') ||
+        userLower === 'admin';
 
       setActiveStaff(activeUser);
       setIsAdminMode(isAdmin);
@@ -1090,6 +1101,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     await savePunchMetaToStorage(activeStaff.id, todayStr, {
       punch_in: timeStr,
+      punch_out: null,
+      working_hours: null,
       status: displayStatus,
       selfie_url: selfieUrl || activeStaff.avatar_url,
       lat: lat ?? undefined,
@@ -1194,7 +1207,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'present' })
-      }).catch(() => {});
+      }).catch(() => { });
 
       if (todayAttendance.id && !todayAttendance.id.startsWith('local-') && !todayAttendance.id.startsWith('att-')) {
         await supabase
