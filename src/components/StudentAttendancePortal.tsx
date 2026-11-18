@@ -20,7 +20,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Search,
-  Layers
   Layers,
   Clock
 } from 'lucide-react';
@@ -96,7 +95,6 @@ export const StudentAttendancePortal: React.FC<StudentAttendancePortalProps> = (
         setInternalAttendances(
           aData.map((a: any) => ({
             ...a,
-            status: (a.status || '').toLowerCase() === 'present' ? 'Present' : 'Absent'
             status: (a.status || 'present').toLowerCase()
           }))
         );
@@ -118,7 +116,6 @@ export const StudentAttendancePortal: React.FC<StudentAttendancePortalProps> = (
 
   // Role checks
   const isOwner = (activeStaff?.designation || '').toLowerCase().includes('owner');
-  const isTutor = (activeStaff?.designation || '').toLowerCase().includes('tutor');
   const isCounselor = (activeStaff?.designation || '').toLowerCase().includes('counselor');
   const isStaffTutor = (activeStaff?.designation || '').toLowerCase().includes('tutor') ||
     (activeStaff?.designation || '').toLowerCase().includes('faculty') ||
@@ -126,12 +123,10 @@ export const StudentAttendancePortal: React.FC<StudentAttendancePortalProps> = (
     (activeStaff?.designation || '').toLowerCase().includes('instructor');
   const isTutor = isStaffTutor;
 
-  // Filter batches: Admins/Owners see ALL academy batches. Tutors only see assigned batches.
   // Filter batches: Admins/Owners retain unrestricted cross-batch access.
   // Academic Tutors (Online like Sinsiya & Offline like Safeer) ONLY see batches assigned to them.
   const availableBatches = useMemo(() => {
     if (isAdminMode || isOwner) return effectiveBatches;
-    if (isTutor) return effectiveBatches.filter((b) => b.tutor_id === activeStaff?.id);
     if (isStaffTutor && activeStaff?.id) {
       return effectiveBatches.filter((b) =>
         b.tutor_id === activeStaff.id ||
@@ -139,60 +134,47 @@ export const StudentAttendancePortal: React.FC<StudentAttendancePortalProps> = (
       );
     }
     return effectiveBatches;
-  }, [isAdminMode, isOwner, isTutor, effectiveBatches, activeStaff?.id]);
-}, [isAdminMode, isOwner, isStaffTutor, effectiveBatches, activeStaff?.id, activeStaff?.full_name]);
+  }, [isAdminMode, isOwner, isStaffTutor, effectiveBatches, activeStaff?.id, activeStaff?.full_name]);
 
-// Selected Batch ID state (defaults to first available batch)
-const defaultBatchId = useMemo(() => {
-  return (availableBatches[0]?.id || effectiveBatches[0]?.id || '');
-}, [availableBatches, effectiveBatches]);
-return (availableBatches[0]?.id || (isAdminMode || isOwner ? effectiveBatches[0]?.id : '') || '');
+  // Selected Batch ID state (defaults to first available batch)
+  const defaultBatchId = useMemo(() => {
+    return (availableBatches[0]?.id || (isAdminMode || isOwner ? effectiveBatches[0]?.id : '') || '');
   }, [availableBatches, effectiveBatches, isAdminMode, isOwner]);
 
-const [selectedBatchId, setSelectedBatchId] = useState<string>(defaultBatchId);
+  const [selectedBatchId, setSelectedBatchId] = useState<string>(defaultBatchId);
 
-// Keep selectedBatchId strictly within availableBatches for tutors
-useEffect(() => {
-  if (isStaffTutor && !isAdminMode && !isOwner) {
-    if (availableBatches.length > 0 && !availableBatches.some((b) => b.id === selectedBatchId)) {
-      setSelectedBatchId(availableBatches[0].id);
+  // Keep selectedBatchId strictly within availableBatches for tutors
+  useEffect(() => {
+    if (isStaffTutor && !isAdminMode && !isOwner) {
+      if (availableBatches.length > 0 && !availableBatches.some((b) => b.id === selectedBatchId)) {
+        setSelectedBatchId(availableBatches[0].id);
+      }
+    } else if (!selectedBatchId && defaultBatchId) {
+      setSelectedBatchId(defaultBatchId);
     }
-  } else if (!selectedBatchId && defaultBatchId) {
-    setSelectedBatchId(defaultBatchId);
-  }
-}, [availableBatches, selectedBatchId, defaultBatchId, isStaffTutor, isAdminMode, isOwner]);
+  }, [availableBatches, selectedBatchId, defaultBatchId, isStaffTutor, isAdminMode, isOwner]);
 
-// Permission Check: Assigned Academic Tutor OR Admins/Owners can mark and edit attendance
-const canMarkAttendance = useMemo(() => {
-  if (isAdminMode || isOwner) return true;
-  if (!isTutor || !activeStaff?.id) return false;
-  // Check if the current selected batch is explicitly assigned to this tutor
-  if (!isStaffTutor || !activeStaff?.id) return false;
-  // Any batch in availableBatches is an assigned batch for this tutor with universal marking rights
-  const batch = effectiveBatches.find(b => b.id === selectedBatchId);
-  if (batch?.tutor_id === activeStaff.id) return true;
-  if (batch?.tutor_name && batch.tutor_name.toLowerCase() === activeStaff.full_name?.toLowerCase()) return true;
-  return availableBatches.some(b => b.id === selectedBatchId);
-}, [isAdminMode, isOwner, isTutor, activeStaff?.id, effectiveBatches, selectedBatchId, availableBatches]);
+  // Permission Check: Assigned Academic Tutor OR Admins/Owners can mark and edit attendance
+  const canMarkAttendance = useMemo(() => {
+    if (isAdminMode || isOwner) return true;
+    if (!isStaffTutor || !activeStaff?.id) return false;
+    // Any batch in availableBatches is an assigned batch for this tutor with universal marking rights
+    const batch = effectiveBatches.find(b => b.id === selectedBatchId);
+    if (batch?.tutor_id === activeStaff.id) return true;
+    if (batch?.tutor_name && batch.tutor_name.toLowerCase() === activeStaff.full_name?.toLowerCase()) return true;
+    return availableBatches.some(b => b.id === selectedBatchId);
   }, [isAdminMode, isOwner, isStaffTutor, activeStaff?.id, activeStaff?.full_name, effectiveBatches, selectedBatchId, availableBatches]);
 
-useEffect(() => {
-  if (!selectedBatchId && defaultBatchId) {
-    setSelectedBatchId(defaultBatchId);
-  }
-}, [defaultBatchId, selectedBatchId]);
-
-const [selectedDate, setSelectedDate] = useState<string>(
-  new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
-);
-const [selectedMonth, setSelectedMonth] = useState<string>(
-  new Date().toISOString().substring(0, 7)
-);
-const [viewMode, setViewMode] = useState<'daily' | 'monthly'>('daily');
-const [isUpdating, setIsUpdating] = useState<boolean>(false);
-const [searchQuery, setSearchQuery] = useState<string>('');
-const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'absent' | 'unmarked'>('all');
-const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'late' | 'absent' | 'unmarked'>('all');
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+  );
+  const [selectedMonth, setSelectedMonth] = useState<string>(
+    new Date().toISOString().substring(0, 7)
+  );
+  const [viewMode, setViewMode] = useState<'daily' | 'monthly'>('daily');
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'late' | 'absent' | 'unmarked'>('all');
 
 // Automated Weekend Holiday Detection (Saturday & Sunday)
 const isWeekendHoliday = useMemo(() => {
@@ -312,8 +294,6 @@ const dailyRecords = useMemo(() => {
 const presentCount = dailyRecords.filter((a) => (a.status || '').toLowerCase() === 'present').length;
 const lateCount = dailyRecords.filter((a) => (a.status || '').toLowerCase() === 'late').length;
 const absentCount = dailyRecords.filter((a) => (a.status || '').toLowerCase() === 'absent').length;
-const unmarkedCount = Math.max(0, batchStudents.length - dailyRecords.length);
-const dailyAttendanceRate = batchStudents.length > 0 ? Math.round((presentCount / batchStudents.length) * 100) : 0;
 const unmarkedCount = Math.max(0, batchStudents.length - (presentCount + lateCount + absentCount));
 const dailyAttendanceRate = batchStudents.length > 0
   ? Math.round(((presentCount + lateCount) / batchStudents.length) * 100)
@@ -345,7 +325,6 @@ const monthlyStats = useMemo(() => {
     const pCount = sLogs.filter((a) => (a.status || '').toLowerCase() === 'present').length;
     const lCount = sLogs.filter((a) => (a.status || '').toLowerCase() === 'late').length;
     const aCount = sLogs.filter((a) => (a.status || '').toLowerCase() === 'absent').length;
-    const rate = totalSessions > 0 ? Math.round((pCount / totalSessions) * 100) : 0;
     const attended = pCount + lCount;
     const rate = totalSessions > 0 ? Math.round((attended / totalSessions) * 100) : 0;
 
@@ -402,7 +381,6 @@ const batchSummaryStats = useMemo(() => {
   const uniqueDates = Array.from(new Set(batchAtts.map((a) => a.attendance_date))).filter(Boolean);
   const totalClasses = uniqueDates.length;
 
-  let totalPresentCount = 0;
   let totalAttendedCount = 0;
   let totalStudentSessions = 0;
   let regularCount = 0;
@@ -413,13 +391,10 @@ const batchSummaryStats = useMemo(() => {
     const pCount = studentLogs.filter((a) => (a.status || '').toLowerCase() === 'present').length;
     const lCount = studentLogs.filter((a) => (a.status || '').toLowerCase() === 'late').length;
     const aCount = studentLogs.filter((a) => (a.status || '').toLowerCase() === 'absent').length;
-    const baseClasses = totalClasses > 0 ? totalClasses : (pCount + aCount);
-    const rate = baseClasses > 0 ? Math.round((pCount / baseClasses) * 100) : 0;
     const attended = pCount + lCount;
     const baseClasses = totalClasses > 0 ? totalClasses : (attended + aCount);
     const rate = baseClasses > 0 ? Math.round((attended / baseClasses) * 100) : 0;
 
-    totalPresentCount += pCount;
     totalAttendedCount += attended;
     totalStudentSessions += baseClasses;
 
@@ -448,8 +423,7 @@ const batchSummaryStats = useMemo(() => {
     };
   }).sort((a, b) => b.rate - a.rate);
 
-  const turnoutRate = totalStudentSessions > 0
-    ? Math.round((totalPresentCount / totalStudentSessions) * 100)
+    const turnoutRate = totalStudentSessions > 0
       ? Math.round((totalAttendedCount / totalStudentSessions) * 100)
       : 0;
 
