@@ -633,17 +633,73 @@ export const StaffManagement: React.FC = () => {
                     <select 
                       required
                       value={designation}
-                      onChange={(e) => setDesignation(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setDesignation(val);
+                        if (val === 'Academy Tutor (Online)') {
+                          setShiftStart('19:30');
+                          setShiftEnd('23:00');
+                        } else if (val === 'Academy Tutor (Offline)' || val === 'Academy Tutor') {
+                          setShiftStart('09:30');
+                          setShiftEnd('17:00');
+                        }
+                      }}
                       className="w-full px-3 py-2 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary transition-colors"
                     >
                       <option value="">Select Designation</option>
                       <option value="Academy Counselor">Academy Counselor</option>
-                      <option value="Academy Tutor">Academy Tutor</option>
+                      <option value="Academy Tutor (Offline)">Academy Tutor (Offline)</option>
+                      <option value="Academy Tutor (Online)">Academy Tutor (Online)</option>
+                      <option value="Academy Tutor">Academy Tutor (General)</option>
                       <option value="Videographer">Videographer</option>
                       <option value="Graphic Designer">Graphic Designer</option>
                       <option value="Company Owner">Company Owner</option>
                       <option value="Company Staff">Company Staff</option>
                     </select>
+
+                    {/* Tutor Classification Mode Toggle */}
+                    {designation.toLowerCase().includes('tutor') && (
+                      <div className="p-2.5 bg-muted-2 rounded-lg border border-border space-y-1.5 animate-fade-in mt-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] font-bold text-muted-foreground uppercase">Tutor Classification & Shift</span>
+                          <span className="text-[9px] font-semibold text-primary">Attendance Mode</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDesignation('Academy Tutor (Offline)');
+                              setShiftStart('09:30');
+                              setShiftEnd('17:00');
+                            }}
+                            className={`p-2 rounded-md border text-center transition-all cursor-pointer ${
+                              !designation.toLowerCase().includes('online')
+                                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 font-bold shadow-xs'
+                                : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            <div className="text-[11px] font-bold">Offline Tutor</div>
+                            <div className="text-[9px] opacity-75 font-mono">09:30 AM - 05:00 PM</div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDesignation('Academy Tutor (Online)');
+                              setShiftStart('19:30');
+                              setShiftEnd('23:00');
+                            }}
+                            className={`p-2 rounded-md border text-center transition-all cursor-pointer ${
+                              designation.toLowerCase().includes('online')
+                                ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-400 font-bold shadow-xs'
+                                : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            <div className="text-[11px] font-bold">Online Tutor</div>
+                            <div className="text-[9px] opacity-75 font-mono">07:30 PM - 11:00 PM</div>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -795,7 +851,18 @@ export const StaffManagement: React.FC = () => {
                                 <Badge variant="error" className="text-[8px] py-0 px-1 font-bold">RESIGNED</Badge>
                               )}
                             </div>
-                            <span className="text-[10px] text-primary font-bold tracking-tight block mt-0.5">{profile.designation}</span>
+                            {profile.designation?.toLowerCase().includes('tutor') ? (
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[10px] text-primary font-bold tracking-tight">Academy Tutor</span>
+                                {profile.designation?.toLowerCase().includes('online') || profile.shift_start_time >= '18:00' ? (
+                                  <Badge variant="indigo" className="text-[8px] py-0 px-1 font-bold">Online Tutor</Badge>
+                                ) : (
+                                  <Badge variant="success" className="text-[8px] py-0 px-1 font-bold">Offline Tutor</Badge>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-primary font-bold tracking-tight block mt-0.5">{profile.designation}</span>
+                            )}
                           </div>
                           
                           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-2.5 text-[9px] text-muted-foreground font-medium">
@@ -908,17 +975,73 @@ export const StaffManagement: React.FC = () => {
                 <select 
                   required
                   value={editDesignation}
-                  onChange={(e) => setEditDesignation(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEditDesignation(val);
+                    if (val === 'Academy Tutor (Online)') {
+                      setEditShiftStart('19:30');
+                      setEditShiftEnd('23:00');
+                    } else if (val === 'Academy Tutor (Offline)' || val === 'Academy Tutor') {
+                      setEditShiftStart('09:30');
+                      setEditShiftEnd('17:00');
+                    }
+                  }}
                   className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-sm text-foreground focus:outline-none focus:border-primary transition-colors"
                 >
                   <option value="">Select Designation</option>
                   <option value="Academy Counselor">Academy Counselor</option>
-                  <option value="Academy Tutor">Academy Tutor</option>
+                  <option value="Academy Tutor (Offline)">Academy Tutor (Offline)</option>
+                  <option value="Academy Tutor (Online)">Academy Tutor (Online)</option>
+                  <option value="Academy Tutor">Academy Tutor (General)</option>
                   <option value="Videographer">Videographer</option>
                   <option value="Graphic Designer">Graphic Designer</option>
                   <option value="Company Owner">Company Owner</option>
                   <option value="Company Staff">Company Staff</option>
                 </select>
+
+                {/* Tutor Classification Mode Toggle for Edit Modal */}
+                {editDesignation.toLowerCase().includes('tutor') && (
+                  <div className="p-2.5 bg-muted rounded-lg border border-border space-y-1.5 animate-fade-in mt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-muted-foreground uppercase">Tutor Classification & Shift</span>
+                      <span className="text-[10px] font-semibold text-primary">Attendance Mode</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditDesignation('Academy Tutor (Offline)');
+                          setEditShiftStart('09:30');
+                          setEditShiftEnd('17:00');
+                        }}
+                        className={`p-2 rounded-md border text-center transition-all cursor-pointer ${
+                          !editDesignation.toLowerCase().includes('online')
+                            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 font-bold shadow-xs'
+                            : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <div className="text-xs font-bold">Offline Tutor</div>
+                        <div className="text-[9px] opacity-75 font-mono">09:30 AM - 05:00 PM</div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditDesignation('Academy Tutor (Online)');
+                          setEditShiftStart('19:30');
+                          setEditShiftEnd('23:00');
+                        }}
+                        className={`p-2 rounded-md border text-center transition-all cursor-pointer ${
+                          editDesignation.toLowerCase().includes('online')
+                            ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-400 font-bold shadow-xs'
+                            : 'bg-card border-border text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        <div className="text-xs font-bold">Online Tutor</div>
+                        <div className="text-[10px] opacity-75 font-mono">07:30 PM - 11:00 PM</div>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1.5">

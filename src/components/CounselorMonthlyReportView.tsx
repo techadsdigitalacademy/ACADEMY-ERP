@@ -17,7 +17,8 @@ import {
   BarChart3,
   X,
   Download,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 
 export interface CounselorMonthlyReportViewProps {
@@ -68,6 +69,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
   // Quick Payment Modal states
   const [paymentStudent, setPaymentStudent] = useState<any | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<string>('');
+  const [paymentDate, setPaymentDate] = useState<string>(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
   const [paymentMode, setPaymentMode] = useState<string>('UPI');
   const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [isSubmittingPayment, setIsSubmittingPayment] = useState<boolean>(false);
@@ -80,7 +82,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
   }, [counselorId]);
 
   const loadMissingData = async () => {
-    
+
     try {
       const [bRes, sRes, fRes, stRes] = await Promise.all([
         batches && batches.length > 0 ? Promise.resolve({ data: batches }) : supabase.from('batches').select('*'),
@@ -94,7 +96,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
         try {
           const r = await fetch('/supabase-admin/rest/v1/batches?select=*');
           if (r.ok) bData = await r.json();
-        } catch (_) {}
+        } catch (_) { }
       }
 
       let sData = sRes.data || [];
@@ -102,7 +104,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
         try {
           const r = await fetch('/supabase-admin/rest/v1/students?select=*');
           if (r.ok) sData = await r.json();
-        } catch (_) {}
+        } catch (_) { }
       }
 
       let fData = fRes.data || [];
@@ -110,7 +112,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
         try {
           const r = await fetch('/supabase-admin/rest/v1/fee_collections?select=*');
           if (r.ok) fData = await r.json();
-        } catch (_) {}
+        } catch (_) { }
       }
 
       let stData = stRes.data || [];
@@ -118,7 +120,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
         try {
           const r = await fetch('/supabase-admin/rest/v1/staff_profiles?select=*');
           if (r.ok) stData = await r.json();
-        } catch (_) {}
+        } catch (_) { }
       }
 
       if (!batches || batches.length === 0) setInternalBatches(bData);
@@ -128,7 +130,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
     } catch (e) {
       console.warn('Counselor report data fetch fallback:', e);
     } finally {
-      
+
     }
   };
 
@@ -149,7 +151,8 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
     setIsSubmittingPayment(true);
     try {
       const amt = parseFloat(paymentAmount) || 0;
-      const curMonth = new Date().toLocaleString('default', { month: 'long', year: 'numeric' });
+      const pDate = paymentDate || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const curMonth = new Date(pDate).toLocaleString('default', { month: 'long', year: 'numeric' });
       const feePayload = {
         student_id: paymentStudent.id,
         batch_id: paymentStudent.batch_id,
@@ -157,7 +160,8 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
         payment_mode: paymentMode.toLowerCase(),
         installment_month: curMonth,
         notes: paymentNotes || 'Fee installment',
-        collected_by: activeStaff?.id || null
+        collected_by: activeStaff?.id || null,
+        created_at: new Date(pDate + 'T12:00:00Z').toISOString()
       };
 
       const { error: fErr } = await supabase.from('fee_collections').insert([feePayload]);
@@ -182,6 +186,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
       setPaymentStudent(null);
       setPaymentAmount('');
       setPaymentNotes('');
+      setPaymentDate(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
       await loadMissingData();
       window.dispatchEvent(new CustomEvent('students_data_changed'));
     } catch (err: any) {
@@ -191,18 +196,59 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
     }
   };
 
-  // Month options (12-month selector)
+  const handleDeleteCollection = async (collectionId: string, studentId: string, amount: number) => {
+    if (!confirm(`Are you sure you want to delete this payment record of ₹${amount.toLocaleString()}? The student's paid fee balance will be recalculated automatically.`)) {
+      return;
+    }
+    try {
+      const { error } = await supabase.from('fee_collections').delete().eq('id', collectionId);
+      if (error) {
+        await fetch(`/supabase-admin/rest/v1/fee_collections?id=eq.${collectionId}`, { method: 'DELETE' });
+      }
+      // Recalculate student paid fee
+      const remaining = effectiveInstallments.filter((i: any) => i.id !== collectionId && i.student_id === studentId);
+      const newTotalPaid = remaining.reduce((sum: number, i: any) => sum + Number(i.amount || i.amount_paid || 0), 0);
+      await supabase.from('students').update({ paid_fee: newTotalPaid }).eq('id', studentId);
+      await fetch(`/supabase-admin/rest/v1/students?id=eq.${studentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paid_fee: newTotalPaid })
+      });
+      await loadMissingData();
+      window.dispatchEvent(new CustomEvent('students_data_changed'));
+      alert('Payment record deleted and student balance recalculated.');
+    } catch (err: any) {
+      alert('Failed to delete payment: ' + err.message);
+    }
+  };
+
+  // Month options (24-month selector + all historical months from data)
   const monthOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
+    const set = new Set<string>();
     const date = new Date();
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 24; i++) {
       const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
       const value = d.toISOString().substring(0, 7);
-      const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      options.push({ value, label });
+      if (!set.has(value)) {
+        set.add(value);
+        options.push({ value, label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) });
+      }
     }
-    return options;
-  }, []);
+    effectiveStudents.forEach((s: any) => {
+      const dStr = s.enrollment_date || s.created_at;
+      if (dStr && typeof dStr === 'string' && dStr.length >= 7) {
+        const ym = dStr.slice(0, 7);
+        if (!set.has(ym)) {
+          set.add(ym);
+          const [y, m] = ym.split('-');
+          const dObj = new Date(parseInt(y), parseInt(m) - 1, 1);
+          options.push({ value: ym, label: dObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) });
+        }
+      }
+    });
+    return options.sort((a, b) => b.value.localeCompare(a.value));
+  }, [effectiveStudents]);
 
   // Filter staff to Academic Counselors
   const counselorStaff = useMemo(() => {
@@ -724,21 +770,19 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActiveReportTab('admissions')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeReportTab === 'admissions'
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeReportTab === 'admissions'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
+                }`}
             >
               Registered Students ({monthStudents.length})
             </button>
             <button
               onClick={() => setActiveReportTab('collections')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeReportTab === 'collections'
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeReportTab === 'collections'
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
+                }`}
             >
               Fee Collections Log ({monthCollections.length})
             </button>
@@ -884,6 +928,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
                     <th className="px-4 py-3 text-right">Amount Paid</th>
                     <th className="px-4 py-3">Notes</th>
                     <th className="px-4 py-3 text-center">Receipt Slip</th>
+                    {isAdminView && <th className="px-4 py-3 text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -933,12 +978,24 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
                             <span className="text-muted-foreground text-[10px] italic">No slip</span>
                           )}
                         </td>
+                        {isAdminView && (
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCollection(c.id, c.student_id, Number(c.amount_paid || c.amount || 0))}
+                              className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                              title="Delete payment record and recalculate student balance"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
                   {filteredCollections.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground text-xs">
+                      <td colSpan={isAdminView ? 9 : 8} className="px-4 py-10 text-center text-muted-foreground text-xs">
                         No fee collection receipts recorded for the selected period.
                       </td>
                     </tr>
@@ -966,17 +1023,29 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
             </p>
 
             <form onSubmit={handleQuickPaymentSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Amount (₹) *</label>
-                <input
-                  required
-                  type="number"
-                  min="1"
-                  placeholder="e.g. 5000"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  className="w-full bg-muted-2 border border-border rounded-lg px-3 py-2 text-foreground font-bold outline-none"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Amount (₹) *</label>
+                  <input
+                    required
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 5000"
+                    value={paymentAmount}
+                    onChange={(e) => setPaymentAmount(e.target.value)}
+                    className="w-full bg-muted-2 border border-border rounded-lg px-3 py-2 text-foreground font-bold outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Payment Date *</label>
+                  <input
+                    required
+                    type="date"
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="w-full bg-muted-2 border border-border rounded-lg px-3 py-2 text-foreground outline-none cursor-pointer"
+                  />
+                </div>
               </div>
 
               <div>

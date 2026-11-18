@@ -63,6 +63,9 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
   const isSalesRoleOrAdmin = isAdminView || activeStaff?.designation === 'Sales Executive' || isOwner;
   const showAdminLayout = isAdminView && !isOwner;
 
+  const isPunchedIn = Boolean(todayAttendance && todayAttendance.punch_in && todayAttendance.punch_in !== '-');
+  const isPunchedOut = Boolean(todayAttendance && todayAttendance.punch_out && todayAttendance.punch_out !== '-' && todayAttendance.punch_out !== 'Missed Punch Out');
+
   return (
     <div className="space-y-3.5 sm:space-y-6">
       {/* Leaderboard Marquee - Displayed for Sales Team & Admin Overview, hidden for Counselor */}
@@ -200,22 +203,22 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">Attendance Tracker</p>
-                  <h4 className={`text-base font-extrabold tracking-wide uppercase mt-1 ${!todayAttendance ? 'text-muted-foreground' : !todayAttendance.punch_out ? 'text-success' : 'text-primary'}`}>
-                    {!todayAttendance ? 'Not Checked In' : !todayAttendance.punch_out ? 'In Office' : 'Punched Out'}
+                  <h4 className={`text-base font-extrabold tracking-wide uppercase mt-1 ${!isPunchedIn ? 'text-muted-foreground' : !isPunchedOut ? 'text-success' : 'text-primary'}`}>
+                    {!isPunchedIn ? 'Not Checked In' : !isPunchedOut ? 'In Office' : 'Punched Out'}
                   </h4>
                 </div>
-                {todayAttendance && (
-                  <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg ${!todayAttendance.punch_out ? 'text-success bg-success-soft border border-success/20' : 'text-primary bg-primary-soft border border-primary/20'}`}>
-                    {!todayAttendance.punch_out ? 'Active' : 'Completed'}
+                {isPunchedIn && (
+                  <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg ${!isPunchedOut ? 'text-success bg-success-soft border border-success/20' : 'text-primary bg-primary-soft border border-primary/20'}`}>
+                    {!isPunchedOut ? 'Active' : 'Completed'}
                   </span>
                 )}
               </div>
 
               <div className="my-2.5 space-y-1">
-                {todayAttendance ? (
+                {isPunchedIn ? (
                   <p className="text-[11px] text-muted-foreground font-semibold">
                     In: <span className="text-foreground font-bold">{todayAttendance.punch_in}</span>
-                    {todayAttendance.punch_out && (
+                    {isPunchedOut && (
                       <> &bull; Out: <span className="text-foreground font-bold">{todayAttendance.punch_out}</span></>
                     )}
                   </p>
@@ -230,7 +233,7 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
               </div>
 
               <div className="w-full mt-2">
-                {!todayAttendance ? (
+                {!isPunchedIn ? (
                   <button
                     onClick={() => onOpenPunchModal('IN')}
                     className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-extrabold py-2.5 text-xs tracking-widest uppercase shadow-lg hover:-translate-y-0.5 active:scale-95 rounded-md transition-all duration-300 flex items-center justify-center gap-2 border border-primary/30 cursor-pointer"
@@ -238,7 +241,7 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
                     <Clock className="w-4 h-4" />
                     PUNCH IN
                   </button>
-                ) : !todayAttendance.punch_out ? (
+                ) : !isPunchedOut ? (
                   <button
                     onClick={() => onOpenPunchModal('OUT')}
                     className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-extrabold py-2.5 text-xs tracking-widest uppercase shadow-lg hover:-translate-y-0.5 active:scale-95 rounded-md transition-all duration-300 flex items-center justify-center gap-2 border border-primary/30 cursor-pointer"
@@ -509,22 +512,22 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[9px] text-muted-foreground font-bold uppercase tracking-wider">Current Status</p>
-                  <h4 className={`text-sm font-extrabold tracking-wide uppercase mt-1 ${!todayAttendance ? 'text-muted-foreground' : !todayAttendance.punch_out ? 'text-success' : 'text-primary'}`}>
-                    {!todayAttendance ? 'Not Checked In' : !todayAttendance.punch_out ? 'In Office' : 'Punched Out'}
+                  <h4 className={`text-sm font-extrabold tracking-wide uppercase mt-1 ${!isPunchedIn ? 'text-muted-foreground' : !isPunchedOut ? 'text-success' : 'text-primary'}`}>
+                    {!isPunchedIn ? 'Not Checked In' : !isPunchedOut ? 'In Office' : 'Punched Out'}
                   </h4>
                 </div>
-                {todayAttendance && (
-                  <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-lg ${!todayAttendance.punch_out ? 'text-success bg-success-soft' : 'text-primary bg-primary-soft'}`}>
-                    {!todayAttendance.punch_out ? 'Active' : 'Completed'}
+                {isPunchedIn && (
+                  <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-lg ${!isPunchedOut ? 'text-success bg-success-soft' : 'text-primary bg-primary-soft'}`}>
+                    {!isPunchedOut ? 'Active' : 'Completed'}
                   </span>
                 )}
               </div>
 
               <div className="my-2.5 space-y-1">
-                {todayAttendance ? (
+                {isPunchedIn ? (
                   <p className="text-[10px] text-muted-foreground font-semibold">
                      In: <span className="text-foreground font-bold">{todayAttendance.punch_in}</span>
-                    {todayAttendance.punch_out && (
+                    {isPunchedOut && (
                       <> &bull;  Out: <span className="text-foreground font-bold">{todayAttendance.punch_out}</span></>
                     )}
                   </p>
@@ -539,14 +542,14 @@ export const SalesDashboardMetrics: React.FC<SalesDashboardMetricsProps> = ({
               </div>
 
               <div className="w-full mt-2">
-                {!todayAttendance ? (
+                {!isPunchedIn ? (
                   <button
                     onClick={() => onOpenPunchModal('IN')}
                     className="w-full bg-primary hover:text-white font-extrabold py-2.5 text-xs tracking-widest uppercase shadow-lg hover:-translate-y-0.5 active:scale-95 rounded-md transition-all duration-300 flex items-center justify-center gap-2 border border-border cursor-pointer"
                   >
                     PUNCH IN
                   </button>
-                ) : !todayAttendance.punch_out ? (
+                ) : !isPunchedOut ? (
                   <button
                     onClick={() => onOpenPunchModal('OUT')}
                     className="w-full bg-primary hover:text-white font-extrabold py-2.5 text-xs tracking-widest uppercase shadow-lg hover:-translate-y-0.5 active:scale-95 rounded-md transition-all duration-300 flex items-center justify-center gap-2 border border-border cursor-pointer"

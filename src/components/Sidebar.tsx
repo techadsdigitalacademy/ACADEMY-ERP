@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { processAvatarFile } from '../utils/imageUtils';
-import { 
-  Briefcase, 
-  DollarSign, 
-  Clock, 
-  Users, 
-  Edit2, 
-  GraduationCap, 
+import {
+  Briefcase,
+  DollarSign,
+  Clock,
+  Users,
+  Edit2,
+  GraduationCap,
   Wallet,
   Sparkles,
   Settings,
@@ -16,15 +16,18 @@ import {
   Sun,
   Moon,
   Menu,
-  X
+  X,
+  FileCheck,
+  LayoutDashboard,
+  UserCheck
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
-  const { 
-    activeStaff, 
-    activeTab, 
-    setActiveTab, 
-    isAdminMode, 
+  const {
+    activeStaff,
+    activeTab,
+    setActiveTab,
+    isAdminMode,
     logout,
     theme,
     toggleTheme,
@@ -79,44 +82,50 @@ export const Sidebar: React.FC = () => {
     window.dispatchEvent(new CustomEvent('close_mobile_sidebar'));
   };
 
-  const isTutor = activeStaff.designation === 'Academy Tutor';
+  const isTutor = (activeStaff.designation || '').toLowerCase().includes('tutor');
   const isCounselor = activeStaff.designation === 'Academy Counselor' || activeStaff.designation?.toLowerCase().includes('counselor');
 
   const renderNavLinks = () => (
     <nav className="space-y-1.5 pt-4">
-      {/* 1. Admin Hub / Academy Admissions / Sales Hub */}
-      <button 
+      {/* 1. Admin Hub / Academy Admissions / Tutor Portal / Sales Hub */}
+      <button
         onClick={() => handleNavClick('sales')}
         className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'sales' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
       >
-        {isCounselor ? (
+        {isTutor ? (
           <GraduationCap className="w-4 h-4 shrink-0 text-primary" />
+        ) : isCounselor ? (
+          <GraduationCap className="w-4 h-4 shrink-0 text-primary" />
+        ) : (isAdminView || isOwner) ? (
+          <LayoutDashboard className="w-4 h-4 shrink-0 text-primary" />
         ) : (
           <Briefcase className="w-4 h-4 shrink-0" />
         )}
-        <span>{(isAdminView || isOwner) ? 'Admin Hub' : isCounselor ? 'Academy Admissions' : isCreativeRole ? 'Work Hub' : 'Sales Hub'}</span>
+        <span>{(isAdminView || isOwner) ? 'Admin Hub' : isTutor ? 'Tutor Portal' : isCounselor ? 'Academy Admissions' : isCreativeRole ? 'Work Hub' : 'Sales Hub'}</span>
       </button>
 
-      {/* 2. Staff History / Admissions History / Sales History / Daily Reports */}
-      <button 
-        onClick={() => handleNavClick((isAdminView || isOwner) ? 'staff-history' : 'history')}
-        className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'history' || activeTab === 'staff-history' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
-      >
-        {isCreativeRole ? (
-          <>
-            <Edit2 className="w-4 h-4 shrink-0" />
-            <span>Daily Reports</span>
-          </>
-        ) : (
-          <>
-            <DollarSign className="w-4 h-4 shrink-0" />
-            <span>{(isAdminView || isOwner) ? 'Staff History' : isCounselor ? 'Admissions History' : 'Sales History'}</span>
-          </>
-        )}
-      </button>
+      {/* 2. Staff History / Admissions History / Sales History / Daily Reports (Hidden for Tutors) */}
+      {!isTutor && (
+        <button
+          onClick={() => handleNavClick((isAdminView || isOwner) ? 'staff-history' : 'history')}
+          className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'history' || activeTab === 'staff-history' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
+        >
+          {isCreativeRole ? (
+            <>
+              <Edit2 className="w-4 h-4 shrink-0" />
+              <span>Daily Reports</span>
+            </>
+          ) : (
+            <>
+              <DollarSign className="w-4 h-4 shrink-0" />
+              <span>{(isAdminView || isOwner) ? 'Staff History' : isCounselor ? 'Admissions History' : 'Sales History'}</span>
+            </>
+          )}
+        </button>
+      )}
 
       {/* 3. Staff Attendance */}
-      <button 
+      <button
         onClick={() => handleNavClick('attendance')}
         className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'attendance' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
       >
@@ -124,11 +133,31 @@ export const Sidebar: React.FC = () => {
         <span>Staff Attendance</span>
       </button>
 
-      {/* 4. Academy Overview (Single unified link for Academy ERP) */}
+      {/* 3.2. Student Attendance Registry (Dedicated navigation for both Admin and Tutor portals) */}
       {(isAdminMode || isOwner || isTutor || isCounselor) && (
-        <button 
+        <button
+          onClick={() => handleNavClick('academy_attendance')}
+          className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'academy_attendance' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
+        >
+          <UserCheck className="w-4 h-4 shrink-0" />
+          <span>Student Attendance Registry</span>
+        </button>
+      )}
+
+      {/* 3.5. Salary & Documents / HR */}
+      <button
+        onClick={() => handleNavClick('salary_docs')}
+        className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'salary_docs' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
+      >
+        <FileCheck className="w-4 h-4 shrink-0" />
+        <span>{(isAdminMode || isOwner) ? 'Salary & HR' : 'Salary & Documents'}</span>
+      </button>
+
+      {/* 4. Academy Overview (Single unified link for Academy ERP - Counselors & Admins) */}
+      {(isAdminMode || isOwner || isCounselor) && (
+        <button
           onClick={() => handleNavClick('academy_overview')}
-          className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab.startsWith('academy') ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
+          className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${['academy_overview', 'academy_batches', 'academy_students', 'academy_reports', 'academy_finances', 'academy_staff'].includes(activeTab) ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
         >
           <GraduationCap className="w-4 h-4 shrink-0" />
           <span>Academy Overview</span>
@@ -137,7 +166,7 @@ export const Sidebar: React.FC = () => {
 
       {/* 6. Leads */}
       {(isAdminMode || isOwner || isCounselor || (!isCreativeRole && !isTutor)) && (
-        <button 
+        <button
           onClick={() => handleNavClick('leads')}
           className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'leads' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
         >
@@ -148,7 +177,7 @@ export const Sidebar: React.FC = () => {
 
       {/* 7. Staff Management */}
       {(isAdminMode || isOwner) && (
-        <button 
+        <button
           onClick={() => handleNavClick('staff')}
           className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'staff' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
         >
@@ -159,7 +188,7 @@ export const Sidebar: React.FC = () => {
 
       {/* 8. Finance */}
       {(isAdminMode || isOwner) && (
-        <button 
+        <button
           onClick={() => handleNavClick('finance')}
           className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'finance' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
         >
@@ -170,7 +199,7 @@ export const Sidebar: React.FC = () => {
 
       {/* 9. Partner Withdrawals */}
       {(isAdminMode || isOwner) && (
-        <button 
+        <button
           onClick={() => handleNavClick('withdrawals')}
           className={`flex items-center gap-2.5 w-full h-9 px-2 rounded-md text-[13px] font-medium transition-colors duration-150 ${activeTab === 'withdrawals' ? 'bg-muted text-foreground font-semibold [&>svg]:text-primary' : 'text-secondary-foreground hover:bg-muted hover:text-foreground'}`}
         >
@@ -185,19 +214,19 @@ export const Sidebar: React.FC = () => {
     <div className="border-t border-border pt-3 space-y-3">
       <div className="flex items-center gap-3 px-2">
         <div className="relative group">
-          <img 
+          <img
             src={activeStaff.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeStaff.full_name)}&background=random`}
-            alt={activeStaff.full_name} 
+            alt={activeStaff.full_name}
             className="w-8 h-8 rounded-full border border-border object-cover"
           />
-          <label 
+          <label
             htmlFor={`avatar-upload-${idPrefix}`}
             className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity duration-200"
           >
             <Camera className="w-3.5 h-3.5 text-foreground" />
           </label>
-          <input 
-            type="file" 
+          <input
+            type="file"
             accept="image/*"
             onChange={handleAvatarUpload}
             disabled={isUploadingAvatar}
@@ -213,20 +242,20 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
       <div className="flex gap-2">
-        <button 
+        <button
           onClick={toggleTheme}
           title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
           className="flex items-center justify-center h-8 w-8 rounded-md text-secondary-foreground bg-card border border-border hover:bg-muted hover:text-foreground transition-colors duration-150 cursor-pointer"
         >
           {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </button>
-        <button 
+        <button
           className="flex-1 flex items-center justify-center gap-1.5 h-8 px-2 rounded-md text-[11px] font-medium text-secondary-foreground hover:text-foreground bg-card hover:bg-muted border border-border transition-colors duration-150"
         >
           <Settings className="w-3.5 h-3.5" />
           <span>Settings</span>
         </button>
-        <button 
+        <button
           onClick={logout}
           className="flex items-center justify-center h-8 w-8 rounded-md text-danger bg-card border border-border hover:bg-danger-soft transition-colors duration-150"
         >
@@ -241,7 +270,7 @@ export const Sidebar: React.FC = () => {
       {/* Mobile Header Bar */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-card border-b border-border px-4 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={() => setIsMobileOpen(!isMobileOpen)}
             className="h-8 w-8 rounded-md bg-card text-foreground border border-border hover:bg-muted transition-colors flex items-center justify-center cursor-pointer"
             aria-label="Toggle Navigation Menu"
@@ -260,16 +289,16 @@ export const Sidebar: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={toggleTheme}
             className="h-7 w-7 rounded-md text-secondary-foreground bg-card border border-border hover:bg-muted hover:text-foreground transition-colors duration-150 flex items-center justify-center"
             title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
           >
             {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
-          <img 
+          <img
             src={activeStaff.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeStaff.full_name)}&background=random`}
-            alt={activeStaff.full_name} 
+            alt={activeStaff.full_name}
             className="w-7 h-7 rounded-full border border-border object-cover"
           />
         </div>
@@ -277,17 +306,16 @@ export const Sidebar: React.FC = () => {
 
       {/* Mobile Drawer Overlay / Backdrop */}
       {isMobileOpen && (
-        <div 
-          onClick={() => setIsMobileOpen(false)} 
+        <div
+          onClick={() => setIsMobileOpen(false)}
           className="lg:hidden fixed inset-0 bg-black/50 z-50 transition-opacity duration-300"
         />
       )}
 
       {/* Mobile Drawer Navigation Panel (Slide-out) */}
-      <aside 
-        className={`lg:hidden fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-card border-r border-border z-50 p-4 flex flex-col justify-between transform transition-transform duration-300 ease-in-out shadow-[var(--shadow-pop)] ${
- isMobileOpen ? 'translate-x-0' : '-translate-x-full'
- }`}
+      <aside
+        className={`lg:hidden fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-card border-r border-border z-50 p-4 flex flex-col justify-between transform transition-transform duration-300 ease-in-out shadow-[var(--shadow-pop)] ${isMobileOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         <div className="space-y-6 overflow-y-auto scrollbar-none">
           <div className="flex items-center justify-between px-1">
@@ -300,7 +328,7 @@ export const Sidebar: React.FC = () => {
                 <span className="text-[9.5px] block text-muted-foreground font-semibold leading-none uppercase tracking-[.07em]">ERP & CRM</span>
               </div>
             </div>
-            <button 
+            <button
               onClick={() => setIsMobileOpen(false)}
               className="h-7 w-7 rounded-md bg-card text-secondary-foreground hover:text-foreground hover:bg-muted border border-border flex items-center justify-center"
             >

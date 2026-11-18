@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../services/supabase';
 import { compressSelfieFromVideo, extensionForBlob } from '../../utils/imageUtils';
-import { evaluatePunchStatus } from '../../utils/attendanceStorage';
+import { evaluateAttendanceStatus, evaluateOnlineTutorStatus } from '../../utils/attendanceRules';
 import { Card } from '../Card';
 import { X, Camera } from 'lucide-react';
 
@@ -29,6 +29,26 @@ export const PunchModal: React.FC<PunchModalProps> = ({
     lng: Number(import.meta.env.VITE_OFFICE_LNG ?? 76.001633)
   };
   const GEOFENCE_RADIUS_M = Number(import.meta.env.VITE_GEOFENCE_RADIUS_M ?? 50);
+
+  // Online Tutor check: Online tutors teach late evening/night batches remotely
+  const isTutor = (activeStaff?.designation || '').toLowerCase().includes('tutor');
+  const isOnlineTutor = isTutor && (
+    (activeStaff?.designation || '').toLowerCase().includes('online') ||
+    (activeStaff?.shift_start_time && activeStaff.shift_start_time >= '18:00')
+  );
+
+  // Dual-slot selection for online tutors (Slot 1: 07:30 PM - 09:00 PM, Slot 2: 09:30 PM - 11:00 PM, or Custom)
+  const [onlineSlot, setOnlineSlot] = useState<'slot_1' | 'slot_2' | 'custom'>(() => {
+    const now = new Date();
+    const hrs = now.getHours();
+    const mins = now.getMinutes();
+    if (hrs >= 21 || (hrs === 20 && mins >= 30)) {
+      return 'slot_2';
+    }
+    return 'slot_1';
+  });
+  const [isCustomSlot, setIsCustomSlot] = useState(false);
+  const [customSlotTime, setCustomSlotTime] = useState('19:30');
 
   const [userCoords, setUserCoords] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   
@@ -191,17 +211,30 @@ export const PunchModal: React.FC<PunchModalProps> = ({
 
       if (punchType === 'IN') {
         const currentTimeStr = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}:00`;
-        const evaluated = evaluatePunchStatus(
-          currentTimeStr,
-          activeStaff?.shift_start_time,
-          undefined,
-          activeStaff?.shift_end_time
-        );
-        const status = evaluated === 'ABSENT' ? 'PRESENT' : evaluated;
+        let evaluated: string;
+        if (isOnlineTutor) {
+          evaluated = evaluateOnlineTutorStatus(
+            currentTimeStr, 
+            onlineSlot, 
+            isCustomSlot ? customSlotTime : (onlineSlot === 'slot_1' ? '19:30' : '21:30')
+          );
+        } else {
+          evaluated = evaluateAttendanceStatus(currentTimeStr, null);
+        }
+        const status = evaluated === 'ABSENT' || evaluated === 'LEAVE' ? 'PRESENT' : evaluated;
 
-        if (!userCoords) throw new Error('Location unavailable — cannot record punch.');
-        await punchIn(selfiePublicUrl, userCoords.lat, userCoords.lng, status);
-        alert(`Successfully punched in! Status: ${status}`);
+        const punchLat = userCoords?.lat || OFFICE_COORDS.lat;
+        const punchLng = userCoords?.lng || OFFICE_COORDS.lng;
+
+        if (!isOnlineTutor && !userCoords) {
+          throw new Error('Location unavailable — cannot record punch.');
+        }
+
+        await punchIn(selfiePublicUrl, punchLat, punchLng, status);
+        const slotDesc = isCustomSlot 
+          ? `Custom Batch Slot: ${customSlotTime}`
+          : (onlineSlot === 'slot_1' ? 'Slot 1: 07:30 PM Batch' : 'Slot 2: 09:30 PM Batch');
+        alert(`Successfully punched in! Status: ${status}${isOnlineTutor ? ` (${slotDesc})` : ''}`);
       } else {
         // Punch Out
         await punchOut();
@@ -225,12 +258,12 @@ export const PunchModal: React.FC<PunchModalProps> = ({
   // A reading less precise than the radius itself cannot prove the user is
   // inside it, so treat it as unusable rather than letting it pass or fail
   // at random.
-  const isFixUnreliable = userCoords !== null && userCoords.accuracy > GEOFENCE_RADIUS_M;
-  const isOutOfRange = distance === null || isFixUnreliable || distance > GEOFENCE_RADIUS_M;
+  const isFixUnreliable = !isOnlineTutor && userCoords !== null && userCoords.accuracy > GEOFENCE_RADIUS_M;
+  const isOutOfRange = isOnlineTutor ? false : (distance === null || isFixUnreliable || distance > GEOFENCE_RADIUS_M);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-fade-in">
-      <Card className="w-full max-w-[400px] p-6 relative space-y-6 text-center max-h-[90vh] overflow-y-auto bg-card dark:bg-card border border-border dark:border-border shadow-2xl">
+      <Card className="w-full max-w-[400px] p-6 relative space-y-5 text-center max-h-[90vh] overflow-y-auto bg-card dark:bg-card border border-border dark:border-border shadow-2xl">
         {/* Close Button */}
         <button 
           onClick={handleClose}
@@ -245,10 +278,30 @@ export const PunchModal: React.FC<PunchModalProps> = ({
             <Camera className="w-5 h-5 text-primary dark:text-primary" />
             <span>Punch {punchType} Selfie</span>
           </h3>
+          {isOnlineTutor && (
+            <p className="text-[11px] text-indigo-400 font-semibold mt-0.5">Online Faculty Attendance</p>
+          )}
         </div>
 
         {/* Warning/Status Banner */}
-        {distance === null ? (
+        {isOnlineTutor ? (
+          <div className="p-3 rounded-md bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 text-xs font-bold uppercase tracking-wider flex flex-col items-center justify-center gap-1.5">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-indigo-400 animate-pulse"></span>
+              <span>ONLINE TUTOR • REMOTE WORKSTATION VERIFIED</span>
+            </div>
+            <div className="text-[10px] text-muted-foreground font-mono flex items-center gap-1.5">
+              {userCoords ? (
+                <>
+                  <span className="text-emerald-400 font-bold">📍 GPS: {userCoords.lat.toFixed(4)}°N, {userCoords.lng.toFixed(4)}°E</span>
+                  <span className="opacity-60">(±{userCoords.accuracy.toFixed(0)}m)</span>
+                </>
+              ) : (
+                <span className="text-warning animate-pulse">📍 Remote Workstation • Geolocation Logging Active</span>
+              )}
+            </div>
+          </div>
+        ) : distance === null ? (
           <div className="p-3.5 rounded-md bg-warning-soft border border-warning/20 text-warning text-xs font-bold uppercase tracking-wider animate-pulse flex items-center justify-center gap-2">
             <span className="h-2 w-2 rounded-full bg-warning animate-ping"></span>
             Acquiring GPS location...
@@ -264,6 +317,79 @@ export const PunchModal: React.FC<PunchModalProps> = ({
         ) : (
           <div className="p-3.5 rounded-md bg-success-soft border border-success/20 text-success text-xs font-black uppercase tracking-widest">
             At office ({distance.toFixed(0)}m)
+          </div>
+        )}
+
+        {/* Online Tutor Flexible Slot Selector */}
+        {isOnlineTutor && punchType === 'IN' && (
+          <div className="space-y-2 text-left bg-muted-2 p-3 rounded-xl border border-border">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Select Batch Slot</span>
+              <button
+                type="button"
+                onClick={() => setIsCustomSlot(prev => !prev)}
+                className="text-[10px] font-bold text-primary hover:underline cursor-pointer"
+              >
+                {isCustomSlot ? '← Standard Slots' : '+ Custom Time'}
+              </button>
+            </div>
+
+            {!isCustomSlot ? (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOnlineSlot('slot_1')}
+                  className={`p-2 rounded-md border text-center transition-all cursor-pointer ${
+                    onlineSlot === 'slot_1'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm font-bold'
+                      : 'bg-card text-muted-foreground border-border hover:text-foreground'
+                  }`}
+                >
+                  <div className="text-[11px] font-bold">Slot 1 • Evening</div>
+                  <div className="text-[9px] opacity-80 font-mono">07:30 PM - 09:00 PM</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOnlineSlot('slot_2')}
+                  className={`p-2 rounded-md border text-center transition-all cursor-pointer ${
+                    onlineSlot === 'slot_2'
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm font-bold'
+                      : 'bg-card text-muted-foreground border-border hover:text-foreground'
+                  }`}
+                >
+                  <div className="text-[11px] font-bold">Slot 2 • Night</div>
+                  <div className="text-[9px] opacity-80 font-mono">09:30 PM - 11:00 PM</div>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-1.5 animate-fade-in">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    value={customSlotTime}
+                    onChange={(e) => setCustomSlotTime(e.target.value)}
+                    className="flex-1 bg-card border border-border rounded-lg px-2.5 py-1.5 text-xs font-bold text-foreground focus:outline-none focus:border-primary"
+                  />
+                  <span className="text-[10px] text-muted-foreground font-mono">+5m grace</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {['18:30', '19:00', '19:30', '20:00', '20:30', '21:00', '21:30', '22:00'].map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setCustomSlotTime(t)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-all cursor-pointer ${
+                        customSlotTime === t
+                          ? 'bg-primary text-primary-foreground font-bold border-primary'
+                          : 'bg-card text-muted-foreground border-border hover:text-foreground'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

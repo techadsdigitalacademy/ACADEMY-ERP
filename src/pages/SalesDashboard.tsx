@@ -29,9 +29,18 @@ import {
   Moon,
   RotateCcw,
   Menu,
-  UserPlus
+  UserPlus,
+  CreditCard
 } from 'lucide-react';
 import { LogRefundModal } from '../components/sales-dashboard/LogRefundModal';
+import { StaffSalaryPortal } from '../components/payslip/StaffSalaryPortal';
+import { SalaryHRTab } from '../components/dashboard-tabs/SalaryHRTab';
+import { isAcademyStaff } from '../services/salaryService';
+import { AcademyMasterDashboard } from '../components/academy/master-hub/AcademyMasterDashboard';
+import { TutorDashboard } from '../components/TutorDashboard';
+import { Badge } from '../components/Badge';
+import { fetchAcademyMasterDataset } from '../services/academyMetricsService';
+import type { AcademyMasterDataset } from '../services/academyMetricsService';
 
 export const isPartnerOrOwner = (staff: any) => {
   if (!staff) return false;
@@ -67,7 +76,7 @@ export const SalesDashboard: React.FC = () => {
     punchIn, 
     punchOut,
     activeTab,
-    
+    setActiveTab,
     isAdminMode,
     theme,
     toggleTheme,
@@ -120,6 +129,31 @@ export const SalesDashboard: React.FC = () => {
   const [dailyLeaderboard, setDailyLeaderboard] = useState<{ name: string; amount: number; avatar?: string }[]>([]);
   const [todayAttendanceStats, setTodayAttendanceStats] = useState({ present: 0, late: 0, halfDay: 0, leave: 0, inOffice: 0 });
 
+  // Admin Hub landing mode: default 'academy_master'
+  const [adminHubMode, setAdminHubMode] = useState<'academy_master' | 'consultant_terminal'>('academy_master');
+  const [academyMasterData, setAcademyMasterData] = useState<AcademyMasterDataset>({
+    batches: [],
+    students: [],
+    installments: [],
+    attendances: [],
+    staffList: []
+  });
+  const [_isMasterDataLoading, setIsMasterDataLoading] = useState(false);
+
+  const loadAcademyMasterData = async () => {
+    setIsMasterDataLoading(true);
+    try {
+      const dataset = await fetchAcademyMasterDataset();
+      setAcademyMasterData(dataset);
+      if (dataset.batches.length > 0) setCounselorBatches(dataset.batches);
+      if (dataset.students.length > 0) setCounselorStudents(dataset.students);
+    } catch (err) {
+      console.warn('Error loading master dataset in SalesDashboard:', err);
+    } finally {
+      setIsMasterDataLoading(false);
+    }
+  };
+
   // Daily Report editing states
   const [editingReport, setEditingReport] = useState<any | null>(null);
   const [editReportPosters, setEditReportPosters] = useState('');
@@ -144,6 +178,9 @@ export const SalesDashboard: React.FC = () => {
 
   // For Staff History tab drill down in Admin Mode
   const [staffProfiles, setStaffProfiles] = useState<any[]>([]);
+  const [adminSalaryStaffId, setAdminSalaryStaffId] = useState<string | null>(null);
+  const [adminSalaryTabMode, setAdminSalaryTabMode] = useState<'manage' | 'portal'>('manage');
+  const [hideRelieved, setHideRelieved] = useState(false);
 
 
 
@@ -172,6 +209,13 @@ export const SalesDashboard: React.FC = () => {
   // Counselor Portal Specific States
   const isCounselor = activeStaff?.designation === 'Academy Counselor' || 
     activeStaff?.designation?.toLowerCase().includes('counselor');
+
+  // Academic Tutor Specific States
+  const isTutor = (activeStaff?.designation || '').toLowerCase().includes('tutor');
+  const isOnlineTutor = isTutor && (
+    (activeStaff?.designation || '').toLowerCase().includes('online') ||
+    (activeStaff?.shift_start_time && activeStaff.shift_start_time >= '18:00')
+  );
   const [counselorBatches, setCounselorBatches] = useState<any[]>([]);
   const [counselorStudents, setCounselorStudents] = useState<any[]>([]);
   const [isAdmissionModalOpen, setIsAdmissionModalOpen] = useState(false);
@@ -230,12 +274,20 @@ export const SalesDashboard: React.FC = () => {
     setIsAdminView(isAdminMode && !isOwnerUser);
   }, [isAdminMode, activeStaff]);
 
+  useEffect(() => {
+    const isOwnerUser = isPartnerOrOwner(activeStaff);
+    if ((isAdminView || isOwnerUser) && activeTab === 'sales') {
+      loadAcademyMasterData();
+    }
+  }, [isAdminView, activeStaff, activeTab]);
+
 
 
 
   // Fetch summaries for Admin View (Optimized parallel fetching with caching & live revalidation)
   useEffect(() => {
-    if (isAdminView && (activeTab === 'sales' || activeTab === 'staff-history')) {
+    const isOwnerUser = isPartnerOrOwner(activeStaff);
+    if ((isAdminView || isOwnerUser) && (activeTab === 'sales' || activeTab === 'staff-history' || activeTab === 'salary_docs')) {
       const loadAdminDashboardData = async (forceRefresh = false) => {
         try {
           const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
@@ -1844,11 +1896,40 @@ export const SalesDashboard: React.FC = () => {
                   <Menu className="w-5 h-5" />
                 </button>
                 <h1 className="text-xs sm:text-sm md:text-lg font-bold text-foreground dark:text-white tracking-wide truncate">
-                  {isAdminView ? 'Admin Control Dashboard' : isCounselor ? 'Academy Admissions' : 'Consultant Sales Terminal'}
+                  {(isAdminView || isOwner) ? 'Admin Hub' : isTutor ? 'Academy Tutor Portal' : isCounselor ? 'Academy Admissions' : 'Consultant Sales Terminal'}
                 </h1>
+                {isTutor && (
+                  <Badge variant={isOnlineTutor ? "indigo" : "success"} className="text-[10px] py-0.5 px-2 font-bold shrink-0">
+                    {isOnlineTutor ? 'Online Faculty' : 'Offline Faculty'}
+                  </Badge>
+                )}
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
+                {(isAdminView || isOwner) && activeTab === 'sales' && (
+                  <div className="inline-flex rounded-lg bg-muted p-0.5 border border-border text-[11px] font-bold shrink-0">
+                    <button
+                      onClick={() => setAdminHubMode('academy_master')}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                        adminHubMode === 'academy_master'
+                          ? 'bg-primary text-primary-foreground shadow-xs'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Academy Master Hub
+                    </button>
+                    <button
+                      onClick={() => setAdminHubMode('consultant_terminal')}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                        adminHubMode === 'consultant_terminal'
+                          ? 'bg-background text-foreground shadow-xs'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Sales Terminal
+                    </button>
+                  </div>
+                )}
                 <select
                   value={selectedMonth}
                   onChange={(e) => setSelectedMonth(e.target.value)}
@@ -1894,7 +1975,7 @@ export const SalesDashboard: React.FC = () => {
                 </Button>
               )}
 
-              {(!isAdminView || isOwner) && !isCounselor && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && activeStaff?.designation !== 'Videographer' && (
+              {(!isAdminView || isOwner) && !isCounselor && !isTutor && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && activeStaff?.designation !== 'Videographer' && (
                 <button
                   onClick={() => setIsRefundModalOpen(true)}
                   className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 bg-danger hover:text-white font-extrabold text-[11px] sm:text-xs rounded-md flex items-center gap-1 shrink-0 transition-all border border-danger/20 cursor-pointer"
@@ -1904,7 +1985,7 @@ export const SalesDashboard: React.FC = () => {
                 </button>
               )}
 
-              {!isAdminView && !isOwner && !isCounselor && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && activeStaff?.designation !== 'Videographer' && (
+              {!isAdminView && !isOwner && !isCounselor && !isTutor && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && activeStaff?.designation !== 'Videographer' && (
                 <Button 
                   variant="primary" 
                   size="sm" 
@@ -1936,43 +2017,75 @@ export const SalesDashboard: React.FC = () => {
           
           {activeTab === 'sales' && (
             <div className="space-y-6">
-              <SalesDashboardMetrics 
-                isAdminView={isAdminView}
-                activeStaff={activeStaff}
-                isOwner={isOwner}
-                isCounselor={isCounselor}
-                counselorBatches={counselorBatches}
-                counselorStudents={counselorStudents}
-                onOpenAdmissionModal={handleOpenAdmissionModal}
-                dailyLeaderboard={dailyLeaderboard}
-                todayAttendanceStats={todayAttendanceStats}
-                academyRevenue={academyRevenue}
-                activeStudentsCount={activeStudentsCount}
-                batchesStats={batchesStats}
-                totalReceived={isOwner && !isAdminView ? ownerTotalReceived : totalReceived}
-                totalPackage={isOwner && !isAdminView ? ownerTotalPackage : totalPackage}
-                totalBalance={isOwner && !isAdminView ? ownerTotalBalance : totalBalance}
-                totalRefund={isOwner && !isAdminView ? ownerTotalRefund : totalRefund}
-                targetAmount={targetAmount}
-                targetPercent={isOwner && !isAdminView ? ownerTargetPercent : targetPercent}
-                todayAttendance={todayAttendance}
-                monthReports={monthReports}
-                selectedMonth={selectedMonth}
-                formatTimeStr={formatTimeStr}
-                onOpenPunchModal={(type) => {
-                  setPunchType(type);
-                  setIsPunchModalOpen(true);
-                }}
-                getDailyReportTotals={getDailyReportTotals}
-              />
-
-              {/* Agency Notice Board Widget placed ONLY at the bottom of Sales Hub main tab */}
-              <div className="pt-4 border-t border-border">
-                <AgencyNoticeBoardWidget 
-                  isAdmin={isAdminView || isAdminMode}
-                  onOpenAdminNoticeModal={() => setIsNoticeBoardModalOpen(true)}
+              {(isAdminView || isOwner) && adminHubMode === 'academy_master' ? (
+                <AcademyMasterDashboard
+                  batches={academyMasterData.batches}
+                  students={academyMasterData.students}
+                  installments={academyMasterData.installments}
+                  attendances={academyMasterData.attendances}
+                  staffList={academyMasterData.staffList}
+                  activeStaff={activeStaff}
+                  isAdminMode={isAdminMode}
+                  onNavigateToBatches={() => setActiveTab('academy_batches')}
+                  onNavigateToStudents={(_batchId) => setActiveTab('academy_students')}
+                  onNavigateToAttendance={(_batchId) => setActiveTab('academy_attendance')}
+                  onNavigateToReports={(_counselorId) => setActiveTab('academy_reports')}
+                  onNavigateToFinances={() => setActiveTab('finance')}
+                  onEnrollStudent={(targetBatch) => {
+                    setTargetBatchForAdmission(targetBatch || null);
+                    setIsAdmissionModalOpen(true);
+                  }}
+                  onRefreshData={loadAcademyMasterData}
                 />
-              </div>
+              ) : isTutor ? (
+                <TutorDashboard
+                  activeStaff={activeStaff}
+                  onOpenPunchModal={(type) => {
+                    setPunchType(type);
+                    setIsPunchModalOpen(true);
+                  }}
+                />
+              ) : (
+                <>
+                  <SalesDashboardMetrics 
+                    isAdminView={isAdminView}
+                    activeStaff={activeStaff}
+                    isOwner={isOwner}
+                    isCounselor={isCounselor}
+                    counselorBatches={counselorBatches}
+                    counselorStudents={counselorStudents}
+                    onOpenAdmissionModal={handleOpenAdmissionModal}
+                    dailyLeaderboard={dailyLeaderboard}
+                    todayAttendanceStats={todayAttendanceStats}
+                    academyRevenue={academyRevenue}
+                    activeStudentsCount={activeStudentsCount}
+                    batchesStats={batchesStats}
+                    totalReceived={isOwner && !isAdminView ? ownerTotalReceived : totalReceived}
+                    totalPackage={isOwner && !isAdminView ? ownerTotalPackage : totalPackage}
+                    totalBalance={isOwner && !isAdminView ? ownerTotalBalance : totalBalance}
+                    totalRefund={isOwner && !isAdminView ? ownerTotalRefund : totalRefund}
+                    targetAmount={targetAmount}
+                    targetPercent={isOwner && !isAdminView ? ownerTargetPercent : targetPercent}
+                    todayAttendance={todayAttendance}
+                    monthReports={monthReports}
+                    selectedMonth={selectedMonth}
+                    formatTimeStr={formatTimeStr}
+                    onOpenPunchModal={(type) => {
+                      setPunchType(type);
+                      setIsPunchModalOpen(true);
+                    }}
+                    getDailyReportTotals={getDailyReportTotals}
+                  />
+
+                  {/* Agency Notice Board Widget placed ONLY at the bottom of Sales Hub main tab */}
+                  <div className="pt-4 border-t border-border">
+                    <AgencyNoticeBoardWidget 
+                      isAdmin={isAdminView || isAdminMode}
+                      onOpenAdminNoticeModal={() => setIsNoticeBoardModalOpen(true)}
+                    />
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -1993,6 +2106,186 @@ export const SalesDashboard: React.FC = () => {
                 isAdmin={false}
               />
             </div>
+          )}
+
+          {activeTab === 'salary_docs' && activeStaff && (
+            (isAdminView || isOwner) ? (
+              <div className="space-y-6 pt-2 animate-fade-in">
+                {/* Admin Salary & HR Header & Switcher */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border">
+                  <div>
+                    <h2 className="text-lg font-black tracking-tight text-foreground flex items-center gap-2">
+                      <CreditCard className="w-5 h-5 text-primary" />
+                      Salary & HR Management
+                    </h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Oversee employee salaries, appraisals, offer letters, banking details, and automated month-end payslip generation.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 bg-muted-2 p-1 rounded-lg border border-border self-start sm:self-auto">
+                    <button
+                      onClick={() => setAdminSalaryTabMode('manage')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                        adminSalaryTabMode === 'manage'
+                          ? 'bg-primary text-white shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Team Payroll & HR
+                    </button>
+                    <button
+                      onClick={() => setAdminSalaryTabMode('portal')}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                        adminSalaryTabMode === 'portal'
+                          ? 'bg-primary text-white shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      My Personal Payslips
+                    </button>
+                  </div>
+                </div>
+
+                {adminSalaryTabMode === 'portal' ? (
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center justify-between bg-muted-2/60 p-3 rounded-lg border border-border gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-foreground">Viewing Portal As:</span>
+                        <select
+                          value={adminSalaryStaffId || activeStaff?.id}
+                          onChange={(e) => setAdminSalaryStaffId(e.target.value)}
+                          className="px-2.5 py-1 rounded bg-card border border-border text-xs font-bold text-foreground focus:outline-none focus:border-primary [color-scheme:dark]"
+                        >
+                          <option value={activeStaff?.id}>{activeStaff?.full_name} (My Personal Portal)</option>
+                          {staffProfiles.filter((s: any) => !isAcademyStaff(s) && s.id !== activeStaff?.id).map((sp: any) => (
+                            <option key={sp.id} value={sp.id}>{sp.full_name} ({sp.designation || 'Staff'})</option>
+                          ))}
+                        </select>
+                      </div>
+                      <span className="text-[10px] uppercase font-bold py-0.5 px-2 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                        Live Staff Portal View
+                      </span>
+                    </div>
+                    <StaffSalaryPortal 
+                      activeStaff={
+                        adminSalaryStaffId && adminSalaryStaffId !== activeStaff?.id
+                          ? (staffProfiles.find((s: any) => s.id === adminSalaryStaffId) || activeStaff)
+                          : activeStaff
+                      } 
+                    />
+                  </div>
+                ) : (
+                  (() => {
+                    const eligibleStaff = staffProfiles.filter((s: any) => !['admin', 'althaf', 'shibili', 'ashif'].includes(s.full_name?.toLowerCase().trim()));
+                    const isRelievedStaff = (s: any) => (s.resignation_status === 'RESIGNED' || s.status === 'resigned' || s.status === 'RESIGNED' || s.status === 'inactive' || s.status === 'INACTIVE') && s.resignation_status !== 'SERVING_NOTICE';
+                    const activeStaffList = eligibleStaff.filter((s: any) => !isRelievedStaff(s));
+                    const relievedStaffList = eligibleStaff.filter((s: any) => isRelievedStaff(s));
+                    const displayStaffList = hideRelieved ? activeStaffList : (activeStaffList.length > 0 ? [...activeStaffList, ...relievedStaffList] : eligibleStaff);
+                    const noticeCount = eligibleStaff.filter((s: any) => s.resignation_status === 'SERVING_NOTICE').length;
+
+                    const activeSelectedId = displayStaffList.some((s: any) => s.id === adminSalaryStaffId)
+                      ? adminSalaryStaffId
+                      : (displayStaffList[0]?.id || null);
+                    const selectedStaff = displayStaffList.find((s: any) => s.id === activeSelectedId) || displayStaffList[0] || activeStaff;
+
+                    return (
+                      <div className="space-y-5">
+                        {/* Employee Selector Bar */}
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <span className="text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground">
+                                Select Employee ({displayStaffList.length} Active / {eligibleStaff.length} Total)
+                              </span>
+                              {relievedStaffList.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setHideRelieved(!hideRelieved)}
+                                  className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border transition-colors ${
+                                    hideRelieved
+                                      ? 'bg-muted-2 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+                                      : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                  }`}
+                                >
+                                  {hideRelieved ? `Show Relieved (${relievedStaffList.length})` : 'Hide Relieved'}
+                                </button>
+                              )}
+                            </div>
+
+                            {noticeCount > 0 && (
+                              <span className="text-[10px] text-amber-500 font-bold flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                {noticeCount} Serving Notice
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                            {displayStaffList.map((sp: any) => {
+                              const isSelected = activeSelectedId === sp.id;
+                              const isNotice = sp.resignation_status === 'SERVING_NOTICE';
+                              const isResigned = isRelievedStaff(sp);
+
+                              return (
+                                <button
+                                  key={sp.id}
+                                  onClick={() => setAdminSalaryStaffId(sp.id)}
+                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all shrink-0 ${
+                                    isSelected
+                                      ? 'bg-primary-soft/60 border-primary text-foreground shadow-sm ring-1 ring-primary/30'
+                                      : 'bg-card border-border hover:bg-muted-2 text-muted-foreground hover:text-foreground'
+                                  }`}
+                                >
+                                  <div className="relative">
+                                    <img
+                                      src={sp.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(sp.full_name || 'Staff')}&background=random`}
+                                      alt={sp.full_name}
+                                      className="w-7 h-7 rounded-full object-cover border border-border"
+                                    />
+                                    {isNotice && (
+                                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border border-card animate-pulse" title="Serving Notice Period" />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="text-xs font-bold truncate text-foreground flex items-center gap-1">
+                                      <span>{sp.full_name}</span>
+                                      {isNotice && (
+                                        <span className="text-[8px] bg-amber-500/20 text-amber-500 px-1 py-0.5 rounded font-extrabold uppercase">Notice</span>
+                                      )}
+                                      {isResigned && (
+                                        <span className="text-[8px] bg-rose-500/20 text-rose-500 px-1 py-0.5 rounded font-extrabold uppercase">Relieved</span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] text-muted-foreground truncate">
+                                      {sp.designation || 'Staff'}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Selected Staff Member Salary & HR Tab */}
+                        {selectedStaff && (
+                          <SalaryHRTab
+                            staffId={selectedStaff.id}
+                            fullName={selectedStaff.full_name}
+                            designation={selectedStaff.designation || 'Staff Member'}
+                            selectedMonth={selectedMonth}
+                          />
+                        )}
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+            ) : (
+              <div className="space-y-6 pt-2">
+                <StaffSalaryPortal activeStaff={activeStaff} />
+              </div>
+            )
           )}
 
           {activeTab === 'history' && (

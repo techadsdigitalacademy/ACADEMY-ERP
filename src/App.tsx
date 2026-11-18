@@ -23,12 +23,12 @@ function DashboardContainer() {
 
   const isTutor = activeStaff?.designation?.toLowerCase().includes('tutor') || false;
   const isCounselor = activeStaff?.designation?.toLowerCase().includes('counselor') || false;
-  
+
   return (
     <Suspense fallback={<PageLoader />}>
       {(() => {
         if (activeTab === 'assets') return <AssetLibrary />;
-        if (activeTab === 'sales' || activeTab === 'history' || activeTab === 'staff-history' || activeTab === 'expense_history' || activeTab === 'reports') return <SalesDashboard />;
+        if (activeTab === 'sales' || activeTab === 'history' || activeTab === 'staff-history' || activeTab === 'expense_history' || activeTab === 'reports' || activeTab === 'salary_docs') return <SalesDashboard />;
         if (activeTab === 'attendance') return (isAdminMode || isOwner) ? <AdminAttendance /> : <SalesDashboard />;
         if (activeTab.startsWith('academy')) return (isAdminMode || isTutor || isCounselor || isOwner) ? <AcademyDashboard /> : <SalesDashboard />;
         if (activeTab === 'staff') return (isAdminMode || isOwner) ? <StaffManagement /> : <SalesDashboard />;

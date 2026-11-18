@@ -1,14 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
-import { enrichAttendanceRecords, calculateWorkingHours, calculateWorkingMinutes, evaluatePunchStatus, fetchStaffAttendanceRecords, getStoredPunchLocal, getPunchMeta, savePunchMetaToStorage, normalize24HourTime, formatDisplayTime } from '../utils/attendanceStorage';
-import { getLinkedStaffIds } from '../utils/staffAliases';
-import { fetchCompanyHolidays } from '../utils/holidayStorage';
-import type { CompanyHoliday } from '../utils/holidayStorage';
 import { Card } from './Card';
 import { Button } from './Button';
 import { Badge } from './Badge';
-import { Edit2, X, Download, FileText } from 'lucide-react';
+import { Edit2, X, Download, FileText, ShieldCheck } from 'lucide-react';
 import type { Attendance } from '../types';
+import { 
+  evaluateAttendanceStatus, 
+  calculateWorkingHours, 
+  isMissedPunchOut, 
+  timeToMinutes,
+  formatDisplayTime
+} from '../utils/attendanceRules';
+import { 
+  fetchStaffAttendanceRecords, 
+  enrichAttendanceRecords, 
+  getPunchMeta, 
+  savePunchMetaToStorage, 
+  getStoredPunchLocal 
+} from '../utils/attendanceStorage';
+import { getLinkedStaffIds } from '../utils/staffAliases';
+import { fetchCompanyHolidays } from '../utils/holidayStorage';
+import type { CompanyHoliday } from '../utils/holidayStorage';
 
 interface AttendanceDashboardProps {
   staffId: string;
@@ -32,7 +45,9 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   const [attendance, setAttendance] = useState<Attendance[]>([]);
   const [holidays, setHolidays] = useState<CompanyHoliday[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedAttMonth, setSelectedAttMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [selectedAttMonth, setSelectedAttMonth] = useState<string>(() => {
+    return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7);
+  });
   const [enlargedSelfie, setEnlargedSelfie] = useState<string | null>(null);
 
   const [profileDetails, setProfileDetails] = useState<{
@@ -44,23 +59,24 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   // Admin editing state
   const [editingAttendance, setEditingAttendance] = useState<any | null>(null);
   const [editAttStatus, setEditAttStatus] = useState<string>('PRESENT');
+  const [editIsMedicalLeave, setEditIsMedicalLeave] = useState<boolean>(false);
   const [editClockIn, setEditClockIn] = useState<string>('09:30');
   const [editClockOut, setEditClockOut] = useState<string>('18:30');
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const fetchAttendanceForMonth = async () => {
+  // Collect all linked IDs for this staff member
+  const [resolvedStaffIds, setResolvedStaffIds] = useState<string[]>([staffId]);
+
+  const fetchAttendanceForMonth = async (targetIds: string[] = resolvedStaffIds) => {
     try {
       const [y, m] = selectedAttMonth.split('-').map(Number);
       const daysInM = new Date(y, m, 0).getDate();
       const monthStart = `${selectedAttMonth}-01`;
       const monthEnd = `${selectedAttMonth}-${String(daysInM).padStart(2, '0')}`;
 
-      // Fetch all staff profiles to resolve alias IDs for this staff member
-      const { data: allProfiles } = await supabase.from('staff_profiles').select('*');
-      const linkedIds = getLinkedStaffIds(staffId || fullName, allProfiles || []);
-      const idsToQuery = Array.from(new Set([staffId, ...linkedIds].filter(Boolean)));
+      const idsToQuery = targetIds.length > 0 ? targetIds : [staffId];
 
-      const data = await fetchStaffAttendanceRecords({
+      const rawData = await fetchStaffAttendanceRecords({
         staffIds: idsToQuery,
         startDate: monthStart,
         endDate: monthEnd
@@ -69,26 +85,27 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       const aliasMap = new Map<string, string[]>();
       aliasMap.set(staffId, idsToQuery);
 
-      const enriched = await enrichAttendanceRecords(data || [], aliasMap);
+      const enriched = await enrichAttendanceRecords(rawData || [], aliasMap);
 
-      // Pre-check any missing days in the month against Supabase Storage so cross-device punches never get lost
+      // Pre-check any missing days in the month against storage metadata
       const enrichedMap = new Map(enriched.map(r => [r.attendance_date, r]));
       const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
       for (let d = 1; d <= daysInM; d++) {
         const dStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         if (!enrichedMap.has(dStr)) {
           const meta = await getPunchMeta(staffId, dStr, idsToQuery);
           if (meta && (meta.punch_in || meta.selfie_url)) {
-            const synthesized = {
+            const synthesized: Attendance = {
               id: `storage-${dStr}`,
               staff_id: staffId,
               attendance_date: dStr,
               punch_in: meta.punch_in || '-',
-              punch_out: meta.punch_out || '-',
-              status: meta.status || 'PRESENT',
-              selfie_url: meta.selfie_url || null,
-              lat: meta.lat ?? null,
-              lng: meta.lng ?? null,
+              punch_out: meta.punch_out || undefined,
+              status: (meta.status || 'PRESENT') as any,
+              selfie_url: meta.selfie_url || undefined,
+              lat: meta.lat ?? undefined,
+              lng: meta.lng ?? undefined,
               working_hours: meta.working_hours || calculateWorkingHours(meta.punch_in, meta.punch_out, dStr === todayStr)
             };
             enriched.push(synthesized);
@@ -106,46 +123,32 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   const fetchLogs = async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch staff metadata directly from staff_profiles to get dynamic weekly_off and shift times
-      const { data: profRecord } = await supabase
-        .from('staff_profiles')
-        .select('shift_start_time, shift_end_time, weekly_off_day')
-        .or(`id.eq.${staffId},full_name.ilike.${fullName}`)
-        .limit(1)
-        .maybeSingle();
+      const { data: allProfiles } = await supabase.from('staff_profiles').select('*');
+      const linked = getLinkedStaffIds(staffId || fullName, allProfiles || []);
+      const allIds = Array.from(new Set([staffId, ...linked].filter(Boolean)));
+      setResolvedStaffIds(allIds);
 
-      if (profRecord) {
+      // Find profile details
+      const matchedProf = (allProfiles || []).find((p: any) => allIds.includes(p.id));
+      if (matchedProf) {
         setProfileDetails({
-          shift_start_time: profRecord.shift_start_time || '09:00:00',
-          shift_end_time: profRecord.shift_end_time || '18:00:00',
-          weekly_off_day: profRecord.weekly_off_day || 'Sunday'
+          shift_start_time: matchedProf.shift_start_time || '09:00:00',
+          shift_end_time: matchedProf.shift_end_time || (gender?.toLowerCase() === 'female' ? '17:00:00' : '18:00:00'),
+          weekly_off_day: matchedProf.weekly_off_day || 'Sunday'
         });
       } else {
-        const { data: staffRecord } = await supabase
-          .from('staff')
-          .select('full_name')
-          .eq('id', staffId)
-          .maybeSingle();
-
-        if (staffRecord) {
-          const { data: pRec } = await supabase
-            .from('staff_profiles')
-            .select('shift_start_time, shift_end_time, weekly_off_day')
-            .eq('full_name', staffRecord.full_name)
-            .maybeSingle();
-          if (pRec) {
-            setProfileDetails({
-              shift_start_time: pRec.shift_start_time || '09:00:00',
-              shift_end_time: pRec.shift_end_time || '18:00:00',
-              weekly_off_day: pRec.weekly_off_day || 'Sunday'
-            });
-          }
-        }
+        setProfileDetails({
+          shift_start_time: '09:00:00',
+          shift_end_time: gender?.toLowerCase() === 'female' ? '17:00:00' : '18:00:00',
+          weekly_off_day: 'Sunday'
+        });
       }
 
-      // 2. Office Holidays
+      // Office Holidays
       const holList = await fetchCompanyHolidays();
       setHolidays(holList || []);
+
+      await fetchAttendanceForMonth(allIds);
     } catch (err: any) {
       console.error('Error fetching attendance logs:', err.message);
     } finally {
@@ -155,7 +158,7 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
 
   useEffect(() => {
     fetchLogs();
-  }, [staffId]);
+  }, [staffId, fullName]);
 
   useEffect(() => {
     const onHolidaysChanged = () => {
@@ -166,9 +169,11 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   }, []);
 
   useEffect(() => {
-    fetchAttendanceForMonth();
+    if (resolvedStaffIds.length > 0) {
+      fetchAttendanceForMonth(resolvedStaffIds);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [staffId, selectedAttMonth]);
+  }, [selectedAttMonth]);
 
   const handleUpdateStatus = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -177,10 +182,24 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
     try {
       const formattedIn = editClockIn.length === 5 ? `${editClockIn}:00` : editClockIn;
       const formattedOut = editClockOut.length === 5 ? `${editClockOut}:00` : editClockOut;
+      const finalStatus = editIsMedicalLeave ? 'MEDICAL_LEAVE' : editAttStatus;
       const targetDate = editingAttendance.date;
-      const targetDbStatus = editAttStatus === 'LEAVE' ? 'leave' : 'present';
+      const targetDbStatus = finalStatus === 'LEAVE' ? 'leave' : 'present';
 
-      // 1. Save metadata (punch_in, punch_out, status, working_hours) across all linked alias IDs
+      // Update local medical leaves registry
+      const localMedicalLeavesKey = `tech_ads_medical_leaves_${staffId || fullName}`;
+      try {
+        const raw = localStorage.getItem(localMedicalLeavesKey);
+        let list: string[] = raw ? JSON.parse(raw) : [];
+        if (editIsMedicalLeave) {
+          if (!list.includes(targetDate)) list.push(targetDate);
+        } else {
+          list = list.filter(d => d !== targetDate);
+        }
+        localStorage.setItem(localMedicalLeavesKey, JSON.stringify(list));
+      } catch {}
+
+      // 1. Save metadata to storage across all linked alias IDs
       const { data: allProfiles } = await supabase.from('staff_profiles').select('*');
       const linkedIds = getLinkedStaffIds(staffId || fullName, allProfiles || []);
 
@@ -190,20 +209,20 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
         {
           punch_in: formattedIn,
           punch_out: formattedOut,
-          status: editAttStatus,
-          working_hours: calculateWorkingHours(formattedIn, formattedOut)
+          status: finalStatus,
+          working_hours: calculateWorkingHours(formattedIn, formattedOut, false)
         },
         linkedIds
       );
 
-      // 2. Insert or update row in staff_attendance with DB-allowed status ('present' or 'leave')
+      // 2. Insert or update row in staff_attendance table
       if (editingAttendance.isVirtual) {
+        const minimalPayload = {
+          staff_id: staffId,
+          attendance_date: targetDate,
+          status: targetDbStatus
+        };
         try {
-          const minimalPayload = {
-            staff_id: staffId,
-            attendance_date: targetDate,
-            status: targetDbStatus
-          };
           const proxyRes = await fetch('/supabase-admin/rest/v1/staff_attendance', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
@@ -212,13 +231,13 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
           if (!proxyRes.ok) {
             await supabase.from('staff_attendance').insert(minimalPayload);
           }
-        } catch (e) {
-          console.warn('Attendance insert error:', e);
+        } catch (insertErr) {
+          console.warn('Attendance insert notice:', insertErr);
         }
       } else {
-        try {
-          const rowId = editingAttendance.id;
-          if (rowId && !String(rowId).startsWith('local-')) {
+        const rowId = editingAttendance.id;
+        if (rowId && !String(rowId).startsWith('storage-') && !String(rowId).startsWith('local-')) {
+          try {
             const proxyPatch = await fetch(`/supabase-admin/rest/v1/staff_attendance?id=eq.${rowId}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
@@ -227,14 +246,14 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
             if (!proxyPatch.ok) {
               await supabase.from('staff_attendance').update({ status: targetDbStatus }).eq('id', rowId);
             }
+          } catch (patchErr) {
+            console.warn('Attendance patch notice:', patchErr);
           }
-        } catch (e) {
-          console.warn('Attendance patch error:', e);
         }
       }
 
       setEditingAttendance(null);
-      await fetchAttendanceForMonth();
+      await fetchAttendanceForMonth(resolvedStaffIds);
       if (onOverrideSuccess) onOverrideSuccess();
     } catch (err: any) {
       alert('Failed to update status: ' + err.message);
@@ -252,14 +271,25 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
   let lateCount = 0;
   let halfDayCount = 0;
   let leaveCount = 0;
+  let medicalLeaveCount = 0;
   let holidayCount = 0;
 
-  const [currY, currM, currD] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).split('-').map(Number);
+  const localMedicalLeavesKey = `tech_ads_medical_leaves_${staffId || fullName}`;
+  let localMedicalLeaves: string[] = [];
+  try {
+    const raw = localStorage.getItem(localMedicalLeavesKey);
+    if (raw) localMedicalLeaves = JSON.parse(raw);
+  } catch {}
+
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth() + 1;
+  const todayDate = today.getDate();
 
   let maxDay = daysInMonth;
-  if (year === currY && monthIdx === currM) {
-    maxDay = currD;
-  } else if (year > currY || (year === currY && monthIdx > currM)) {
+  if (year === currentYear && monthIdx === currentMonth) {
+    maxDay = todayDate;
+  } else if (year > currentYear || (year === currentYear && monthIdx > currentMonth)) {
     maxDay = 0;
   }
 
@@ -274,6 +304,12 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
     const matchHoliday = holidays.find(h => h.holiday_date === dateStr);
     const isTodayLog = dateStr === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
+    const isMedical = Boolean(
+      matchedLog?.is_medical_leave ||
+      matchedLog?.status === 'MEDICAL_LEAVE' ||
+      localMedicalLeaves.includes(dateStr)
+    );
+
     if (!matchedLog) {
       const local = getStoredPunchLocal(staffId, dateStr);
       if (local && (local.punch_in || local.selfie_url)) {
@@ -282,28 +318,48 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
           staff_id: staffId,
           attendance_date: dateStr,
           punch_in: local.punch_in || '-',
-          punch_out: local.punch_out || '-',
+          punch_out: local.punch_out || undefined,
           status: local.status || 'PRESENT',
           selfie_url: local.selfie_url || null,
           working_hours: local.working_hours || calculateWorkingHours(local.punch_in, local.punch_out, isTodayLog)
         };
       }
     }
-    
+
     if (matchedLog) {
-      const evalStatus = evaluatePunchStatus(
+      const isMissed = isMissedPunchOut(
+        dateStr,
         matchedLog.punch_in,
-        profileDetails?.shift_start_time,
         matchedLog.punch_out,
-        profileDetails?.shift_end_time,
-        matchedLog.status
+        gender,
+        profileDetails?.shift_end_time
       );
 
-      if (evalStatus === 'PRESENT') presentCount++;
-      else if (evalStatus === 'LATE') lateCount++;
-      else if (evalStatus === 'HALF_DAY') halfDayCount++;
-      else if (evalStatus === 'LEAVE') leaveCount++;
-      
+      let effectiveStatus = isMissed
+        ? 'MISSED PUNCH OUT'
+        : evaluateAttendanceStatus(
+            matchedLog.punch_in,
+            matchedLog.punch_out,
+            matchedLog.status
+          );
+
+      if (isMedical) {
+        effectiveStatus = 'MEDICAL_LEAVE';
+        medicalLeaveCount++;
+      } else if (effectiveStatus === 'PRESENT') {
+        presentCount++;
+      } else if (effectiveStatus === 'LATE') {
+        lateCount++;
+      } else if (effectiveStatus === 'HALF_DAY') {
+        halfDayCount++;
+      } else if (effectiveStatus === 'LEAVE' || effectiveStatus === 'ABSENT') {
+        leaveCount++;
+      }
+
+      const displayPunchOut = matchedLog.punch_out 
+        ? formatDisplayTime(matchedLog.punch_out)
+        : (isMissed ? 'Missed Punch Out' : (isTodayLog ? '(In Office)' : '-'));
+
       const workingHours = matchedLog.working_hours && matchedLog.working_hours !== '-' && !matchedLog.working_hours.includes('NaN')
         ? matchedLog.working_hours 
         : calculateWorkingHours(matchedLog.punch_in, matchedLog.punch_out, isTodayLog);
@@ -311,9 +367,10 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       monthlyLogs.push({
         id: matchedLog.id,
         date: dateStr,
-        punch_in: matchedLog.punch_in || '-',
-        punch_out: matchedLog.punch_out || '-',
-        status: evalStatus,
+        punch_in: matchedLog.punch_in && matchedLog.punch_in !== '-' ? formatDisplayTime(matchedLog.punch_in) : '-',
+        punch_out: displayPunchOut,
+        status: effectiveStatus,
+        is_medical_leave: isMedical,
         selfie_url: matchedLog.selfie_url,
         working_hours: workingHours,
         isVirtual: false
@@ -327,6 +384,18 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
           punch_out: '-',
           status: 'HOLIDAY',
           holiday_name: matchHoliday ? matchHoliday.holiday_name : `${userWeeklyOff} Holiday`,
+          selfie_url: null,
+          working_hours: '-',
+          isVirtual: true
+        });
+      } else if (isMedical) {
+        medicalLeaveCount++;
+        monthlyLogs.push({
+          date: dateStr,
+          punch_in: '-',
+          punch_out: '-',
+          status: 'MEDICAL_LEAVE',
+          is_medical_leave: true,
           selfie_url: null,
           working_hours: '-',
           isVirtual: true
@@ -360,7 +429,7 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
 
   const totalWorkingDays = maxDay - holidayCount;
   const attendancePercentage = totalWorkingDays > 0 
-    ? Math.min(100, Math.round(((presentCount + lateCount + halfDayCount * 0.5) / totalWorkingDays) * 100))
+    ? Math.min(100, Math.round(((presentCount + lateCount + medicalLeaveCount + halfDayCount * 0.5) / totalWorkingDays) * 100))
     : 0;
 
   const handleExportAttendanceExcel = () => {
@@ -368,15 +437,15 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       const csvRows = [];
       csvRows.push([`Tech Ads ERP - Staff Attendance Report`]);
       csvRows.push([`Staff Name: ${fullName}`, `Designation: ${designation}`, `Month: ${selectedAttMonth}`]);
-      csvRows.push([`Present: ${presentCount}`, `Late: ${lateCount}`, `Half Day: ${halfDayCount}`, `Leave: ${leaveCount}`, `Holiday: ${holidayCount}`, `Attendance %: ${attendancePercentage}%`]);
+      csvRows.push([`Present: ${presentCount}`, `Late: ${lateCount}`, `Half Day: ${halfDayCount}`, `Leave: ${leaveCount}`, `Medical Paid: ${medicalLeaveCount}`, `Holiday: ${holidayCount}`, `Working Days: ${totalWorkingDays}`, `Attendance %: ${attendancePercentage}%`]);
       csvRows.push([]);
       csvRows.push(['Date', 'Clock In', 'Clock Out', 'Working Hours', 'Status', 'Selfie Verified']);
       
       monthlyLogs.slice().reverse().forEach((log: any) => {
         csvRows.push([
           log.date, 
-          formatDisplayTime(log.punch_in), 
-          formatDisplayTime(log.punch_out), 
+          log.punch_in || '-', 
+          log.punch_out || '-', 
           log.working_hours || '-', 
           log.status || 'ABSENT',
           log.selfie_url ? 'Yes' : 'No'
@@ -411,10 +480,10 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
         return `
           <tr style="border-bottom: 1px solid #e2e8f0;">
             <td style="padding: 8px; font-weight: bold;">${log.date}</td>
-            <td style="padding: 8px;">${formatDisplayTime(log.punch_in)}</td>
-            <td style="padding: 8px;">${formatDisplayTime(log.punch_out)}</td>
+            <td style="padding: 8px;">${log.punch_in || '-'}</td>
+            <td style="padding: 8px;">${log.punch_out || '-'}</td>
             <td style="padding: 8px;">${log.working_hours || '-'}</td>
-            <td style="padding: 8px; text-align: center; font-weight: bold; color: ${log.status === 'PRESENT' ? '#059669' : log.status === 'LATE' ? '#4f46e5' : log.status === 'HALF_DAY' ? '#6366f1' : '#e11d48'};">${log.status || 'ABSENT'}</td>
+            <td style="padding: 8px; text-align: center; font-weight: bold; color: ${log.status === 'PRESENT' ? '#059669' : log.status === 'LATE' ? '#f59e0b' : log.status === 'MISSED PUNCH OUT' ? '#d97706' : log.status === 'HALF_DAY' ? '#6366f1' : '#e11d48'};">${log.status || 'ABSENT'}</td>
             <td style="padding: 8px; text-align: center;">${log.selfie_url ? 'Yes' : 'No'}</td>
           </tr>
         `;
@@ -460,8 +529,16 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
                 <div class="metric-val" style="color: #9333ea;">${leaveCount}</div>
               </div>
               <div class="metric-item">
+                <div class="metric-label">Medical Paid</div>
+                <div class="metric-val" style="color: #10b981;">${medicalLeaveCount}</div>
+              </div>
+              <div class="metric-item">
                 <div class="metric-label">Holiday</div>
                 <div class="metric-val" style="color: #a855f7;">${holidayCount}</div>
+              </div>
+              <div class="metric-item">
+                <div class="metric-label">Working Days</div>
+                <div class="metric-val" style="color: #0f172a;">${totalWorkingDays}</div>
               </div>
               <div class="metric-item">
                 <div class="metric-label">Attendance %</div>
@@ -532,7 +609,7 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
           {/* Present */}
           <Card variant="glass" glowColor="emerald" className="p-3 flex flex-col justify-between border-success/10 min-h-[80px]">
             <span className="text-[9px] font-bold text-success uppercase">Present</span>
@@ -553,8 +630,20 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
 
           {/* Leave */}
           <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-primary/10 min-h-[80px]">
-            <span className="text-[9px] font-bold text-primary uppercase">Leave</span>
+            <span className="text-[9px] font-bold text-primary uppercase">Leave (Unpaid)</span>
             <p className="text-xl font-extrabold text-primary mt-1">{leaveCount}</p>
+          </Card>
+
+          {/* Medical Leave (Paid) */}
+          <Card variant="glass" glowColor="emerald" className="p-3 flex flex-col justify-between border-emerald-500/20 min-h-[80px]">
+            <span className="text-[9px] font-bold text-emerald-400 uppercase">Medical (Paid)</span>
+            <p className="text-xl font-extrabold text-emerald-400 mt-1">{medicalLeaveCount}</p>
+          </Card>
+
+          {/* Working Days */}
+          <Card variant="glass" className="p-3 flex flex-col justify-between border-border min-h-[80px]">
+            <span className="text-[9px] font-bold text-muted-foreground uppercase">Working Days</span>
+            <p className="text-xl font-extrabold text-foreground mt-1">{totalWorkingDays}</p>
           </Card>
 
           {/* Worked Hours */}
@@ -562,14 +651,17 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
             <span className="text-[9px] font-bold text-muted-foreground uppercase">Worked Hours</span>
             <p className="text-sm font-extrabold text-foreground mt-1.5 truncate">
               {(() => {
-                const totalMins = monthlyLogs.reduce((acc, curr) => {
-                  if (curr.punch_in && curr.punch_in !== '-' && curr.punch_out && curr.punch_out !== '-') {
-                    return acc + calculateWorkingMinutes(curr.punch_in, curr.punch_out);
+                const totalMins = attendance.reduce((acc, curr) => {
+                  if (curr.attendance_date.slice(0, 7) === selectedAttMonth && curr.punch_in && curr.punch_out && curr.punch_out !== 'Missed Punch Out') {
+                    const inM = timeToMinutes(curr.punch_in);
+                    const outM = timeToMinutes(curr.punch_out);
+                    if (outM > inM) {
+                      return acc + (outM - inM);
+                    }
                   }
                   return acc;
                 }, 0);
-                const totalHrs = totalMins / 60;
-                return !isNaN(totalHrs) && isFinite(totalHrs) && totalHrs > 0 ? `${totalHrs.toFixed(1)} hrs` : '0.0 hrs';
+                return `${(totalMins / 60).toFixed(1)} hrs`;
               })()}
             </p>
           </Card>
@@ -585,28 +677,28 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
       {/* History Logs Table */}
       <Card variant="glass" className="p-5 border-border space-y-4">
         <div className="border-b border-border pb-3 flex justify-between items-center gap-2">
-            <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex-1">Attendance Logs History</h3>
-            {isAdmin && (
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={handleExportAttendanceExcel}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
-                  title="Export Attendance Report to Excel / CSV"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Export Excel</span>
-                </button>
-                <button 
-                  onClick={handleExportAttendancePDF}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft hover:bg-danger-soft text-danger border border-danger/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
-                  title="Export Attendance Report to PDF"
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Export PDF</span>
-                </button>
-              </div>
-            )}
-          </div>
+          <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex-1">Attendance Logs History</h3>
+          {isAdmin && (
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={handleExportAttendanceExcel}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                title="Export Attendance Report to Excel / CSV"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Excel</span>
+              </button>
+              <button 
+                onClick={handleExportAttendancePDF}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft hover:bg-danger-soft text-danger border border-danger/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                title="Export Attendance Report to PDF"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Export PDF</span>
+              </button>
+            </div>
+          )}
+        </div>
 
         <div className="overflow-x-auto rounded-md border border-border bg-muted-2">
           <table className="w-full text-left border-collapse text-xs">
@@ -644,25 +736,38 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
                     )}
                   </td>
                   <td className="py-2.5 px-3 text-muted-foreground">{log.date}</td>
-                  <td className="py-2.5 px-3 text-foreground font-bold">{formatDisplayTime(log.punch_in)}</td>
-                  <td className="py-2.5 px-3 text-muted-foreground">{formatDisplayTime(log.punch_out)}</td>
+                  <td className="py-2.5 px-3 text-foreground font-bold">{log.punch_in}</td>
+                  <td className="py-2.5 px-3">
+                    {log.punch_out === 'Missed Punch Out' ? (
+                      <span className="text-amber-500 font-bold text-xs">Missed Punch Out</span>
+                    ) : log.punch_out === '(In Office)' ? (
+                      <span className="text-emerald-500 font-bold text-xs">(In Office)</span>
+                    ) : (
+                      <span className="text-muted-foreground">{log.punch_out}</span>
+                    )}
+                  </td>
                   <td className="py-2.5 px-3 text-muted-foreground">{log.working_hours}</td>
                   <td className="py-2.5 px-3 text-center">
                     {log.status === 'HOLIDAY' ? (
                       <Badge variant="indigo" className="text-[8px] font-bold uppercase tracking-wider">
                         {log.holiday_name || 'HOLIDAY'}
                       </Badge>
+                    ) : (log.status === 'MEDICAL_LEAVE' || log.is_medical_leave) ? (
+                      <Badge variant="success" className="text-[8px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        <ShieldCheck className="w-2.5 h-2.5 mr-0.5 inline" />
+                        Medical (Paid)
+                      </Badge>
                     ) : (
                       <Badge 
                         variant={
+                          log.status === 'MISSED PUNCH OUT' ? 'warning' :
                           log.status === 'PRESENT' ? 'success' : 
                           log.status === 'LATE' ? 'warning' : 
-                          log.status === 'HALF_DAY' ? 'indigo' : 
-                          log.status === 'PENDING' ? 'info' : 'error'
+                          log.status === 'HALF_DAY' ? 'indigo' : 'error'
                         } 
                         className="text-[8px] font-bold uppercase tracking-wider"
                       >
-                        {log.status === 'PENDING' ? 'NOT CHECKED IN' : log.status}
+                        {log.status}
                       </Badge>
                     )}
                   </td>
@@ -672,19 +777,18 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
                         type="button"
                         onClick={() => {
                           setEditingAttendance(log);
-                          setEditAttStatus(log.status === 'HOLIDAY' || log.status === 'LEAVE' ? 'PRESENT' : log.status);
+                          setEditAttStatus(log.status === 'HOLIDAY' ? 'PRESENT' : log.status === 'MEDICAL_LEAVE' ? 'LEAVE' : log.status);
+                          setEditIsMedicalLeave(Boolean(log.is_medical_leave || log.status === 'MEDICAL_LEAVE'));
 
-                          let defaultIn = profileDetails?.shift_start_time?.slice(0, 5) || '09:30';
+                          let defaultIn = profileDetails?.shift_start_time || '09:30';
                           if (log.punch_in && log.punch_in !== '-') {
-                            const norm = normalize24HourTime(log.punch_in);
-                            defaultIn = norm ? norm.slice(0, 5) : defaultIn;
+                            defaultIn = log.punch_in.length >= 5 ? log.punch_in.slice(0, 5) : log.punch_in;
                           }
                           setEditClockIn(defaultIn);
 
-                          let defaultOut = profileDetails?.shift_end_time?.slice(0, 5) || '18:30';
-                          if (log.punch_out && log.punch_out !== '-') {
-                            const norm = normalize24HourTime(log.punch_out);
-                            defaultOut = norm ? norm.slice(0, 5) : defaultOut;
+                          let defaultOut = profileDetails?.shift_end_time || '18:30';
+                          if (log.punch_out && log.punch_out !== '-' && log.punch_out !== '(In Office)' && log.punch_out !== 'Missed Punch Out') {
+                            defaultOut = log.punch_out.length >= 5 ? log.punch_out.slice(0, 5) : log.punch_out;
                           }
                           setEditClockOut(defaultOut);
                         }}
@@ -751,6 +855,32 @@ export const AttendanceDashboard: React.FC<AttendanceDashboardProps> = ({
                   <option value="HALF_DAY">HALF DAY</option>
                   <option value="LEAVE">LEAVE</option>
                 </select>
+              </div>
+
+              {/* Medical Leave Exemption Toggle */}
+              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <label htmlFor="medical-leave-toggle" className="text-xs font-bold text-foreground flex items-center gap-1.5 cursor-pointer">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    Medical Leave Exemption
+                  </label>
+                  <p className="text-[10px] text-muted-foreground">
+                    Exempt this day from monthly salary & payslip deduction
+                  </p>
+                </div>
+                <input
+                  id="medical-leave-toggle"
+                  type="checkbox"
+                  checked={editIsMedicalLeave}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setEditIsMedicalLeave(checked);
+                    if (checked) {
+                      setEditAttStatus('LEAVE');
+                    }
+                  }}
+                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary cursor-pointer accent-primary"
+                />
               </div>
 
               {/* Clock In & Clock Out Grid */}

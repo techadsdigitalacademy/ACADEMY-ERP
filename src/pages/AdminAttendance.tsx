@@ -6,12 +6,13 @@ import { Badge } from '../components/Badge';
 import { Button } from '../components/Button';
 import { supabase, STAFF_PROFILE_COLUMNS } from '../services/supabase';
 import { dataCache } from '../services/dataCache';
-import { enrichAttendanceRecords, fetchStaffAttendanceRecords, getStoredPunchLocal, normalize24HourTime, formatDisplayTime, evaluatePunchStatus, calculateWorkingHours } from '../utils/attendanceStorage';
-import { deduplicateStaffProfiles, getLinkedStaffIds } from '../utils/staffAliases';
+import { enrichAttendanceRecords, fetchStaffAttendanceRecords, getStoredPunchLocal, normalize24HourTime, formatDisplayTime, evaluatePunchStatus } from '../utils/attendanceStorage';
+import { deduplicateStaffProfiles } from '../utils/staffAliases';
 import { fetchCompanyHolidays } from '../utils/holidayStorage';
 import type { CompanyHoliday } from '../utils/holidayStorage';
 import { HolidayManagementModal } from '../components/HolidayManagementModal';
 import { MetricCardsSkeleton, TableSkeleton } from '../components/Skeleton';
+import { AttendanceDashboard } from '../components/AttendanceDashboard';
 import type { Staff, Attendance } from '../types';
 import {
   AlertCircle,
@@ -62,141 +63,6 @@ export const AdminAttendance: React.FC = () => {
   const [holidays, setHolidays] = useState<CompanyHoliday[]>([]);
   const [isHolidayModalOpen, setIsHolidayModalOpen] = useState<boolean>(false);
 
-  const handleExportStaffAttendanceExcel = (staff: any, month: string, logs: any[], present: number, late: number, halfDay: number, leave: number, holiday: number, attPct: number) => {
-    try {
-      const csvRows = [];
-      csvRows.push([`Tech Ads ERP - Staff Attendance Report`]);
-      csvRows.push([`Staff Name: ${staff?.full_name || 'Staff'}`, `Designation: ${staff?.designation || 'Staff'}`, `Month: ${month}`]);
-      csvRows.push([`Present: ${present}`, `Late: ${late}`, `Half Day: ${halfDay}`, `Leave: ${leave}`, `Holiday: ${holiday}`, `Attendance %: ${attPct}%`]);
-      csvRows.push([]);
-      csvRows.push(['Date', 'Clock In', 'Clock Out', 'Working Hours', 'Status', 'Selfie Verified']);
-
-      (logs || []).slice().reverse().forEach((log: any) => {
-        csvRows.push([
-          log.date,
-          log.punch_in || '-',
-          log.punch_out || '-',
-          log.working_hours || '-',
-          log.status || 'ABSENT',
-          log.selfie_url ? 'Yes' : 'No'
-        ]);
-      });
-
-      const BOM = "\uFEFF";
-      const csvContent = BOM + csvRows.map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `Attendance_Report_${(staff?.full_name || 'Staff').replace(/\s+/g, '_')}_${month}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (e) {
-      alert('Error exporting attendance: ' + e);
-    }
-  };
-
-  const handleExportStaffAttendancePDF = (staff: any, month: string, logs: any[], present: number, late: number, halfDay: number, leave: number, holiday: number, attPct: number) => {
-    try {
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        alert('Please allow popups to export PDF');
-        return;
-      }
-
-      const rowsHtml = (logs || []).slice().reverse().map((log: any) => {
-        return `
-          <tr style="border-bottom: 1px solid #e2e8f0;">
-            <td style="padding: 8px; font-weight: bold;">${log.date}</td>
-            <td style="padding: 8px;">${log.punch_in || '-'}</td>
-            <td style="padding: 8px;">${log.punch_out || '-'}</td>
-            <td style="padding: 8px;">${log.working_hours || '-'}</td>
-            <td style="padding: 8px; text-align: center; font-weight: bold; color: ${log.status === 'PRESENT' ? '#059669' : log.status === 'LATE' ? '#4f46e5' : log.status === 'HALF_DAY' ? '#6366f1' : '#e11d48'};">${log.status || 'ABSENT'}</td>
-            <td style="padding: 8px; text-align: center;">${log.selfie_url ? 'Yes' : 'No'}</td>
-          </tr>
-        `;
-      }).join('');
-
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Attendance Report - ${staff?.full_name}</title>
-            <style>
-              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; }
-              h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
-              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
-              .metrics { display: flex; gap: 12px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
-              .metric-item { flex: 1; text-align: center; }
-              .metric-label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; }
-              .metric-val { font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 2px; }
-              table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
-              th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
-              th.center { text-align: center; }
-            </style>
-          </head>
-          <body>
-            <h1>Tech Ads ERP - Staff Attendance Report</h1>
-            <p>Staff: <strong>${staff?.full_name || 'Staff'}</strong> &bull; Designation: <strong>${staff?.designation || 'Staff'}</strong> &bull; Month: <strong>${month}</strong></p>
-            
-            <div class="metrics">
-              <div class="metric-item">
-                <div class="metric-label">Present</div>
-                <div class="metric-val" style="color: #059669;">${present}</div>
-              </div>
-              <div class="metric-item">
-                <div class="metric-label">Late</div>
-                <div class="metric-val" style="color: #4f46e5;">${late}</div>
-              </div>
-              <div class="metric-item">
-                <div class="metric-label">Half Day</div>
-                <div class="metric-val" style="color: #6366f1;">${halfDay}</div>
-              </div>
-              <div class="metric-item">
-                <div class="metric-label">Leave</div>
-                <div class="metric-val" style="color: #9333ea;">${leave}</div>
-              </div>
-              <div class="metric-item">
-                <div class="metric-label">Holiday</div>
-                <div class="metric-val" style="color: #a855f7;">${holiday}</div>
-              </div>
-              <div class="metric-item">
-                <div class="metric-label">Attendance %</div>
-                <div class="metric-val">${attPct}%</div>
-              </div>
-            </div>
-
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Clock In</th>
-                  <th>Clock Out</th>
-                  <th>Working HR's</th>
-                  <th class="center">Status</th>
-                  <th class="center">Selfie Verified</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${rowsHtml}
-              </tbody>
-            </table>
-            <script>
-              window.onload = function() {
-                window.print();
-              };
-            </script>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-    } catch (e) {
-      alert('Error exporting PDF: ' + e);
-    }
-  };
-
   // Custom Reports states
   const [reportFromDate, setReportFromDate] = useState<string>(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString('sv-SE'));
   const [reportToDate, setReportToDate] = useState<string>(new Date().toLocaleDateString('sv-SE'));
@@ -205,64 +71,10 @@ export const AdminAttendance: React.FC = () => {
 
   // Drilldown states
   const [selectedStaffForDrill, setSelectedStaffForDrill] = useState<any | null>(null);
-  const [drillMonth, setDrillMonth] = useState<string>(new Date().toISOString().slice(0, 7));
-  const [drillLogs, setDrillLogs] = useState<any[]>([]);
-  const [loadingDrill, setLoadingDrill] = useState(false);
-
-  // The drill-down only ever reads the days of `drillMonth`, so fetch that month
-  // rather than the staff member's entire attendance history. The month is part of
-  // the cache key, and every month stays reachable through the picker.
-  const fetchDrillLogs = async (staffId: string, month: string, forceRefresh = false) => {
-    setLoadingDrill(true);
-    try {
-      const cacheKey = `attendance_drill_${staffId}_${month}`;
-      const [dYear, dMonth] = month.split('-').map(Number);
-      const monthStart = `${month}-01`;
-      const monthEnd = `${month}-${String(new Date(dYear, dMonth, 0).getDate()).padStart(2, '0')}`;
-
-      // Resolve linked alias IDs
-      const targetStaff = staffList.find(s => s.id === staffId) || selectedStaffForDrill;
-      const linkedIds = targetStaff?.linked_ids || getLinkedStaffIds(staffId, masterStaffList);
-      const idsToQuery = Array.from(new Set([staffId, ...linkedIds].filter(Boolean)));
-
-      const logs = await dataCache.fetchWithCache(
-        cacheKey,
-        async () => {
-          const data = await fetchStaffAttendanceRecords({
-            staffIds: idsToQuery,
-            startDate: monthStart,
-            endDate: monthEnd
-          });
-          const aliasMap = new Map<string, string[]>();
-          aliasMap.set(staffId, idsToQuery);
-          const enriched = await enrichAttendanceRecords(data || [], aliasMap);
-          return enriched.map((d: any) => ({
-            ...d,
-            status: (d.status || 'present').toUpperCase(),
-            punch_in: d.punch_in || (d.created_at ? new Date(d.created_at).toLocaleTimeString('en-US', { hour12: false }) : '09:00:00')
-          }));
-        },
-        { ttlMs: 60000, forceRefresh }
-      );
-      setDrillLogs(logs);
-    } catch (err: any) {
-      console.error("Error loading drill logs:", err);
-    } finally {
-      setLoadingDrill(false);
-    }
-  };
 
   const handleOpenDrillModal = (staff: any) => {
     setSelectedStaffForDrill(staff);
-    setDrillMonth(new Date().toISOString().slice(0, 7));
   };
-
-  useEffect(() => {
-    if (selectedStaffForDrill?.id && drillMonth) {
-      fetchDrillLogs(selectedStaffForDrill.id, drillMonth);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStaffForDrill?.id, drillMonth]);
 
   const generateReport = async () => {
     setIsGeneratingReport(true);
@@ -1463,236 +1275,26 @@ export const AdminAttendance: React.FC = () => {
 
               {/* DRILLDOWN STAFF PORTAL MODAL VIEW */}
               {selectedStaffForDrill && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-card/80 animate-fade-in">
-                  <Card variant="glass" className="w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-border p-6 flex flex-col gap-6 relative">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-fade-in">
+                  <div className="relative max-w-5xl w-full max-h-[90vh] overflow-y-auto rounded-xl bg-card border border-border p-6 shadow-2xl">
                     <button
                       onClick={() => setSelectedStaffForDrill(null)}
-                      className="absolute top-4 right-4 p-2 rounded-lg bg-card/85 hover:bg-muted text-muted-foreground hover:text-white transition-colors"
+                      className="absolute top-4 right-4 p-2 rounded-full bg-muted text-muted-foreground hover:text-white transition-colors cursor-pointer z-10"
                     >
                       <X className="w-5 h-5" />
                     </button>
-
-                    <div className="border-b border-border pb-4 flex items-center gap-4">
-                      <img
-                        src={selectedStaffForDrill.avatar_url}
-                        alt=""
-                        className="w-12 h-12 rounded-full border border-border object-cover"
-                      />
-                      <div>
-                        <h3 className="text-base font-extrabold text-foreground">{selectedStaffForDrill.full_name} Attendance Registry</h3>
-                        <p className="text-xs text-muted-foreground font-bold">{selectedStaffForDrill.staff_code} &bull; {selectedStaffForDrill.role_name} ({selectedStaffForDrill.gender})</p>
-                      </div>
-                    </div>
-
-                    {loadingDrill ? (
-                      <div className="py-16 text-center">
-                        <div className="w-10 h-10 rounded-full border-4 border-primary/20 border-t-indigo-500 animate-spin mx-auto mb-3"></div>
-                        <p className="text-xs font-semibold text-muted-foreground">Syncing member logs...</p>
-                      </div>
-                    ) : (
-                      (() => {
-                        // Generate monthly logs for drill Month (Day 1 to Current Date)
-                        const [year, monthIdx] = drillMonth.split('-').map(Number);
-                        const daysInMonth = new Date(year, monthIdx, 0).getDate();
-
-                        const [currY, currM, currD] = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).split('-').map(Number);
-
-                        let maxDay = daysInMonth;
-                        if (year === currY && monthIdx === currM) {
-                          maxDay = currD;
-                        } else if (year > currY || (year === currY && monthIdx > currM)) {
-                          maxDay = 0;
-                        }
-
-                        const monthlyLogs: any[] = [];
-                        let presentCount = 0;
-                        let lateCount = 0;
-                        let halfDayCount = 0;
-                        let leaveCount = 0;
-                        let holidayCount = 0;
-                        const staffWeeklyOff = selectedStaffForDrill?.weekly_off_day || 'Sunday';
-
-                        for (let d = 1; d <= maxDay; d++) {
-                          const dateStr = `${year}-${String(monthIdx).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                          const matchedLog = drillLogs.find(a => a.attendance_date === dateStr);
-                          const dateObj = new Date(year, monthIdx - 1, d);
-                          const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
-                          const isWeeklyOff = dayName.toLowerCase() === staffWeeklyOff.toLowerCase();
-                          const matchHoliday = holidays.find(h => h.holiday_date === dateStr);
-
-                          if (matchedLog) {
-                            const isTodayLog = dateStr === new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-                            const effectiveStatus = evaluatePunchStatus(
-                              matchedLog.punch_in,
-                              selectedStaffForDrill?.shift_start_time,
-                              matchedLog.punch_out,
-                              selectedStaffForDrill?.shift_end_time,
-                              matchedLog.status
-                            );
-
-                            if (effectiveStatus === 'PRESENT') presentCount++;
-                            else if (effectiveStatus === 'LATE') lateCount++;
-                            else if (effectiveStatus === 'HALF_DAY') halfDayCount++;
-                            else if (effectiveStatus === 'LEAVE' || effectiveStatus === 'ABSENT') leaveCount++;
-
-                            const workingHours = matchedLog.working_hours && matchedLog.working_hours !== '-' && !matchedLog.working_hours.includes('NaN')
-                              ? matchedLog.working_hours
-                              : calculateWorkingHours(matchedLog.punch_in, matchedLog.punch_out, isTodayLog);
-
-                            monthlyLogs.push({
-                              date: dateStr,
-                              punch_in: matchedLog.punch_in || '-',
-                              punch_out: matchedLog.punch_out || '-',
-                              status: effectiveStatus,
-                              selfie_url: matchedLog.selfie_url,
-                              working_hours: workingHours
-                            });
-                          } else {
-                            if (isWeeklyOff || matchHoliday) {
-                              holidayCount++;
-                              monthlyLogs.push({
-                                date: dateStr,
-                                punch_in: '-',
-                                punch_out: '-',
-                                status: 'HOLIDAY',
-                                holiday_name: matchHoliday ? matchHoliday.holiday_name : `${staffWeeklyOff} Holiday`,
-                                selfie_url: null,
-                                working_hours: '-'
-                              });
-                            } else {
-                              leaveCount++;
-                              monthlyLogs.push({
-                                date: dateStr,
-                                punch_in: '-',
-                                punch_out: '-',
-                                status: 'ABSENT',
-                                selfie_url: null,
-                                working_hours: '-'
-                              });
-                            }
-                          }
-                        }
-
-                        const totalWorkingDays = maxDay - holidayCount;
-                        const attendancePercentage = totalWorkingDays > 0
-                          ? Math.min(100, Math.round(((presentCount + lateCount + halfDayCount * 0.5) / totalWorkingDays) * 100))
-                          : 0;
-
-                        return (
-                          <div className="space-y-6">
-                            <div className="flex justify-between items-center bg-muted-2 p-4 rounded-md border border-border">
-                              <span className="text-xs font-bold text-muted-foreground uppercase">Filter Registry Month</span>
-                              <div className="flex items-center gap-2">
-                                <input
-                                  type="month"
-                                  value={drillMonth}
-                                  onChange={(e) => setDrillMonth(e.target.value)}
-                                  className="px-3 py-1.5 rounded-md bg-card border border-border text-xs font-bold text-foreground focus:outline-none"
-                                />
-                                <button
-                                  onClick={() => handleExportStaffAttendanceExcel(selectedStaffForDrill, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-success-soft hover:bg-success-soft text-success border border-success/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
-                                  title="Export Attendance Report to Excel / CSV"
-                                >
-                                  <Download className="w-3.5 h-3.5" />
-                                  <span>Export Excel</span>
-                                </button>
-                                <button
-                                  onClick={() => handleExportStaffAttendancePDF(selectedStaffForDrill, drillMonth, monthlyLogs, presentCount, lateCount, halfDayCount, leaveCount, holidayCount, attendancePercentage)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-danger-soft hover:bg-danger-soft text-danger border border-danger/30 text-xs font-bold transition-all cursor-pointer shadow-sm"
-                                  title="Export Attendance Report to PDF"
-                                >
-                                  <FileText className="w-3.5 h-3.5" />
-                                  <span>Export PDF</span>
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Summary Metrics */}
-                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-                              <Card variant="glass" glowColor="emerald" className="p-3 flex flex-col justify-between border-success/10">
-                                <span className="text-[9px] font-bold text-success uppercase">Present</span>
-                                <p className="text-lg font-extrabold text-success mt-1">{presentCount}</p>
-                              </Card>
-                              <Card variant="glass" glowColor="purple" className="p-3 flex flex-col justify-between border-primary/10">
-                                <span className="text-[9px] font-bold text-warning uppercase">Late</span>
-                                <p className="text-lg font-extrabold text-warning mt-1">{lateCount}</p>
-                              </Card>
-                              <Card variant="glass" className="p-3 flex flex-col justify-between border-primary/10">
-                                <span className="text-[9px] font-bold text-primary uppercase">Half Day</span>
-                                <p className="text-lg font-extrabold text-primary mt-1">{halfDayCount}</p>
-                              </Card>
-                              <Card variant="glass" className="p-3 flex flex-col justify-between border-border">
-                                <span className="text-[9px] font-bold text-primary uppercase">Leave</span>
-                                <p className="text-lg font-extrabold text-primary mt-1">{leaveCount}</p>
-                              </Card>
-                              <Card variant="glass" className="p-3 flex flex-col justify-between border-border">
-                                <span className="text-[9px] font-bold text-muted-foreground uppercase">Working Days</span>
-                                <p className="text-lg font-extrabold text-foreground mt-1">{totalWorkingDays}</p>
-                              </Card>
-                              <Card variant="glass" glowColor={attendancePercentage >= 90 ? 'emerald' : 'none'} className="p-3 flex flex-col justify-between border-border">
-                                <span className="text-[9px] font-bold text-primary uppercase">Att. %</span>
-                                <p className="text-lg font-extrabold text-foreground mt-1">{attendancePercentage}%</p>
-                              </Card>
-                            </div>
-
-                            {/* Logs table */}
-                            <div className="overflow-x-auto rounded-md border border-border bg-muted-2 max-h-[40vh] overflow-y-auto">
-                              <table className="w-full text-left border-collapse text-xs">
-                                <thead>
-                                  <tr className="border-b border-border bg-muted-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky top-0">
-                                    <th className="py-2.5 px-3">Selfie</th>
-                                    <th className="py-2.5 px-3">Date</th>
-                                    <th className="py-2.5 px-3"> In</th>
-                                    <th className="py-2.5 px-3"> Out</th>
-                                    <th className="py-2.5 px-3">Working HR's</th>
-                                    <th className="py-2.5 px-3 text-center">Status</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border text-muted-foreground font-semibold">
-                                  {monthlyLogs.slice().reverse().map((log: any) => (
-                                    <tr key={log.date} className="hover:bg-muted-2">
-                                      <td className="py-2.5 px-3">
-                                        {log.selfie_url ? (
-                                          <button type="button" onClick={() => setEnlargedSelfie(log.selfie_url)} className="focus:outline-none cursor-pointer" title="Click to enlarge selfie">
-                                            <img
-                                              src={log.selfie_url}
-                                              alt=""
-                                              className="w-8 h-8 rounded-full border border-border object-cover hover:border-primary shadow-sm hover:scale-105 transition-all"
-                                            />
-                                          </button>
-                                        ) : (
-                                          <span className="text-foreground block text-center">—</span>
-                                        )}
-                                      </td>
-                                      <td className="py-2.5 px-3 text-muted-foreground">{log.date}</td>
-                                      <td className="py-2.5 px-3 text-foreground font-bold">{log.punch_in || '-'}</td>
-                                      <td className="py-2.5 px-3 text-muted-foreground">{log.punch_out || '-'}</td>
-                                      <td className="py-2.5 px-3 text-muted-foreground">{log.working_hours}</td>
-                                      <td className="py-2.5 px-3 text-center">
-                                        <Badge
-                                          variant={
-                                            log.status === 'PRESENT' ? 'success' :
-                                              log.status === 'LATE' ? 'warning' :
-                                                log.status === 'HALF_DAY' ? 'purple' :
-                                                  log.status === 'LEAVE' ? 'info' :
-                                                    log.status === 'HOLIDAY' ? 'indigo' : 'error'
-                                          }
-                                          className="text-[9px] py-0.5 px-1.5"
-                                        >
-                                          {log.status === 'HALF_DAY' ? 'HALF DAY' : log.status === 'LEAVE' ? 'ON LEAVE' : log.status}
-                                        </Badge>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        );
-                      })()
-                    )}
-                  </Card>
+                    <AttendanceDashboard
+                      staffId={selectedStaffForDrill.id}
+                      fullName={selectedStaffForDrill.full_name}
+                      designation={selectedStaffForDrill.role_name || selectedStaffForDrill.designation}
+                      gender={selectedStaffForDrill.gender}
+                      avatarUrl={selectedStaffForDrill.avatar_url}
+                      isAdmin={true}
+                      onOverrideSuccess={() => {
+                        loadAttendanceData(true);
+                      }}
+                    />
+                  </div>
                 </div>
               )}
             </>

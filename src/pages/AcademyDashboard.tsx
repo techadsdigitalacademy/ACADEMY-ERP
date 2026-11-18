@@ -12,12 +12,13 @@ import { StudentAttendancePortal } from '../components/StudentAttendancePortal';
 import { UnifiedEnrollmentModal } from '../components/UnifiedEnrollmentModal';
 import { CounselorMonthlyReportView } from '../components/CounselorMonthlyReportView';
 import { CourseTimelineTracker } from '../components/CourseTimelineTracker';
+import { AcademyMasterDashboard } from '../components/academy/master-hub/AcademyMasterDashboard';
 import { 
-  Users, BookOpen, UserPlus, GraduationCap, DollarSign,
-  Wallet, Search, X,
-  ArrowUpRight, Layers, UserCheck,
+  Users, BookOpen, UserPlus, GraduationCap,
+  Search, X,
+  Layers, UserCheck,
   Eye, UploadCloud, Sun, Moon, TrendingUp, RotateCcw,
-  Trash2, PlayCircle, Download, FileText
+  Trash2, PlayCircle, Download, FileText, Edit2
 } from 'lucide-react';
 
 interface AcademyBatch {
@@ -56,6 +57,8 @@ interface AcademyStudent {
 interface AcademyInstallment {
   id: string;
   student_id: string;
+  batch_id?: string;
+  collected_by?: string;
   amount_paid: number;
   payment_date: string;
   payment_method: string;
@@ -80,7 +83,14 @@ export const AcademyDashboard: React.FC = () => {
   // Role permissions
   const isCounselor = (activeStaff?.designation || '').toLowerCase().includes('counselor');
   const isOwner = (activeStaff?.designation || '').toLowerCase().includes('owner');
+  const isTutor = (activeStaff?.designation || '').toLowerCase().includes('tutor');
   const canManageStudents = isAdminMode || isCounselor || isOwner;
+
+  useEffect(() => {
+    if (isTutor && activeTab !== 'academy_attendance') {
+      setActiveTab('academy_attendance');
+    }
+  }, [isTutor, activeTab]);
 
   
   const [isLoading, setIsLoading] = useState(true);
@@ -98,6 +108,7 @@ export const AcademyDashboard: React.FC = () => {
 
   const [isStudentModalOpen, setIsStudentModalOpen] = useState(false);
   const [studentForm, setStudentForm] = useState({
+    student_id_code: '',
     name: '',
     email: '',
     phone: '',
@@ -115,6 +126,16 @@ export const AcademyDashboard: React.FC = () => {
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   const [isUploadingProof, setIsUploadingProof] = useState(false);
   const [previewSlipUrl, setPreviewSlipUrl] = useState<string | null>(null);
+
+  // Admin Edit Installment state
+  const [isEditInstallmentModalOpen, setIsEditInstallmentModalOpen] = useState(false);
+  const [editingInstallment, setEditingInstallment] = useState<AcademyInstallment | null>(null);
+  const [editInstallmentForm, setEditInstallmentForm] = useState({
+    amount: '',
+    date: '',
+    method: 'UPI',
+    notes: ''
+  });
 
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [expenseForm, setExpenseForm] = useState({ category: 'Tutor Salary', amount: '', date: new Date().toISOString().split('T')[0], description: '' });
@@ -143,6 +164,7 @@ export const AcademyDashboard: React.FC = () => {
   const [isEditStudentModalOpen, setIsEditStudentModalOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<AcademyStudent | null>(null);
   const [editStudentForm, setEditStudentForm] = useState({
+    student_id_code: '',
     name: '',
     phone: '',
     email: '',
@@ -209,10 +231,12 @@ export const AcademyDashboard: React.FC = () => {
 
       if (bDataList && bDataList.length > 0) {
         setBatches(bDataList.map((b: any) => ({
+          ...b,
           id: b.id,
           batch_name: b.batch_name,
-          batch_code: b.batch_name.slice(0, 4).toUpperCase(),
+          batch_code: b.batch_code || b.batch_name?.slice(0, 4).toUpperCase() || 'BTCH',
           batch_type: b.mode === 'online' ? 'Online' : 'Offline',
+          mode: b.mode || 'offline',
           status: b.status ? b.status.charAt(0).toUpperCase() + b.status.slice(1) : 'Upcoming',
           tutor_id: b.tutor_id,
           created_at: b.created_at,
@@ -255,6 +279,8 @@ export const AcademyDashboard: React.FC = () => {
           const cleanCode = s.student_id_code?.replace(/\s*\[DISCONTINUED\]/g, '') || `STU-${s.id.slice(0, 4)}`;
           const assignedBatch = batchesMap.get(s.batch_id);
           const counselorName = s.counselor_id ? staffMap.get(s.counselor_id) || 'Assigned Counselor' : 'Direct / Admin';
+          const isBatchCompleted = (assignedBatch?.status || '').toLowerCase() === 'completed';
+          const isStudentCompleted = isBatchCompleted || (s.status || '').toLowerCase() === 'completed';
 
           return {
             id: s.id,
@@ -267,7 +293,7 @@ export const AcademyDashboard: React.FC = () => {
             counselor_id: s.counselor_id,
             counselor_name: counselorName,
             total_fees: Number(s.total_fee) || 0,
-            status: isDiscontinued ? 'Discontinued' : 'Active',
+            status: isDiscontinued ? 'Discontinued' : isStudentCompleted ? 'Completed' : 'Active',
             created_at: s.created_at
           };
         }));
@@ -298,6 +324,8 @@ export const AcademyDashboard: React.FC = () => {
           return {
             id: f.id,
             student_id: f.student_id,
+            batch_id: f.batch_id,
+            collected_by: f.collected_by,
             amount_paid: Number(f.amount) || 0,
             payment_date: f.created_at ? f.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
             payment_method: f.payment_mode ? f.payment_mode.toUpperCase() : 'ONLINE',
@@ -413,6 +441,7 @@ export const AcademyDashboard: React.FC = () => {
   const handleOpenEditStudentModal = (student: AcademyStudent) => {
     setEditingStudent(student);
     setEditStudentForm({
+      student_id_code: student.registration_number || '',
       name: student.student_name,
       phone: student.phone || '',
       email: student.email || '',
@@ -427,7 +456,8 @@ export const AcademyDashboard: React.FC = () => {
     e.preventDefault();
     if (!editingStudent) return;
     try {
-      const payload = {
+      const trimmedCode = editStudentForm.student_id_code.trim();
+      const payload: any = {
         name: editStudentForm.name.trim(),
         phone: editStudentForm.phone.trim(),
         email: editStudentForm.email.trim() || null,
@@ -435,6 +465,9 @@ export const AcademyDashboard: React.FC = () => {
         batch_id: editStudentForm.batch_id || editingStudent.batch_id,
         counselor_id: editStudentForm.counselor_id || null
       };
+      if (trimmedCode) {
+        payload.student_id_code = trimmedCode;
+      }
       const res = await fetch(`/supabase-admin/rest/v1/students?id=eq.${editingStudent.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -448,6 +481,7 @@ export const AcademyDashboard: React.FC = () => {
       window.dispatchEvent(new CustomEvent('sales_data_changed'));
       setSelectedStudentView(prev => prev ? {
         ...prev,
+        registration_number: trimmedCode || prev.registration_number,
         student_name: payload.name,
         phone: payload.phone,
         email: payload.email || '',
@@ -500,7 +534,9 @@ export const AcademyDashboard: React.FC = () => {
     if (!studentForm.name || !studentForm.batch_id || !studentForm.total_fees) return;
     
     try {
-      const studentCode = `STU-${new Date().getFullYear()}-${String(students.length + 101).padStart(3, '0')}`;
+      const studentCode = studentForm.student_id_code?.trim()
+        ? studentForm.student_id_code.trim()
+        : `STU-${new Date().getFullYear()}-${String(students.length + 101).padStart(3, '0')}`;
       const enrollingCounselorId = studentForm.counselor_id || (isCounselor ? activeStaff?.id : null);
       const initialAmt = parseFloat(studentForm.initial_payment) || 0;
 
@@ -559,6 +595,7 @@ export const AcademyDashboard: React.FC = () => {
       
       setIsStudentModalOpen(false);
       setStudentForm({
+        student_id_code: '',
         name: '',
         email: '',
         phone: '',
@@ -622,7 +659,8 @@ export const AcademyDashboard: React.FC = () => {
         amount: amt,
         payment_mode: pMode,
         installment_month: curMonth,
-        notes: notesWithProof || 'Fee payment'
+        notes: notesWithProof || 'Fee payment',
+        created_at: installmentForm.date ? new Date(installmentForm.date + 'T12:00:00Z').toISOString() : new Date().toISOString()
       };
 
       const { error } = await dbClient.from('fee_collections').insert([feePayload]);
@@ -667,6 +705,103 @@ export const AcademyDashboard: React.FC = () => {
       alert(err.message);
     } finally {
       setIsUploadingProof(false);
+    }
+  };
+
+  const handleOpenEditInstallment = (inst: AcademyInstallment) => {
+    setEditingInstallment(inst);
+    setEditInstallmentForm({
+      amount: String(inst.amount_paid),
+      date: inst.payment_date || (inst.created_at ? inst.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+      method: inst.payment_method === 'CASH' ? 'Cash' : inst.payment_method === 'BANK TRANSFER' ? 'Bank Transfer' : 'UPI',
+      notes: inst.notes || ''
+    });
+    setIsEditInstallmentModalOpen(true);
+  };
+
+  const handleSaveEditInstallment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingInstallment) return;
+
+    try {
+      const amt = parseFloat(editInstallmentForm.amount) || 0;
+      const pMode = editInstallmentForm.method === 'Cash' ? 'cash' : editInstallmentForm.method === 'Bank Transfer' ? 'bank_transfer' : 'online';
+      const curMonth = new Date(editInstallmentForm.date).toLocaleString('default', { month: 'long', year: 'numeric' });
+      const newCreatedAt = editInstallmentForm.date ? new Date(editInstallmentForm.date + 'T12:00:00Z').toISOString() : editingInstallment.created_at;
+
+      const payload: any = {
+        amount: amt,
+        payment_mode: pMode,
+        installment_month: curMonth,
+        notes: editInstallmentForm.notes.trim() || 'Fee installment',
+        created_at: newCreatedAt
+      };
+
+      const { error } = await dbClient.from('fee_collections').update(payload).eq('id', editingInstallment.id);
+      if (error) {
+        const res = await fetch(`/supabase-admin/rest/v1/fee_collections?id=eq.${editingInstallment.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error('Failed to update payment record');
+      }
+
+      // Recalculate student total paid fee from all installments
+      const updatedInstallments = installments.map(i => i.id === editingInstallment.id ? { ...i, amount_paid: amt, payment_date: editInstallmentForm.date, payment_method: pMode.toUpperCase(), notes: payload.notes, created_at: newCreatedAt } : i);
+      const newTotalPaid = updatedInstallments
+        .filter(i => i.student_id === editingInstallment.student_id)
+        .reduce((sum, i) => sum + Number(i.amount_paid), 0);
+
+      await dbClient.from('students').update({ paid_fee: newTotalPaid }).eq('id', editingInstallment.student_id);
+      await fetch(`/supabase-admin/rest/v1/students?id=eq.${editingInstallment.student_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paid_fee: newTotalPaid })
+      });
+
+      setIsEditInstallmentModalOpen(false);
+      setEditingInstallment(null);
+      await fetchAcademyData();
+      window.dispatchEvent(new CustomEvent('students_data_changed'));
+      window.dispatchEvent(new CustomEvent('sales_data_changed'));
+      alert('Payment installment updated successfully.');
+    } catch (err: any) {
+      alert(`Error updating installment: ${err.message}`);
+    }
+  };
+
+  const handleDeleteInstallment = async (inst: AcademyInstallment) => {
+    if (!confirm(`Are you sure you want to delete this payment of ₹${inst.amount_paid.toLocaleString()} recorded on ${inst.payment_date}? The student's total paid fees will be recalculated automatically.`)) {
+      return;
+    }
+
+    try {
+      const { error } = await dbClient.from('fee_collections').delete().eq('id', inst.id);
+      if (error) {
+        const res = await fetch(`/supabase-admin/rest/v1/fee_collections?id=eq.${inst.id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error('Failed to delete payment record');
+      }
+
+      // Recalculate student paid fee from remaining
+      const remainingInstallments = installments.filter(i => i.id !== inst.id);
+      const newTotalPaid = remainingInstallments
+        .filter(i => i.student_id === inst.student_id)
+        .reduce((sum, i) => sum + Number(i.amount_paid), 0);
+
+      await dbClient.from('students').update({ paid_fee: newTotalPaid }).eq('id', inst.student_id);
+      await fetch(`/supabase-admin/rest/v1/students?id=eq.${inst.student_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paid_fee: newTotalPaid })
+      });
+
+      await fetchAcademyData();
+      window.dispatchEvent(new CustomEvent('students_data_changed'));
+      window.dispatchEvent(new CustomEvent('sales_data_changed'));
+      alert('Payment installment deleted and student total paid fees recalculated.');
+    } catch (err: any) {
+      alert(`Error deleting installment: ${err.message}`);
     }
   };
 
@@ -832,355 +967,39 @@ export const AcademyDashboard: React.FC = () => {
     }
   };
 
-  const handleExportAcademyOverviewExcel = () => {
-    try {
-      const csvRows: any[][] = [];
-      const totalCollected = installments.reduce((a, b) => a + Number(b.amount_paid || 0), 0);
-      const totalFeesExpected = students.reduce((a, b) => a + Number(b.total_fees || 0), 0);
-      const balanceRemaining = Math.max(0, totalFeesExpected - totalCollected);
-
-      csvRows.push([`Tech Ads ERP - Academy Overview Executive Summary`]);
-      csvRows.push([`Generated on: ${new Date().toLocaleDateString('en-IN')}`]);
-      csvRows.push([`Total Students: ${students.length}`, `Total Expected: ₹${totalFeesExpected.toLocaleString()}`, `Total Collected: ₹${totalCollected.toLocaleString()}`, `Balance Remaining: ₹${balanceRemaining.toLocaleString()}`]);
-      csvRows.push([]);
-      csvRows.push(['Batch Name', 'Course Name', 'Mode', 'Status', 'Start Date', 'Total Seats', 'Enrolled Students']);
-
-      batches.forEach(b => {
-        const enrolled = students.filter(s => s.batch_id === b.id).length;
-        csvRows.push([
-          b.batch_name,
-          b.course_name,
-          (b.mode || 'offline').toUpperCase(),
-          b.status.toUpperCase(),
-          b.start_date || '-',
-          b.total_seats,
-          enrolled
-        ]);
-      });
-
-      const BOM = "\uFEFF";
-      const csvContent = BOM + csvRows.map(row => row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `Academy_Overview_Summary_${new Date().toISOString().slice(0, 10)}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (e: any) {
-      alert('Error exporting Academy Overview Excel: ' + e.message);
-    }
-  };
-
-  const handleExportAcademyOverviewPDF = () => {
-    try {
-      const printWindow = window.open('', '_blank');
-      if (!printWindow) {
-        alert('Please allow popups to export PDF');
-        return;
-      }
-
-      const totalCollected = installments.reduce((a, b) => a + Number(b.amount_paid || 0), 0);
-      const totalFeesExpected = students.reduce((a, b) => a + Number(b.total_fees || 0), 0);
-      const balanceRemaining = Math.max(0, totalFeesExpected - totalCollected);
-
-      const batchRows = batches.map(b => {
-        const enrolled = students.filter(s => s.batch_id === b.id).length;
-        return `
-          <tr style="border-bottom: 1px solid #e2e8f0;">
-            <td style="padding: 8px; font-weight: bold;">${b.batch_name}</td>
-            <td style="padding: 8px;">${b.course_name}</td>
-            <td style="padding: 8px; text-transform: uppercase;">${b.mode || 'offline'}</td>
-            <td style="padding: 8px; font-weight: bold; color: ${b.status === 'running' ? '#059669' : b.status === 'completed' ? '#9333ea' : '#d97706'};">${b.status.toUpperCase()}</td>
-            <td style="padding: 8px;">${b.start_date || '-'}</td>
-            <td style="padding: 8px; text-align: center;">${enrolled} / ${b.total_seats}</td>
-          </tr>
-        `;
-      }).join('');
-
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <title>Academy Executive Overview</title>
-            <style>
-              body { font-family: system-ui, -apple-system, sans-serif; padding: 20px; color: #0f172a; }
-              h1 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
-              p { font-size: 12px; color: #64748b; margin-top: 0; margin-bottom: 16px; }
-              .metrics { display: flex; gap: 10px; margin-bottom: 20px; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; }
-              .metric-item { flex: 1; text-align: center; }
-              .metric-label { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; }
-              .metric-val { font-size: 16px; font-weight: 800; color: #0f172a; margin-top: 2px; }
-              table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; }
-              th { background: #f1f5f9; padding: 8px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
-              th.center { text-align: center; }
-            </style>
-          </head>
-          <body>
-            <h1>Tech Ads ERP - Academy Executive Overview</h1>
-            <p>Generated on: <strong>${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong></p>
-            
-            <div class="metrics">
-              <div class="metric-item"><div class="metric-label">Total Enrolled</div><div class="metric-val">${students.length}</div></div>
-              <div class="metric-item"><div class="metric-label">Total Expected</div><div class="metric-val" style="color: #2563eb;">₹${totalFeesExpected.toLocaleString()}</div></div>
-              <div class="metric-item"><div class="metric-label">Total Collected</div><div class="metric-val" style="color: #059669;">₹${totalCollected.toLocaleString()}</div></div>
-              <div class="metric-item"><div class="metric-label">Balance Remaining</div><div class="metric-val" style="color: #e11d48;">₹${balanceRemaining.toLocaleString()}</div></div>
-            </div>
-
-            <table>
-              <thead>
-                <tr>
-                  <th>Batch Name</th>
-                  <th>Course</th>
-                  <th>Mode</th>
-                  <th>Status</th>
-                  <th>Start Date</th>
-                  <th class="center">Enrolled / Total Seats</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${batchRows}
-              </tbody>
-            </table>
-            <script>
-              window.onload = function() { window.print(); };
-            </script>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-    } catch (e: any) {
-      alert('Error exporting Academy Overview PDF: ' + e.message);
-    }
-  };
-
   // --- RENDERS ---
 
   const renderOverview = () => {
-    const totalCollected = installments.reduce((a, b) => a + Number(b.amount_paid || 0), 0);
-    const totalFeesExpected = students.reduce((a, b) => a + Number(b.total_fees || 0), 0);
-    const balanceRemaining = Math.max(0, totalFeesExpected - totalCollected);
-    const upcomingBatches = batches.filter(b => (b.status || '').toLowerCase() === 'upcoming');
-    const runningBatches = batches.filter(b => (b.status || '').toLowerCase() === 'running');
-
     return (
-      <div className="space-y-6 animate-fade-in">
-        {/* Top Header Card with Quick Actions */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-card/60 border border-border p-5 rounded-2xl">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-primary-soft text-primary border border-primary/20">
-              <GraduationCap className="w-6 h-6" />
-            </div>
-            <div>
-              <h2 className="text-xl font-black text-foreground tracking-tight">Academy Overview</h2>
-              <p className="text-xs text-muted-foreground font-medium">Real-time academy performance, active admissions & batch status</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setActiveTab('academy_batches')}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-muted hover:bg-muted-2 text-foreground border border-border flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <Layers className="w-3.5 h-3.5 text-primary" />
-              <span>Manage Batches</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('academy_batches')}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
-              title="Enroll students directly through upcoming batches"
-            >
-              <UserPlus className="w-3.5 h-3.5" />
-              <span>Enroll Student</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('academy_attendance')}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-muted hover:bg-muted-2 text-foreground border border-border flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <UserCheck className="w-3.5 h-3.5 text-success" />
-              <span>Mark Attendance</span>
-            </button>
-            <button
-              onClick={handleExportAcademyOverviewExcel}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
-              title="Export Academy Overview Summary to Excel"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export Excel</span>
-            </button>
-            <button
-              onClick={handleExportAcademyOverviewPDF}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
-              title="Export Academy Overview Summary to PDF"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Export PDF</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 4 Summary Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card variant="glass" className="p-4 border-success/20 bg-success-soft/30 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total Fee Collected</span>
-              <div className="p-2 bg-success-soft rounded-lg text-success">
-                <DollarSign className="w-4 h-4" />
-              </div>
-            </div>
-            <div>
-              <div className="text-2xl font-black text-foreground">{formatCurrency(totalCollected)}</div>
-              <p className="text-[10px] text-success font-semibold mt-1">Confirmed Student Receipts</p>
-            </div>
-          </Card>
-
-          <Card variant="glass" className="p-4 border-primary/20 bg-primary-soft/30 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Active Students</span>
-              <div className="p-2 bg-primary-soft rounded-lg text-primary">
-                <Users className="w-4 h-4" />
-              </div>
-            </div>
-            <div>
-              <div className="text-2xl font-black text-foreground">{students.length}</div>
-              <p className="text-[10px] text-muted-foreground font-semibold mt-1">Enrolled across all batches</p>
-            </div>
-          </Card>
-
-          <Card variant="glass" className="p-4 border-indigo/20 bg-primary-soft/20 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total Batches</span>
-              <div className="p-2 bg-primary-soft rounded-lg text-primary">
-                <BookOpen className="w-4 h-4" />
-              </div>
-            </div>
-            <div>
-              <div className="text-2xl font-black text-foreground">{batches.length}</div>
-              <div className="flex items-center gap-2 text-[10px] font-bold mt-1">
-                <span className="text-primary">{runningBatches.length} Running</span>
-                <span className="text-muted-foreground">•</span>
-                <span className="text-muted-foreground">{upcomingBatches.length} Upcoming</span>
-              </div>
-            </div>
-          </Card>
-
-          <Card variant="glass" className="p-4 border-warning/20 bg-warning-soft/20 flex flex-col justify-between">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Pending Balance</span>
-              <div className="p-2 bg-warning-soft rounded-lg text-warning">
-                <Wallet className="w-4 h-4" />
-              </div>
-            </div>
-            <div>
-              <div className="text-2xl font-black text-warning">{formatCurrency(balanceRemaining)}</div>
-              <p className="text-[10px] text-muted-foreground font-semibold mt-1">From {formatCurrency(totalFeesExpected)} total fees</p>
-            </div>
-          </Card>
-        </div>
-
-        {/* Overview Dual Panels: Batches Snapshot & Recent Enrollments */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Panel: Batches Snapshot */}
-          <Card variant="glass" className="p-5 border-border space-y-4">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-                <Layers className="w-4 h-4 text-primary" />
-                <span>Active & Upcoming Batches</span>
-              </h3>
-              <button
-                onClick={() => setActiveTab('academy_batches')}
-                className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <span>View All ({batches.length})</span>
-                <ArrowUpRight className="w-3 h-3" />
-              </button>
-            </div>
-
-            <div className="space-y-2.5">
-              {batches.slice(0, 5).map(b => {
-                const enrolled = students.filter(s => s.batch_id === b.id).length;
-                const total = b.total_seats || 30;
-                const balance = Math.max(0, total - enrolled);
-                const isUpcoming = (b.status || '').toLowerCase() === 'upcoming';
-                return (
-                  <div key={b.id} className="p-3 rounded-xl border border-border bg-muted/40 hover:bg-muted/70 transition-all flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-foreground">{b.batch_name}</span>
-                        <Badge variant={isUpcoming ? 'warning' : 'success'} className="text-[9px] py-0">
-                          {b.status}
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground">({b.batch_type})</span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">Course Fee: {formatCurrency(b.fee_amount || 25000)}</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="flex items-center gap-2 font-mono text-xs">
-                        <span className="font-bold text-success">{enrolled} Filled</span>
-                        <span className="text-muted-foreground">/</span>
-                        <span className="font-bold text-primary">{balance} Left</span>
-                      </div>
-                      <span className="text-[9px] text-muted-foreground">Total: {total} seats</span>
-                    </div>
-                  </div>
-                );
-              })}
-              {batches.length === 0 && (
-                <div className="py-8 text-center text-xs text-muted-foreground">
-                  No batches created yet. Click "Manage Batches" to create your first batch.
-                </div>
-              )}
-            </div>
-          </Card>
-
-          {/* Right Panel: Recent Student Enrollments */}
-          <Card variant="glass" className="p-5 border-border space-y-4">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-xs font-bold text-foreground uppercase tracking-wider flex items-center gap-2">
-                <Users className="w-4 h-4 text-success" />
-                <span>Recent Student Registrations</span>
-              </h3>
-              <button
-                onClick={() => setActiveTab('academy_students')}
-                className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <span>Students Hub ({students.length})</span>
-                <ArrowUpRight className="w-3 h-3" />
-              </button>
-            </div>
-
-            <div className="space-y-2.5">
-              {students.slice(0, 5).map(s => {
-                const batch = batches.find(b => b.id === s.batch_id);
-                const paid = installments.filter(i => i.student_id === s.id).reduce((sum, i) => sum + Number(i.amount_paid || 0), 0);
-                return (
-                  <div key={s.id} className="p-3 rounded-xl border border-border bg-muted/40 hover:bg-muted/70 transition-all flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-foreground">{s.student_name}</span>
-                        <span className="font-mono text-[9px] text-muted-foreground px-1.5 py-0.5 rounded bg-muted border border-border">{s.registration_number}</span>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {batch ? batch.batch_name : 'Assigned Batch'} • {s.phone || 'No phone'}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs font-extrabold text-success">{formatCurrency(paid)}</div>
-                      <span className="text-[9px] text-muted-foreground">of {formatCurrency(s.total_fees)}</span>
-                    </div>
-                  </div>
-                );
-              })}
-              {students.length === 0 && (
-                <div className="py-8 text-center text-xs text-muted-foreground">
-                  No students registered yet. Click "Register Student" to enroll.
-                </div>
-              )}
-            </div>
-          </Card>
-        </div>
-      </div>
+      <AcademyMasterDashboard
+        batches={batches}
+        students={students}
+        installments={installments}
+        attendances={attendances}
+        staffList={staffList}
+        activeStaff={activeStaff}
+        isAdminMode={isAdminMode}
+        onNavigateToBatches={() => setActiveTab('academy_batches')}
+        onNavigateToStudents={(_batchId) => {
+          setActiveTab('academy_students');
+        }}
+        onNavigateToAttendance={(_batchId) => {
+          setActiveTab('academy_attendance');
+        }}
+        onNavigateToReports={(_counselorId) => {
+          setActiveTab('academy_reports');
+        }}
+        onNavigateToFinances={() => setActiveTab('finance')}
+        onEnrollStudent={(targetBatch) => {
+          setTargetBatchForEnroll(targetBatch || null);
+          setIsUnifiedEnrollOpen(true);
+        }}
+        onRecordPayment={(student) => {
+          setSelectedStudentForFee(student);
+          setIsInstallmentModalOpen(true);
+        }}
+        onRefreshData={fetchAcademyData}
+      />
     );
   };
 
@@ -1205,6 +1024,7 @@ export const AcademyDashboard: React.FC = () => {
       const bStudents = filtered.filter(s => s.batch_id === b.id);
       const isUpcoming = (b.status || '').toLowerCase() === 'upcoming';
       const isRunning = (b.status || '').toLowerCase() === 'running';
+      const isCompleted = (b.status || '').toLowerCase() === 'completed';
       const totalEnrolled = bStudents.length;
       const totalCapacity = b.total_seats || 30;
       const totalBatchFees = bStudents.reduce((sum, s) => sum + (Number(s.total_fees) || 0), 0);
@@ -1219,6 +1039,7 @@ export const AcademyDashboard: React.FC = () => {
         students: bStudents,
         isUpcoming,
         isRunning,
+        isCompleted,
         totalEnrolled,
         totalCapacity,
         totalBatchFees,
@@ -1477,7 +1298,7 @@ export const AcademyDashboard: React.FC = () => {
             </Card>
           ) : (
             <div className="space-y-6">
-            {visibleBatches.map(({ batch, students: bStudents, isUpcoming, isRunning, totalEnrolled, totalCapacity, totalBatchPaid, totalBatchDue }) => (
+            {visibleBatches.map(({ batch, students: bStudents, isUpcoming, isRunning, isCompleted, totalEnrolled, totalCapacity, totalBatchPaid, totalBatchDue }) => (
               <Card
                 key={batch.id}
                 variant="glass"
@@ -1486,6 +1307,8 @@ export const AcademyDashboard: React.FC = () => {
                     ? 'border-emerald-500/30 bg-emerald-500/[0.02]'
                     : isUpcoming
                     ? 'border-amber-500/30 bg-amber-500/[0.02]'
+                    : isCompleted
+                    ? 'border-purple-500/30 bg-purple-500/[0.02]'
                     : 'border-border'
                 }`}
               >
@@ -1495,6 +1318,8 @@ export const AcademyDashboard: React.FC = () => {
                     ? 'bg-emerald-500/10 border-emerald-500/20'
                     : isUpcoming
                     ? 'bg-amber-500/10 border-amber-500/20'
+                    : isCompleted
+                    ? 'bg-purple-500/10 border-purple-500/20'
                     : 'bg-muted-2 border-border'
                 }`}>
                   <div className="space-y-1">
@@ -1503,10 +1328,10 @@ export const AcademyDashboard: React.FC = () => {
                         {batch.batch_name}
                       </span>
                       <Badge
-                        variant={isRunning ? 'success' : isUpcoming ? 'warning' : 'info'}
+                        variant={isRunning ? 'success' : isUpcoming ? 'warning' : isCompleted ? 'purple' : 'info'}
                         className="text-[10px] font-bold uppercase"
                       >
-                        {isRunning ? '● Active Class' : isUpcoming ? 'Upcoming' : batch.status}
+                        {isRunning ? '● Active Class' : isUpcoming ? 'Upcoming' : isCompleted ? '🎓 Completed' : batch.status}
                       </Badge>
                       <Badge
                         variant={batch.batch_type === 'Online' ? 'purple' : 'info'}
@@ -1574,6 +1399,26 @@ export const AcademyDashboard: React.FC = () => {
                           Complete Batch
                         </button>
                       </div>
+                    )}
+                    {isAdminMode && isCompleted && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!confirm(`Re-open completed batch "${batch.batch_name}" back to Running status?`)) return;
+                          await fetch(`/supabase-admin/rest/v1/batches?id=eq.${batch.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ status: 'running' })
+                          });
+                          await fetchAcademyData();
+                          window.dispatchEvent(new CustomEvent('batches_data_changed'));
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/40 transition-colors cursor-pointer flex items-center gap-1"
+                        title="Re-open Batch back to Active/Running status"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>Re-open</span>
+                      </button>
                     )}
                     {isAdminMode && isUpcoming && (
                       <button
@@ -1948,7 +1793,29 @@ export const AcademyDashboard: React.FC = () => {
                         </div>
                         <p className="text-[10px] text-muted-foreground mt-0.5">{new Date(inst.payment_date).toLocaleDateString()} • {inst.payment_method}</p>
                       </div>
-                      {inst.notes && <p className="text-[10px] text-muted-foreground italic max-w-[120px] truncate" title={inst.notes}>{inst.notes}</p>}
+                      <div className="flex items-center gap-2">
+                        {inst.notes && <p className="text-[10px] text-muted-foreground italic max-w-[120px] truncate" title={inst.notes}>{inst.notes}</p>}
+                        {canManageStudents && (
+                          <div className="flex items-center gap-1 pl-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditInstallment(inst)}
+                              className="p-1 rounded text-muted-foreground hover:text-blue-400 hover:bg-blue-500/10 transition-colors cursor-pointer"
+                              title="Edit payment installment"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteInstallment(inst)}
+                              className="p-1 rounded text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                              title="Delete payment installment"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                   {installments?.filter(i => i.student_id === selectedStudentView.id).length === 0 && (
@@ -1984,12 +1851,16 @@ export const AcademyDashboard: React.FC = () => {
             <div>
               <div className="flex items-center gap-3 mb-2">
                 <div className="p-2 bg-primary-soft rounded-lg">
-                  <BookOpen className="w-5 h-5 text-primary" />
+                  {isTutor ? <UserCheck className="w-5 h-5 text-primary" /> : <BookOpen className="w-5 h-5 text-primary" />}
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight">Academy ERP</h1>
+                <h1 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight">
+                  {isTutor ? 'Student Attendance Registry' : 'Academy ERP'}
+                </h1>
               </div>
               <p className="text-sm text-muted-foreground max-w-xl">
-                Manage batches, student registrations, fee tracking, and academy finances.
+                {isTutor 
+                  ? 'Daily student attendance marking, past log auditing, and official PDF reporting for your assigned academy batches.'
+                  : 'Manage batches, student registrations, fee tracking, and academy finances.'}
               </p>
             </div>
 
@@ -2005,80 +1876,80 @@ export const AcademyDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* Academy Sub-Navigation Tabs (Visible for Admins & Counselors) */}
+          {!isTutor && (
+            <div className="flex items-center gap-2 border-b border-border/80 overflow-x-auto pb-2.5 scrollbar-none">
+              <button
+                onClick={() => setActiveTab('academy_overview')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'academy_overview' || !['academy_batches', 'academy_students', 'academy_attendance', 'academy_reports'].includes(activeTab)
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                <GraduationCap className="w-4 h-4" />
+                <span>Overview</span>
+              </button>
 
+              <button
+                onClick={() => setActiveTab('academy_batches')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'academy_batches'
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                <Layers className="w-4 h-4" />
+                <span>Academy Batches</span>
+                {batches.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-background/30 font-mono font-bold">
+                    {batches.length}
+                  </span>
+                )}
+              </button>
 
-          {/* Academy Sub-Navigation Tabs */}
-          <div className="flex items-center gap-2 border-b border-border/80 overflow-x-auto pb-2.5 scrollbar-none">
-            <button
-              onClick={() => setActiveTab('academy_overview')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'academy_overview' || !['academy_batches', 'academy_students', 'academy_attendance', 'academy_reports'].includes(activeTab)
-                  ? 'bg-primary text-primary-foreground shadow-md'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              <GraduationCap className="w-4 h-4" />
-              <span>Overview</span>
-            </button>
+              <button
+                onClick={() => setActiveTab('academy_students')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'academy_students'
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                <span>Students Hub</span>
+                {students.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-background/30 font-mono font-bold">
+                    {students.length}
+                  </span>
+                )}
+              </button>
 
-            <button
-              onClick={() => setActiveTab('academy_batches')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'academy_batches'
-                  ? 'bg-primary text-primary-foreground shadow-md'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              <Layers className="w-4 h-4" />
-              <span>Academy Batches</span>
-              {batches.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] bg-background/30 font-mono font-bold">
-                  {batches.length}
-                </span>
-              )}
-            </button>
+              <button
+                onClick={() => setActiveTab('academy_attendance')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'academy_attendance'
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                <UserCheck className="w-4 h-4" />
+                <span>Attendance</span>
+              </button>
 
-            <button
-              onClick={() => setActiveTab('academy_students')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'academy_students'
-                  ? 'bg-primary text-primary-foreground shadow-md'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>Students Hub</span>
-              {students.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] bg-background/30 font-mono font-bold">
-                  {students.length}
-                </span>
-              )}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('academy_attendance')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'academy_attendance'
-                  ? 'bg-primary text-primary-foreground shadow-md'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>Attendance</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('academy_reports')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'academy_reports'
-                  ? 'bg-primary text-primary-foreground shadow-md'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4" />
-              <span>Counselor Reports</span>
-            </button>
-          </div>
+              <button
+                onClick={() => setActiveTab('academy_reports')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'academy_reports'
+                    ? 'bg-primary text-primary-foreground shadow-md'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                <TrendingUp className="w-4 h-4" />
+                <span>Counselor Reports</span>
+              </button>
+            </div>
+          )}
 
           {/* Render Active Sub-Section (Default: Overview) */}
           <div className="mt-6">
@@ -2166,6 +2037,20 @@ export const AcademyDashboard: React.FC = () => {
             <p className="text-xs text-muted-foreground mb-4">Update registration record, package fee, or assigned counselor.</p>
 
             <form onSubmit={handleSaveEditStudent} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block text-[11px] font-bold text-muted-foreground uppercase mb-1">
+                  Student Registration Code (ID)
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. TECHADSA12025082"
+                  value={editStudentForm.student_id_code}
+                  onChange={(e) => setEditStudentForm({ ...editStudentForm, student_id_code: e.target.value.toUpperCase() })}
+                  className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-foreground focus:outline-none focus:border-primary font-mono font-bold"
+                />
+              </div>
+
               <div>
                 <label className="block text-[11px] font-bold text-muted-foreground uppercase mb-1">Student Full Name</label>
                 <input
@@ -2324,6 +2209,19 @@ export const AcademyDashboard: React.FC = () => {
             <h2 className="text-xl font-black text-foreground mb-6">Register Student</h2>
             <form onSubmit={handleRegisterStudent} className="space-y-4">
               <div>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1 flex items-center justify-between">
+                  <span>Student / Registration Code</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">Optional</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Auto-generated if blank (e.g. TECHADSA12025082)"
+                  value={studentForm.student_id_code}
+                  onChange={e => setStudentForm({...studentForm, student_id_code: e.target.value.toUpperCase()})}
+                  className="w-full bg-muted-2 border border-border rounded-lg px-3 py-2 text-foreground font-mono font-bold outline-none"
+                />
+              </div>
+              <div>
                 <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Student Name</label>
                 <input required type="text" value={studentForm.name} onChange={e => setStudentForm({...studentForm, name: e.target.value})} className="w-full bg-muted-2 border border-border rounded-lg px-3 py-2 text-foreground outline-none" />
               </div>
@@ -2428,6 +2326,82 @@ export const AcademyDashboard: React.FC = () => {
                 <Button type="submit" disabled={isUploadingProof} className="w-full">
                   {isUploadingProof ? 'Uploading & Saving...' : 'Save Payment'}
                 </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
+      )}
+
+      {/* EDIT INSTALLMENT MODAL */}
+      {isEditInstallmentModalOpen && editingInstallment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <Card variant="glass" className="w-full max-w-md p-6 border-border shadow-2xl relative">
+            <button
+              onClick={() => { setIsEditInstallmentModalOpen(false); setEditingInstallment(null); }}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground cursor-pointer transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <h3 className="text-base font-black text-foreground mb-1">Edit Payment Record</h3>
+            <p className="text-xs text-muted-foreground mb-4">Update payment amount, historical date, or payment method.</p>
+
+            <form onSubmit={handleSaveEditInstallment} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Amount Paid (₹) *</label>
+                <input
+                  required
+                  type="number"
+                  min="1"
+                  value={editInstallmentForm.amount}
+                  onChange={e => setEditInstallmentForm({ ...editInstallmentForm, amount: e.target.value })}
+                  className="w-full bg-muted-2 border border-border rounded-lg px-3 py-2 text-foreground text-lg font-bold outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Payment Date *</label>
+                  <input
+                    required
+                    type="date"
+                    value={editInstallmentForm.date}
+                    onChange={e => setEditInstallmentForm({ ...editInstallmentForm, date: e.target.value })}
+                    className="w-full bg-muted-2 border border-border rounded-lg px-3 py-2 text-foreground outline-none cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Method *</label>
+                  <select
+                    value={editInstallmentForm.method}
+                    onChange={e => setEditInstallmentForm({ ...editInstallmentForm, method: e.target.value })}
+                    className="w-full bg-muted-2 border border-border rounded-lg px-3 py-2 text-foreground outline-none cursor-pointer"
+                  >
+                    <option value="UPI">UPI</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">Notes / Transaction ID</label>
+                <textarea
+                  value={editInstallmentForm.notes}
+                  onChange={e => setEditInstallmentForm({ ...editInstallmentForm, notes: e.target.value })}
+                  className="w-full bg-muted-2 border border-border rounded-lg px-3 py-2 text-foreground outline-none h-20 resize-none"
+                  placeholder="Reference or notes"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => { setIsEditInstallmentModalOpen(false); setEditingInstallment(null); }}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <Button type="submit" className="font-bold">Save Changes</Button>
               </div>
             </form>
           </Card>

@@ -19,6 +19,27 @@ export interface Staff {
   monthly_targets?: any;
   notice_period_days: number;
   status?: 'ACTIVE' | 'INACTIVE' | 'RESIGNED';
+  starting_salary?: number;
+  current_salary?: number;
+  offer_letter_url?: string;
+  offer_letter_name?: string;
+  offer_letter_uploaded_at?: string;
+  bank_name?: string;
+  bank_account_no?: string;
+  bank_ifsc?: string;
+  pan_number?: string;
+  upi_id?: string;
+  resignation_status?: 'ACTIVE' | 'SERVING_NOTICE' | 'RESIGNED';
+  resignation_date?: string;
+  last_working_day?: string;
+  resignation_reason?: string;
+  is_training?: boolean;
+  training_start_date?: string;
+  training_end_date?: string;
+  training_duration_days?: number;
+  training_commission_rate?: number;
+  is_sales_manager?: boolean;
+  assigned_executive_ids?: string[];
   
   // Joined fields for display
   department_name?: string;
@@ -113,6 +134,92 @@ export interface StaffProfile {
   weekly_off_day: string;
   created_at: string;
   base_salary?: number;
+  starting_salary?: number;
+  current_salary?: number;
+  offer_letter_url?: string;
+  offer_letter_name?: string;
+  offer_letter_uploaded_at?: string;
+  bank_name?: string;
+  bank_account_no?: string;
+  bank_ifsc?: string;
+  pan_number?: string;
+  upi_id?: string;
+  resignation_status?: 'ACTIVE' | 'SERVING_NOTICE' | 'RESIGNED';
+  resignation_date?: string;
+  notice_period_days?: number;
+  last_working_day?: string;
+  resignation_reason?: string;
+  is_training?: boolean;
+  training_start_date?: string;
+  training_end_date?: string;
+  training_duration_days?: number;
+  training_commission_rate?: number;
+  is_sales_manager?: boolean;
+  assigned_executive_ids?: string[];
   status?: 'ACTIVE' | 'INACTIVE' | 'RESIGNED';
   password?: string;
+}
+
+export interface SalesManagerConfig {
+  is_sales_manager: boolean;
+  assigned_executive_ids?: string[];
+  assigned_at?: string;
+  assigned_by?: string;
+}
+
+export interface SalaryIncrement {
+  id: string;
+  staff_id: string;
+  previous_salary: number;
+  new_salary: number;
+  increment_amount: number;
+  increment_percentage?: number;
+  effective_from: string; // YYYY-MM-DD
+  reason?: string;
+  approved_by?: string;
+  created_at?: string;
+}
+
+export interface MonthlyPayslip {
+  id: string;
+  staff_id: string;
+  month_key: string; // YYYY-MM
+  month_name: string; // e.g. "November 2026"
+  base_salary: number;
+  total_month_days: number;
+  total_working_days: number;
+  present_days: number;
+  weekly_offs: number;
+  holidays: number;
+  medical_leaves: number;
+  half_days: number;
+  unpaid_leaves: number;
+  payable_days: number;
+  daily_rate: number;
+  gross_earnings: number;
+  leave_deductions: number;
+  half_day_deductions: number;
+  other_deductions: number;
+  incentives: number;
+  training_commission?: number;
+  training_sales_total?: number;
+  training_days_waived?: number;
+  base_salary_waived?: number;
+  working_days?: number;
+  late_days?: number;
+  total_deductions?: number;
+  net_salary_in_words?: string;
+  bank_name?: string;
+  bank_account_no?: string;
+  bank_ifsc?: string;
+  pan_number?: string;
+  upi_id?: string;
+  attendance_breakdown?: any[];
+  net_salary: number;
+  payment_status: 'PENDING' | 'APPROVED' | 'DISBURSED';
+  disbursement_date?: string;
+  payment_method?: string;
+  transaction_ref?: string;
+  notes?: string;
+  created_at?: string;
 }

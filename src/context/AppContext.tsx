@@ -7,7 +7,7 @@ import { extensionForBlob } from '../utils/imageUtils';
 import { savePunchMetaToStorage, enrichAttendanceRecords, calculateWorkingHours, evaluatePunchStatus, fetchStaffAttendanceRecords, getPunchMeta } from '../utils/attendanceStorage';
 import { getLinkedStaffIds } from '../utils/staffAliases';
 
-export type TabType = 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_reports' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets';
+export type TabType = 'sales' | 'attendance' | 'leads' | 'staff-history' | 'academy_overview' | 'academy_batches' | 'academy_students' | 'academy_attendance' | 'academy_reports' | 'academy_finances' | 'academy_staff' | 'history' | 'staff' | 'finance' | 'reports' | 'withdrawals' | 'expense_history' | 'assets' | 'salary_docs';
 
 interface AppContextType {
   activeStaff: Staff | null;
@@ -81,6 +81,7 @@ const TAB_PATHS: Record<string, string> = {
   academy_reports: '/academy/reports',
   academy_finances: '/academy/finances',
   academy_staff: '/academy/staff',
+  salary_docs: '/salary-hr',
 };
 
 const PATH_TABS: Record<string, string> = Object.fromEntries(
@@ -91,6 +92,7 @@ const DEFAULT_TAB = 'sales';
 
 const tabForPath = (pathname: string): string => {
   const clean = pathname.replace(/\/+$/, '') || '/';
+  if (clean === '/salary-hr' || clean === '/salary' || clean === '/hr') return 'salary_docs';
   return PATH_TABS[clean] || DEFAULT_TAB;
 };
 
@@ -588,20 +590,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     if (isLoading) return; // Prevent clearing today's punch state during initial boot / auth load
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-    const todayRecord = attendance.find((a) => a.attendance_date === todayStr);
+    const activeId = activeStaff?.id;
+    
+    // Check if attendance array has today's record for this active staff
+    const todayRecord = attendance.find((a) => 
+      a.attendance_date === todayStr && 
+      (a.staff_id === activeId || (activeId && a.id?.includes(activeId)))
+    );
+
     if (todayRecord) {
-      setTodayAttendance(todayRecord);
+      const cleanPunchOut = todayRecord.punch_out && todayRecord.punch_out !== '-' && todayRecord.punch_out !== 'Missed Punch Out'
+        ? todayRecord.punch_out
+        : undefined;
+      setTodayAttendance({
+        ...todayRecord,
+        punch_out: cleanPunchOut
+      });
     } else {
-      const activeId = activeStaff?.id;
       if (activeId) {
         const local = getStoredPunch(activeId, todayStr);
         if (local && local.punch_in) {
+          const cleanPunchOut = local.punch_out && local.punch_out !== '-' && local.punch_out !== 'Missed Punch Out'
+            ? local.punch_out
+            : undefined;
           setTodayAttendance({
             id: local.id || `local-${todayStr}`,
             staff_id: activeId,
             attendance_date: todayStr,
             punch_in: local.punch_in,
-            punch_out: local.punch_out,
+            punch_out: cleanPunchOut,
             status: (local.status || 'PRESENT') as any,
             selfie_url: local.selfie_url,
             working_hours: local.working_hours,
