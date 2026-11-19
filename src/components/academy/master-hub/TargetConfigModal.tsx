@@ -59,8 +59,8 @@ export const TargetConfigModal: React.FC<TargetConfigModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-      <Card variant="glass" className="w-full max-w-2xl p-6 border-border shadow-2xl relative max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in overflow-y-auto">
+      <Card variant="glass" className="w-full max-w-2xl p-4 sm:p-6 border-border shadow-2xl relative max-h-[90vh] flex flex-col my-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-4 border-b border-border">
           <div className="flex items-center gap-3">

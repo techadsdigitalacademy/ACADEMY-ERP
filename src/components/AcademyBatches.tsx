@@ -559,12 +559,12 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
   const handleOpenEditModal = (batch: BatchItem) => {
     setEditingBatch(batch);
     setBatchForm({
-      batch_name: batch.batch_name,
-      course_name: batch.course_name,
-      mode: batch.mode.toLowerCase(),
-      total_seats: String(batch.total_seats),
-      fee_amount: String(batch.fee_amount),
-      status: batch.status.toLowerCase(),
+      batch_name: batch.batch_name || '',
+      course_name: batch.course_name || '',
+      mode: (batch.mode || 'offline').toLowerCase(),
+      total_seats: String(batch.total_seats ?? 30),
+      fee_amount: String(batch.fee_amount ?? 25000),
+      status: (batch.status || 'upcoming').toLowerCase(),
       start_date: batch.start_date || new Date().toISOString().split('T')[0],
       tutor_id: batch.tutor_id || '',
       selectedCounselorIds: batch.assigned_counselors || []
@@ -595,54 +595,107 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       fee_amount: parseFloat(batchForm.fee_amount) || 0,
       status: batchForm.status.toLowerCase(), // 'upcoming', 'running', or 'completed'
       start_date: finalStartDate,
-      tutor_id: batchForm.tutor_id || null
+      tutor_id: batchForm.tutor_id ? batchForm.tutor_id : null
     };
 
+    // Find tutor name for instant UI update
+    const staffMap = new Map<string, string>();
+    staffList.forEach(s => staffMap.set(s.id, s.full_name));
+    const tutorName = payload.tutor_id ? staffMap.get(payload.tutor_id) || 'Unassigned Tutor' : 'Unassigned Tutor';
+
+    // 1. Immediate optimistic UI update so user experiences zero-lag response
+    if (editingBatch) {
+      setBatches(prev => prev.map(b => b.id === editingBatch.id ? {
+        ...b,
+        ...payload,
+        tutor_name: tutorName
+      } : b));
+    }
+
     try {
-      const executeBatchWrite = async (action: 'insert' | 'update', batchPayload: any, batchId?: string) => {
-        const url = action === 'insert' ? `/supabase-admin/rest/v1/batches` : `/supabase-admin/rest/v1/batches?id=eq.${batchId}`;
-        const method = action === 'insert' ? 'POST' : 'PATCH';
-        const res = await fetch(url, {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-            'Prefer': 'return=representation'
-          },
-          body: JSON.stringify(action === 'insert' ? [batchPayload] : batchPayload)
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || `Failed to ${action} batch`);
-        }
-        return await res.json();
-      };
-
       if (editingBatch) {
-        let updateRes = await supabase
-          .from('batches')
-          .update(payload)
-          .eq('id', editingBatch.id);
+        // Step 1: Update via /supabase-admin proxy (uses service key to bypass RLS)
+        let saved = false;
+        try {
+          const res = await fetch(`/supabase-admin/rest/v1/batches?id=eq.${editingBatch.id}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) {
+            const data = await res.json().catch(() => []);
+            if (Array.isArray(data) && data.length > 0) {
+              saved = true;
+            }
+          }
+        } catch (adminErr) {
+          console.warn('Admin proxy update error, attempting supabase direct:', adminErr);
+        }
 
-        if (updateRes.error) {
-          await executeBatchWrite('update', payload, editingBatch.id);
+        // Step 2: Fallback to direct supabase client if needed
+        if (!saved) {
+          const { error: updateErr } = await supabase
+            .from('batches')
+            .update(payload)
+            .eq('id', editingBatch.id);
+          if (updateErr) throw updateErr;
         }
       } else {
-        let insertRes = await supabase
-          .from('batches')
-          .insert([payload])
-          .select();
+        // Step 1: Create batch through proxy /supabase-admin first
+        let createdRecord: any = null;
+        try {
+          const res = await fetch('/supabase-admin/rest/v1/batches', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Prefer': 'return=representation'
+            },
+            body: JSON.stringify([payload])
+          });
+          if (res.ok) {
+            const data = await res.json().catch(() => []);
+            if (Array.isArray(data) && data.length > 0) {
+              createdRecord = data[0];
+            }
+          }
+        } catch (adminErr) {
+          console.warn('Admin proxy insert error, attempting supabase direct:', adminErr);
+        }
 
-        if (insertRes.error) {
-          await executeBatchWrite('insert', payload);
+        // Step 2: Fallback to direct supabase client if needed
+        if (!createdRecord) {
+          const { data: insertData, error: insertErr } = await supabase
+            .from('batches')
+            .insert([payload])
+            .select();
+          if (insertErr) throw insertErr;
+          if (insertData && insertData.length > 0) {
+            createdRecord = insertData[0];
+          }
+        }
+
+        if (createdRecord) {
+          const newFormattedBatch: BatchItem = {
+            ...createdRecord,
+            mode: (createdRecord.mode || 'offline').toLowerCase(),
+            status: (createdRecord.status || 'upcoming').toLowerCase(),
+            tutor_name: tutorName
+          };
+          setBatches(prev => [newFormattedBatch, ...prev]);
         }
       }
 
       setIsBatchModalOpen(false);
+      setEditingBatch(null);
       await loadData(true);
       window.dispatchEvent(new CustomEvent('batches_data_changed'));
     } catch (err: any) {
       console.error('Error saving batch:', err);
       setFormError(err.message || 'Failed to save batch. Please try again.');
+      await loadData(true);
     } finally {
       setIsSubmittingBatch(false);
     }
@@ -758,14 +811,14 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
     <div className="space-y-8 animate-fade-in pb-16">
 
       {/* 1. Header Banner & Quick Action */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-card via-card/90 to-card/70 border border-border p-6 rounded-2xl shadow-xl backdrop-blur-md">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gradient-to-r from-card via-card/90 to-card/70 border border-border p-4 sm:p-6 rounded-2xl shadow-xl backdrop-blur-md">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary">
-              <Layers className="w-6 h-6" />
+            <div className="p-2 sm:p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary">
+              <Layers className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h2 className="text-2xl font-black tracking-tight text-foreground flex items-center gap-2">
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-foreground flex items-center gap-2">
                 Academy Batches
                 <span className="text-xs font-mono font-normal px-2.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/20">
                   {batches.length} total
@@ -778,7 +831,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <Button
             variant="secondary"
             onClick={() => loadData(true)}
@@ -810,7 +863,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
               <Button
                 id="create-new-batch-btn"
                 onClick={handleOpenCreateModal}
-                className="flex items-center gap-2 bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-primary/30 font-bold px-4 py-2.5 rounded-xl text-sm cursor-pointer"
+                className="flex items-center gap-2 bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:shadow-primary/30 font-bold px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Create New Batch</span>
@@ -821,10 +874,10 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       </div>
 
       {/* 2. Aggregate KPI Overview Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
 
         {/* Total Batches Card */}
-        <Card variant="glass" className="p-4 border-border hover:border-primary/40 transition-all duration-300">
+        <Card variant="glass" className="p-3.5 sm:p-4 border-border hover:border-primary/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Total Batches</span>
             <div className="p-2 rounded-lg bg-indigo-500/10 text-indigo-400">
@@ -840,7 +893,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
         </Card>
 
         {/* Upcoming Seats Capacity Card */}
-        <Card variant="glass" className="p-4 border-amber-500/20 bg-amber-500/5 hover:border-amber-500/40 transition-all duration-300">
+        <Card variant="glass" className="p-3.5 sm:p-4 border-amber-500/20 bg-amber-500/5 hover:border-amber-500/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">Upcoming Capacity</span>
             <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400">
@@ -856,7 +909,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
         </Card>
 
         {/* Running Batch Fee Collections */}
-        <Card variant="glass" className="p-4 border-emerald-500/20 bg-emerald-500/5 hover:border-emerald-500/40 transition-all duration-300">
+        <Card variant="glass" className="p-3.5 sm:p-4 border-emerald-500/20 bg-emerald-500/5 hover:border-emerald-500/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider">Active Batch Collections</span>
             <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400">
@@ -872,7 +925,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
         </Card>
 
         {/* Running Batch Attendance Rate */}
-        <Card variant="glass" className="p-4 border-primary/20 bg-primary/5 hover:border-primary/40 transition-all duration-300">
+        <Card variant="glass" className="p-3.5 sm:p-4 border-primary/20 bg-primary/5 hover:border-primary/40 transition-all duration-300">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Avg Class Attendance</span>
             <div className="p-2 rounded-lg bg-primary/20 text-primary">
@@ -1115,8 +1168,8 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                     </div>
 
                     {/* Bottom Action Footer */}
-                    <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2 mt-2">
-                      <div className="flex items-center gap-1.5">
+                    <div className="pt-3 border-t border-border/60 flex flex-wrap items-center justify-between gap-2 mt-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {isAdminMode && (
                           <>
                             <button
@@ -1124,7 +1177,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                                 setActivatingBatch(batch);
                                 setManualStartDate(new Date().toISOString().slice(0, 10));
                               }}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 flex items-center gap-1 transition-all cursor-pointer"
+                              className="h-8 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
                               title="Start Classes (Change status to Running)"
                             >
                               <PlayCircle className="w-3.5 h-3.5" />
@@ -1132,14 +1185,14 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                             </button>
                             <button
                               onClick={() => handleOpenEditModal(batch)}
-                              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+                              className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border border-border/60 transition-colors cursor-pointer"
                               title="Edit Batch"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleDeleteBatch(batch.id, batch.batch_name)}
-                              className="p-1.5 text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                              className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 rounded-lg border border-border/60 transition-colors cursor-pointer"
                               title="Delete Batch"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -1152,9 +1205,9 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                         size="sm"
                         onClick={() => handleOpenEnrollModal(batch)}
                         disabled={isFull}
-                        className={`text-xs font-bold flex items-center gap-1.5 rounded-lg ${isFull
+                        className={`h-8 text-xs font-bold flex items-center gap-1.5 px-3 py-1 rounded-lg ml-auto cursor-pointer ${isFull
                             ? 'opacity-50 cursor-not-allowed bg-muted'
-                            : 'bg-primary text-primary-foreground shadow-md'
+                            : 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
                           }`}
                       >
                         <UserPlus className="w-3.5 h-3.5" />
@@ -1174,7 +1227,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       {/* ========================================================================= */}
       {(statusFilter === 'all' || statusFilter === 'running') && (
         <div className="space-y-5 pt-4 animate-fade-in" id="active-batches-section">
-          <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3.5 bg-gradient-to-r from-emerald-500/[0.08] via-transparent to-transparent p-3.5 rounded-2xl border border-emerald-500/20">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-emerald-500/20 pb-3.5 bg-gradient-to-r from-emerald-500/[0.08] via-transparent to-transparent p-3.5 rounded-2xl border border-emerald-500/20">
             <div className="flex items-center gap-3">
               <div className="relative flex h-3.5 w-3.5 items-center justify-center">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -1201,7 +1254,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
               <p className="text-xs text-muted-foreground mt-1">Start an upcoming batch when orientation begins!</p>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-6">
               {runningBatches.map(batch => {
                 const stats = batchStatsMap.get(batch.id) || {
                   totalSeats: batch.total_seats || 30,
@@ -1220,16 +1273,16 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                   <Card
                     key={batch.id}
                     variant="glass"
-                    className="p-5 border-emerald-500/30 bg-gradient-to-br from-emerald-500/[0.06] via-card to-card hover:border-emerald-500/70 transition-all duration-300 relative flex flex-col justify-between overflow-hidden shadow-xl shadow-emerald-500/5 group"
+                    className="p-4 sm:p-5 border-emerald-500/30 bg-gradient-to-br from-emerald-500/[0.06] via-card to-card hover:border-emerald-500/70 transition-all duration-300 relative flex flex-col justify-between overflow-hidden shadow-xl shadow-emerald-500/5 group"
                   >
                     {/* Vibrant Active Neon Top Border */}
                     <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 shadow-sm shadow-emerald-500/50" />
 
                     <div>
                       {/* Batch Title & Info */}
-                      <div className="flex items-start justify-between gap-4 mb-4">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
+                      <div className="flex items-start justify-between gap-3 mb-3 sm:mb-4">
+                        <div className="space-y-1 min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                             <Badge variant={batch.mode === 'online' ? 'purple' : 'info'} className="text-[10px] font-bold uppercase">
                               {batch.mode === 'online' ? '🌐 Online' : '🏢 Offline'}
                             </Badge>
@@ -1238,18 +1291,18 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                               Running
                             </Badge>
                           </div>
-                          <h4 className="text-xl font-black text-foreground group-hover:text-primary transition-colors">
+                          <h4 className="text-lg sm:text-xl font-black text-foreground group-hover:text-primary transition-colors truncate">
                             {batch.batch_name}
                           </h4>
-                          <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5">
-                            <GraduationCap className="w-3.5 h-3.5 text-primary" />
-                            {batch.course_name}
+                          <p className="text-xs text-muted-foreground font-semibold flex items-center gap-1.5 truncate">
+                            <GraduationCap className="w-3.5 h-3.5 text-primary shrink-0" />
+                            <span className="truncate">{batch.course_name}</span>
                           </p>
                         </div>
 
-                        <div className="text-right">
+                        <div className="text-right shrink-0">
                           <span className="text-[10px] font-bold uppercase text-muted-foreground block">Tutor</span>
-                          <span className="text-xs font-bold text-foreground truncate max-w-[120px] block">
+                          <span className="text-xs font-bold text-foreground truncate max-w-[110px] sm:max-w-[140px] block" title={batch.tutor_name || 'Unassigned'}>
                             {batch.tutor_name || 'Unassigned'}
                           </span>
                         </div>
@@ -1258,32 +1311,32 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                       {/* ======================================================= */}
                       {/* THREE STATS: Total Students, Fee Collections, Attendance */}
                       {/* ======================================================= */}
-                      <div className="grid grid-cols-3 gap-3 my-4">
+                      <div className="grid grid-cols-3 gap-2 sm:gap-3 my-3 sm:my-4">
 
                         {/* 1. Total Students */}
-                        <div className="p-3 rounded-xl bg-card/80 border border-border shadow-sm flex flex-col justify-between">
+                        <div className="p-2 sm:p-3 rounded-xl bg-card/80 border border-border shadow-xs flex flex-col justify-between">
                           <div className="flex items-center justify-between text-muted-foreground mb-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wider">Students</span>
-                            <Users className="w-3.5 h-3.5 text-primary" />
+                            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">Students</span>
+                            <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
                           </div>
-                          <div className="text-2xl font-black text-foreground">
+                          <div className="text-xl sm:text-2xl font-black text-foreground">
                             {stats.filledSeats}
                           </div>
-                          <span className="text-[10px] text-muted-foreground mt-1">
+                          <span className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5 sm:mt-1 truncate">
                             of {stats.totalSeats} seats
                           </span>
                         </div>
 
                         {/* 2. Fee Collections */}
-                        <div className="p-3 rounded-xl bg-card/80 border border-border shadow-sm flex flex-col justify-between">
+                        <div className="p-2 sm:p-3 rounded-xl bg-card/80 border border-border shadow-xs flex flex-col justify-between">
                           <div className="flex items-center justify-between text-muted-foreground mb-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wider">Collections</span>
-                            <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">Collections</span>
+                            <DollarSign className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400" />
                           </div>
-                          <div className="text-lg font-black text-emerald-400 truncate" title={formatCurrency(stats.totalCollected)}>
+                          <div className="text-sm sm:text-lg font-black text-emerald-400 truncate" title={formatCurrency(stats.totalCollected)}>
                             {formatCurrency(stats.totalCollected)}
                           </div>
-                          <div className="w-full bg-muted-2 rounded-full h-1.5 mt-1 overflow-hidden">
+                          <div className="w-full bg-muted-2 rounded-full h-1 sm:h-1.5 mt-1 overflow-hidden">
                             <div
                               className="bg-emerald-400 h-full rounded-full"
                               style={{ width: `${Math.min(100, stats.collectionPercentage)}%` }}
@@ -1292,16 +1345,16 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                         </div>
 
                         {/* 3. Attendance Percentage */}
-                        <div className="p-3 rounded-xl bg-card/80 border border-border shadow-sm flex flex-col justify-between">
+                        <div className="p-2 sm:p-3 rounded-xl bg-card/80 border border-border shadow-xs flex flex-col justify-between">
                           <div className="flex items-center justify-between text-muted-foreground mb-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wider">Attendance</span>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
+                            <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">Attendance</span>
+                            <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
                           </div>
-                          <div className={`text-2xl font-black ${stats.attendancePercentage >= 80 ? 'text-emerald-400' : stats.attendancePercentage >= 65 ? 'text-amber-400' : 'text-rose-400'
+                          <div className={`text-xl sm:text-2xl font-black ${stats.attendancePercentage >= 80 ? 'text-emerald-400' : stats.attendancePercentage >= 65 ? 'text-amber-400' : 'text-rose-400'
                             }`}>
                             {stats.attendancePercentage}%
                           </div>
-                          <span className="text-[10px] text-muted-foreground mt-1">
+                          <span className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5 sm:mt-1 truncate">
                             {stats.attendanceRecordCount} records
                           </span>
                         </div>
@@ -1313,14 +1366,14 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                     </div>
 
                     {/* Bottom Action Footer for Running Batches */}
-                    <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2 mt-2">
-                      <div className="flex items-center gap-1.5">
+                    <div className="pt-3 border-t border-border/60 flex flex-wrap items-center justify-between gap-2 mt-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         {onNavigateToAttendance && (
                           <Button
                             size="sm"
                             variant="secondary"
                             onClick={() => onNavigateToAttendance(batch.id)}
-                            className="text-xs font-bold border border-border hover:bg-muted text-foreground flex items-center gap-1"
+                            className="h-8 text-xs font-bold border border-border hover:bg-muted text-foreground flex items-center gap-1.5 px-2.5 py-1 cursor-pointer"
                           >
                             <UserCheck className="w-3.5 h-3.5 text-primary" />
                             <span>Attendance</span>
@@ -1332,7 +1385,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                             size="sm"
                             variant="secondary"
                             onClick={() => onNavigateToStudent(batch.id)}
-                            className="text-xs font-bold border border-border hover:bg-muted text-foreground flex items-center gap-1"
+                            className="h-8 text-xs font-bold border border-border hover:bg-muted text-foreground flex items-center gap-1.5 px-2.5 py-1 cursor-pointer"
                           >
                             <Users className="w-3.5 h-3.5 text-primary" />
                             <span>Roster</span>
@@ -1340,7 +1393,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5 ml-auto">
                         {isAdminMode && (
                           <>
                             <button
@@ -1350,24 +1403,26 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                                   handleUpdateBatchStatus(batch.id, 'upcoming');
                                 }
                               }}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 border border-amber-500/30 flex items-center gap-1 transition-all cursor-pointer"
+                              className="h-8 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 border border-amber-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
                               title="Revert Batch back to Upcoming status"
                             >
                               <RotateCcw className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Revert</span>
+                              <span>Revert</span>
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleUpdateBatchStatus(batch.id, 'completed')}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 border border-purple-500/30 flex items-center gap-1 transition-all"
+                              className="h-8 px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 border border-purple-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
                               title="Archive Batch as Completed"
                             >
                               <Award className="w-3.5 h-3.5" />
-                              <span className="hidden sm:inline">Complete</span>
+                              <span>Complete</span>
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleOpenEditModal(batch)}
-                              className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-                              title="Edit Batch"
+                              className="h-8 w-8 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg border border-border/60 transition-colors cursor-pointer"
+                              title="Edit Batch Details"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
@@ -1376,7 +1431,7 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                         <Button
                           size="sm"
                           onClick={() => handleOpenEnrollModal(batch)}
-                          className="text-xs font-bold bg-primary text-primary-foreground flex items-center gap-1"
+                          className="h-8 text-xs font-bold bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-1.5 px-3 py-1 cursor-pointer shadow-sm"
                         >
                           <UserPlus className="w-3.5 h-3.5" />
                           <span>+ Student</span>
@@ -1494,17 +1549,21 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       {/* 7. CREATE / EDIT BATCH MODAL (Requirement 2: All 9 Fields)                */}
       {/* ========================================================================= */}
       {isBatchModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
-          <Card variant="glass" className="w-full max-w-xl p-6 md:p-8 border-border shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <Card variant="glass" className="w-full max-w-xl p-4 sm:p-6 md:p-8 border-border shadow-2xl relative max-h-[90vh] overflow-y-auto my-auto">
             <button
-              onClick={() => setIsBatchModalOpen(false)}
-              className="absolute top-5 right-5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              type="button"
+              onClick={() => {
+                setIsBatchModalOpen(false);
+                setEditingBatch(null);
+              }}
+              className="absolute top-4 sm:top-5 right-4 sm:right-5 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
-            <div className="mb-6">
-              <h2 className="text-xl font-black text-foreground flex items-center gap-2">
+            <div className="mb-5 sm:mb-6 pr-6">
+              <h2 className="text-lg sm:text-xl font-black text-foreground flex items-center gap-2">
                 <Layers className="w-5 h-5 text-primary" />
                 {editingBatch ? 'Edit Academy Batch' : 'Create New Academy Batch'}
               </h2>
@@ -1713,7 +1772,10 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => setIsBatchModalOpen(false)}
+                  onClick={() => {
+                    setIsBatchModalOpen(false);
+                    setEditingBatch(null);
+                  }}
                   disabled={isSubmittingBatch}
                 >
                   Cancel
@@ -1751,8 +1813,8 @@ export const AcademyBatches: React.FC<AcademyBatchesProps> = ({
       {/* 9. START BATCH ACTIVATION MODAL (MANUAL START DATE & TIMELINE)           */}
       {/* ========================================================================= */}
       {activatingBatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-fade-in">
-          <Card variant="glass" className="w-full max-w-md p-6 border border-border shadow-2xl rounded-2xl bg-card space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-background/80 backdrop-blur-sm animate-fade-in overflow-y-auto">
+          <Card variant="glass" className="w-full max-w-md p-4 sm:p-6 border border-border shadow-2xl rounded-2xl bg-card space-y-4 my-auto">
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400">

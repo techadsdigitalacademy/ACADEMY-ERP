@@ -960,14 +960,14 @@ const handleExportBatchPDF = () => {
 return (
   <div className="space-y-6 animate-fade-in">
     {/* 1. Header with Role Info & View Toggle */}
-    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-card border border-border">
+    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 sm:p-5 rounded-2xl bg-card border border-border">
       <div className="flex items-center gap-3">
-        <div className="p-3 rounded-xl bg-primary-soft text-primary border border-primary/20">
-          <GraduationCap className="w-6 h-6" />
+        <div className="p-2.5 sm:p-3 rounded-xl bg-primary-soft text-primary border border-primary/20">
+          <GraduationCap className="w-5 h-5 sm:w-6 sm:h-6" />
         </div>
         <div>
-          <h2 className="text-xl font-black text-foreground tracking-tight flex items-center gap-2">
-            Student Attendance Portal
+          <h2 className="text-lg sm:text-xl font-black text-foreground tracking-tight flex items-center gap-2 flex-wrap">
+            <span>Student Attendance Portal</span>
             {isTutor ? (
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
                 Tutor Portal
@@ -991,10 +991,10 @@ return (
       </div>
 
       {/* View Mode Switcher */}
-      <div className="flex items-center gap-2 bg-muted-2 p-1 rounded-xl border border-border">
+      <div className="flex items-center gap-2 bg-muted-2 p-1 rounded-xl border border-border w-full sm:w-auto justify-between sm:justify-start">
         <button
           onClick={() => setViewMode('daily')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${viewMode === 'daily'
+          className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${viewMode === 'daily'
             ? 'bg-primary text-primary-foreground shadow-sm'
             : 'text-muted-foreground hover:text-foreground'
             }`}
@@ -1004,7 +1004,7 @@ return (
         </button>
         <button
           onClick={() => setViewMode('monthly')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${viewMode === 'monthly'
+          className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${viewMode === 'monthly'
             ? 'bg-primary text-primary-foreground shadow-sm'
             : 'text-muted-foreground hover:text-foreground'
             }`}

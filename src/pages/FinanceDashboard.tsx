@@ -21,6 +21,7 @@ import {
   Star,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
+import { getCollectionMonthKey, getStudentAdmissionMonthKey, hasStudentFeeInRegistry, formatMonthLabel } from '../utils/dateAttribution';
 
 interface Expense {
   id: string;
@@ -151,6 +152,7 @@ export const FinanceDashboard: React.FC = () => {
   const [feeAmount, setFeeAmount] = useState('');
   const [feePaymentMode, setFeePaymentMode] = useState('UPI');
   const [feeInstallmentMonth, setFeeInstallmentMonth] = useState('');
+  const [feePaymentDate, setFeePaymentDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
   const [feeNotes, setFeeNotes] = useState('');
   const [isAddingFee, setIsAddingFee] = useState(false);
 
@@ -223,18 +225,14 @@ export const FinanceDashboard: React.FC = () => {
             allFeeList = (feeCollectionsRes.data || []) as any[];
           }
 
-          const curMonthName = new Date(year, monthIdx - 1).toLocaleString('default', { month: 'long' }).toLowerCase();
           const curFeeList = (allFeeList || []).filter((f: any) => {
-            const dStr = f.payment_date || (f.created_at ? f.created_at.substring(0, 10) : '');
-            if (dStr && dStr >= startOfMonthDateStr && dStr <= endOfMonthDateStr) return true;
-            const instMonth = (f.installment_month || '').toLowerCase();
-            if (instMonth.includes(curMonthName) && (instMonth.includes(String(year)) || !instMonth.match(/\d{4}/))) return true;
-            return false;
+            const feeMonthKey = getCollectionMonthKey(f);
+            return feeMonthKey === selectedLedgerMonth;
           });
 
           const prevFeesList = (allFeeList || []).filter((f: any) => {
-            const dStr = f.payment_date || (f.created_at ? f.created_at.substring(0, 10) : '');
-            return dStr && dStr < startOfMonthDateStr;
+            const feeMonthKey = getCollectionMonthKey(f);
+            return feeMonthKey < selectedLedgerMonth;
           });
 
           let bList = batchesRes.data || [];
@@ -608,17 +606,17 @@ export const FinanceDashboard: React.FC = () => {
         }
       });
 
-      // Also process initial admission deposits paid by students enrolled this month
+      // Also process initial admission deposits paid by students enrolled this month (only if NOT in fee_collections registry)
+      const allKnownFees = [...(bundle.currentFees || []), ...(bundle.prevFees || [])];
       (bundle.studentsData || []).forEach((st: any) => {
         const deposit = Number(st.paid_fee) || 0;
         if (deposit <= 0) return;
 
-        const enrollDate = st.enrollment_date || (st.created_at ? st.created_at.substring(0, 10) : '');
-        const inMonth = enrollDate >= startOfMonthDateStr && enrollDate <= endOfMonthDateStr;
-        if (!inMonth) return;
+        const stuMonthKey = getStudentAdmissionMonthKey(st);
+        if (stuMonthKey !== selectedLedgerMonth) return;
 
-        // Avoid double counting if already logged in fee_collections
-        const hasExistingFee = (bundle.currentFees || []).some((f: any) => String(f.student_id) === String(st.id));
+        // Avoid double counting if already logged in fee_collections registry
+        const hasExistingFee = hasStudentFeeInRegistry(st.id, allKnownFees);
         if (hasExistingFee) return;
 
         const bId = st.batch_id;
@@ -995,15 +993,19 @@ export const FinanceDashboard: React.FC = () => {
     try {
       const dbClient = supabase;
       const parsedAmt = Number(feeAmount);
+      const targetMonthKey = feeInstallmentMonth || selectedLedgerMonth;
+      const effectivePaymentDate = feePaymentDate || (targetMonthKey ? `${targetMonthKey}-15` : new Date().toISOString().slice(0, 10));
+      const targetMonthLabel = formatMonthLabel(targetMonthKey);
 
       const feePayload = {
         student_id: feeStudentId || null,
         batch_id: feeBatchId || null,
         collected_by: feeCounselorId || activeStaff.id,
         amount: parsedAmt,
-        payment_mode: feePaymentMode,
-        installment_month: feeInstallmentMonth || selectedLedgerMonth,
-        notes: feeNotes.trim() || null
+        payment_mode: feePaymentMode.toLowerCase(),
+        installment_month: targetMonthLabel,
+        notes: feeNotes.trim() || null,
+        created_at: new Date(effectivePaymentDate + 'T12:00:00Z').toISOString()
       };
 
       const { error: feeErr } = await dbClient
@@ -1391,34 +1393,49 @@ export const FinanceDashboard: React.FC = () => {
     }
   };
 
-  // Month select options
+  // Month select options with full historical backfill coverage (from 2024 onwards + dynamic data discovery)
   const getLedgerMonthOptions = () => {
-    const options = [];
+    const monthSet = new Set<string>();
     const date = new Date();
     const currentYear = date.getFullYear();
-    
-    let startYear = 2026;
-    let startMonth = 0;
-    
+
+    // Standard span from 2024 to currentYear + 1
+    const startYear = 2024;
     const endYear = currentYear + 1;
-    const endMonth = 11;
-    
-    let y = startYear;
-    let m = startMonth;
-    
-    while (y < endYear || (y === endYear && m <= endMonth)) {
-      const val = `${y}-${String(m + 1).padStart(2, '0')}`;
-      const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-      const label = `${months[m]} ${y}`;
-      options.push({ value: val, label });
-      
-      m++;
-      if (m > 11) {
-        m = 0;
-        y++;
+
+    for (let y = startYear; y <= endYear; y++) {
+      for (let m = 1; m <= 12; m++) {
+        monthSet.add(`${y}-${String(m).padStart(2, '0')}`);
       }
     }
-    return options.reverse();
+
+    // Dynamically include any historical months detected in fee collections
+    (feesList || []).forEach((f: any) => {
+      const ym = getCollectionMonthKey(f);
+      if (ym) monthSet.add(ym);
+    });
+
+    // Dynamically include any historical months from students
+    (studentsList || []).forEach((st: any) => {
+      const ym = getStudentAdmissionMonthKey(st);
+      if (ym) monthSet.add(ym);
+    });
+
+    // Dynamically include any months from sales and expenses
+    (salesList || []).forEach((s: any) => {
+      if (s.created_at) monthSet.add(s.created_at.slice(0, 7));
+    });
+    (expensesList || []).forEach((e: any) => {
+      if (e.expense_date) monthSet.add(e.expense_date.slice(0, 7));
+    });
+
+    return Array.from(monthSet)
+      .filter(val => /^\d{4}-\d{2}$/.test(val))
+      .sort((a, b) => b.localeCompare(a))
+      .map(val => ({
+        value: val,
+        label: formatMonthLabel(val)
+      }));
   };
 
   // Summary Metrics calculations
@@ -1990,20 +2007,40 @@ export const FinanceDashboard: React.FC = () => {
                           <input 
                             type="month"
                             value={feeInstallmentMonth || selectedLedgerMonth}
-                            onChange={(e) => setFeeInstallmentMonth(e.target.value)}
-                            className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
+                            onChange={(e) => {
+                              setFeeInstallmentMonth(e.target.value);
+                              if (e.target.value && !feePaymentDate.startsWith(e.target.value)) {
+                                setFeePaymentDate(`${e.target.value}-15`);
+                              }
+                            }}
+                            className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary cursor-pointer"
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-muted-foreground uppercase block">Notes / Info</label>
+                          <label className="text-[9px] font-bold text-muted-foreground uppercase block">Actual Payment Date</label>
                           <input 
-                            type="text" 
-                            placeholder="e.g. Admission fee / Installment 1"
-                            value={feeNotes}
-                            onChange={(e) => setFeeNotes(e.target.value)}
-                            className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
+                            type="date"
+                            value={feePaymentDate}
+                            onChange={(e) => {
+                              setFeePaymentDate(e.target.value);
+                              if (e.target.value) {
+                                setFeeInstallmentMonth(e.target.value.slice(0, 7));
+                              }
+                            }}
+                            className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary cursor-pointer"
                           />
                         </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-muted-foreground uppercase block">Notes / Info</label>
+                        <input 
+                          type="text" 
+                          placeholder="e.g. Admission fee / Installment 1"
+                          value={feeNotes}
+                          onChange={(e) => setFeeNotes(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-md bg-card border border-border text-xs text-foreground focus:outline-none focus:border-primary"
+                        />
                       </div>
 
                       <div className="pt-4">

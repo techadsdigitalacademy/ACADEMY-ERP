@@ -20,8 +20,8 @@ import { supabase, SALES_COLUMNS, STAFF_PROFILE_COLUMNS, monthWindowStart } from
 import { formatCurrency } from '../services/mockData';
 import { dataCache } from '../services/dataCache';
 import { resetStaffAuthPassword } from '../services/staffAuth';
-import { 
-  Plus, 
+import {
+  Plus,
   X,
   Edit2,
   Star,
@@ -64,16 +64,16 @@ export const isPartnerOrOwner = (staff: any) => {
 };
 
 export const SalesDashboard: React.FC = () => {
-  const { 
-    activeStaff, 
-    sales, 
+  const {
+    activeStaff,
+    sales,
     dailyReports,
     selectedMonth,
     setSelectedMonth,
-    todayAttendance, 
-    addSale, 
+    todayAttendance,
+    addSale,
     addDailyReport,
-    punchIn, 
+    punchIn,
     punchOut,
     activeTab,
     setActiveTab,
@@ -96,12 +96,12 @@ export const SalesDashboard: React.FC = () => {
 
   // Owner expenses state
   const [ownerExpenses, setOwnerExpenses] = useState<any[]>([]);
-  
+
   // Log Sale & Log Refund Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
   const [selectedSlipUrl, setSelectedSlipUrl] = useState<string | null>(null);
-  
+
   // Daily Report form states
   const [dailyWorkType, setDailyWorkType] = useState('');
   const [dailyWorkDesc, setDailyWorkDesc] = useState('');
@@ -207,7 +207,7 @@ export const SalesDashboard: React.FC = () => {
   const [isNoticeBoardModalOpen, setIsNoticeBoardModalOpen] = useState(false);
 
   // Counselor Portal Specific States
-  const isCounselor = activeStaff?.designation === 'Academy Counselor' || 
+  const isCounselor = activeStaff?.designation === 'Academy Counselor' ||
     activeStaff?.designation?.toLowerCase().includes('counselor');
 
   // Academic Tutor Specific States
@@ -221,7 +221,7 @@ export const SalesDashboard: React.FC = () => {
   const [isAdmissionModalOpen, setIsAdmissionModalOpen] = useState(false);
   const [targetBatchForAdmission, setTargetBatchForAdmission] = useState<any | null>(null);
 
-  
+
   const loadCounselorBatchesData = async () => {
     try {
       const [batchesRes, studentsRes] = await Promise.all([
@@ -233,7 +233,7 @@ export const SalesDashboard: React.FC = () => {
         try {
           const r = await fetch('/supabase-admin/rest/v1/batches?select=*&order=start_date.asc');
           if (r.ok) bList = await r.json();
-        } catch (_) {}
+        } catch (_) { }
       }
       if (bList) setCounselorBatches(bList);
 
@@ -242,7 +242,7 @@ export const SalesDashboard: React.FC = () => {
         try {
           const r = await fetch('/supabase-admin/rest/v1/students?select=*');
           if (r.ok) sList = await r.json();
-        } catch (_) {}
+        } catch (_) { }
       }
       if (sList) {
         const staffMap = new Map<string, string>();
@@ -397,7 +397,7 @@ export const SalesDashboard: React.FC = () => {
             if (!p || !p.full_name) return false;
             if (p.status === 'INACTIVE' || p.status === 'RESIGNED') return false;
             if (isOwnerProfile(p)) return false;
-            
+
             const desig = String(p.designation || '').toLowerCase().trim();
             const rName = String(p.role_name || p.role || '').toLowerCase().trim();
             const nameStr = String(p.full_name || '').toLowerCase().trim();
@@ -524,8 +524,8 @@ export const SalesDashboard: React.FC = () => {
           const merged = profiles.map(p => {
             const target = targetMap[p.full_name] || 0;
             const avatar_url = avatarMap[p.full_name] || undefined;
-            
-            const staffSales = monthSalesFiltered.filter((s: any) => 
+
+            const staffSales = monthSalesFiltered.filter((s: any) =>
               (s.staff_id && p.id && String(s.staff_id) === String(p.id)) ||
               (s.user_id && p.id && String(s.user_id) === String(p.id)) ||
               (s.staff_name && p.full_name && String(s.staff_name).trim().toLowerCase() === String(p.full_name).trim().toLowerCase()) ||
@@ -623,7 +623,7 @@ export const SalesDashboard: React.FC = () => {
     }
   }, [isAdminView, activeTab, selectedMonth]);
 
-        // Academy revenue computed
+  // Academy revenue computed
 
 
 
@@ -667,15 +667,15 @@ export const SalesDashboard: React.FC = () => {
           const parsed = JSON.parse(stored);
           if (Array.isArray(parsed)) localSales = parsed;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       const allMergedSales = [...dbSales, ...(sales || []), ...localSales];
       const deduppedMap = new Map<string, any>();
 
       allMergedSales.forEach(s => {
         if (s) {
-          const key = s.id 
-            ? String(s.id) 
+          const key = s.id
+            ? String(s.id)
             : `${String(s.client_name || s.clientName || '').trim().toLowerCase()}-${Number(s.received_amount || s.amount || 0)}-${String(s.created_at || s.date || '').substring(0, 10)}`;
           if (!deduppedMap.has(key)) {
             deduppedMap.set(key, s);
@@ -694,7 +694,7 @@ export const SalesDashboard: React.FC = () => {
             if (!isNaN(d.getTime())) {
               return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
             }
-          } catch (e) {}
+          } catch (e) { }
         }
         const val = item.timestamp || item.date || item.sale_date;
         if (val) {
@@ -704,7 +704,7 @@ export const SalesDashboard: React.FC = () => {
             if (!isNaN(d.getTime())) {
               return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
             }
-          } catch (e) {}
+          } catch (e) { }
           const match = str.match(/^(\d{4}-\d{2}-\d{2})/);
           if (match) return match[1];
         }
@@ -725,8 +725,8 @@ export const SalesDashboard: React.FC = () => {
         const nameUpper = String(rawName).trim().toUpperCase();
         const designationLower = String(staffObj?.designation || '').toLowerCase();
 
-        const isExcludedUserOrRole = 
-          nameUpper.includes('SHIBILI') || 
+        const isExcludedUserOrRole =
+          nameUpper.includes('SHIBILI') ||
           nameUpper.includes('ASHIF') ||
           designationLower.includes('owner') ||
           designationLower.includes('admin') ||
@@ -853,20 +853,20 @@ export const SalesDashboard: React.FC = () => {
   const handleCsvUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
     reader.onload = async (event) => {
       const text = event.target?.result as string;
       if (!text) return;
-      
+
       const lines = text.split(/\r?\n/);
       const leadsToInsert = [];
-      
+
       // Skip the header row
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
-        
+
         const parts = line.split(',');
         if (parts.length >= 3) {
           leadsToInsert.push({
@@ -878,7 +878,7 @@ export const SalesDashboard: React.FC = () => {
           });
         }
       }
-      
+
       if (leadsToInsert.length > 0) {
         try {
           const { error } = await supabase.from('leads').insert(leadsToInsert);
@@ -907,7 +907,7 @@ export const SalesDashboard: React.FC = () => {
 
   if (!activeStaff) return null;
   const isOwner = isPartnerOrOwner(activeStaff);
-    
+
 
 
   useEffect(() => {
@@ -937,7 +937,7 @@ export const SalesDashboard: React.FC = () => {
               .eq('payment_type', 'Refund')
               .or(`created_at.gte.${windowStartStr},created_at.is.null`);
             if (rData) refundSalesData = rData;
-          } catch (e) {}
+          } catch (e) { }
 
           const convertedRefunds = refundSalesData.map((s: any, idx: number) => {
             const sDate = (s.created_at || s.date || s.sale_date || s.sale_month || '').substring(0, 10);
@@ -957,7 +957,7 @@ export const SalesDashboard: React.FC = () => {
 
           const combined = [...combinedData, ...convertedRefunds];
           const uniqueMap = new Map<string, any>();
-          
+
           combined.forEach((item, idx) => {
             if (item) {
               const itemIdStr = String(item.id || '');
@@ -967,13 +967,13 @@ export const SalesDashboard: React.FC = () => {
 
               const isRefundCat = itemCat === 'Sales Refund' || itemCat === 'Return Sales' || itemIdStr.startsWith('converted-refund-');
               let key = item.id ? String(item.id) : `${item.expense_date}-${item.amount}-${item.category}-${idx}`;
-              
+
               if (isRefundCat) {
                 const sRef = item.sale_id || (itemIdStr.startsWith('converted-refund-') ? itemIdStr.replace('converted-refund-', '') : '');
                 const sStaff = (item.staff_name || item.logged_by_name || item.staff_id || '').toUpperCase();
                 key = sRef ? `refund-ref-${sRef}` : `refund-sig-${itemDateStr}-${itemAmt}-${sStaff}`;
               }
-              
+
               if (!uniqueMap.has(key)) uniqueMap.set(key, item);
             }
           });
@@ -1044,7 +1044,7 @@ export const SalesDashboard: React.FC = () => {
 
   // Staff profile history select
 
-  
+
 
 
 
@@ -1101,7 +1101,7 @@ export const SalesDashboard: React.FC = () => {
 
       alert('Daily report updated successfully!');
       setEditingReport(null);
-      
+
       if (activeStaff) {
         await fetchDashboardData(activeStaff.id);
       }
@@ -1178,7 +1178,7 @@ export const SalesDashboard: React.FC = () => {
     });
   }, [sales, activeStaff]);
 
-  {/* Main Content Area */}
+  {/* Main Content Area */ }
   const monthReports = useMemo(() => {
     return dailyReports?.filter(r => r.report_date && r.report_date.startsWith(selectedMonth));
   }, [dailyReports, selectedMonth]);
@@ -1198,7 +1198,7 @@ export const SalesDashboard: React.FC = () => {
             const m = String(dObj.getMonth() + 1).padStart(2, '0');
             if (`${y}-${m}` === selectedMonth) return true;
           }
-        } catch (e) {}
+        } catch (e) { }
       }
       if (s.sale_month && selectedMonth) {
         try {
@@ -1206,7 +1206,7 @@ export const SalesDashboard: React.FC = () => {
           const date = new Date(Number(year), Number(month) - 1, 1);
           const name = date.toLocaleString('default', { month: 'long', year: 'numeric' });
           if (String(s.sale_month).toLowerCase() === name.toLowerCase()) return true;
-        } catch (e) {}
+        } catch (e) { }
       }
       return false;
     });
@@ -1340,7 +1340,7 @@ export const SalesDashboard: React.FC = () => {
       totalLogos += r.logos_count || 0;
       totalOthers += r.others_count || 0;
       totalAdsPlaced += r.ads_placed_count || 0;
-      
+
       const cat = r.work_category;
       const vCount = r.videos_count || 0;
       if (cat === 'Tech Ads Agency') {
@@ -1352,11 +1352,11 @@ export const SalesDashboard: React.FC = () => {
       }
       totalTravelExpenses += Number(r.travel_expense) || 0;
     });
-    return { 
-      totalPosters, 
-      totalReEdits, 
-      totalLogos, 
-      totalOthers, 
+    return {
+      totalPosters,
+      totalReEdits,
+      totalLogos,
+      totalOthers,
       totalAdsPlaced,
       totalAgencyVideos,
       totalAcademyVideos,
@@ -1392,7 +1392,7 @@ export const SalesDashboard: React.FC = () => {
   const renderDailyReportsTable = (reportsList: any[], showActions: boolean = false) => {
     const designation = activeStaff?.designation;
     let totals = getDailyReportTotals(reportsList);
-    
+
     if (designation === 'Videographer') {
       const filteredReports = videoFilter === 'All'
         ? reportsList
@@ -1434,11 +1434,10 @@ export const SalesDashboard: React.FC = () => {
                   key={filterVal}
                   onClick={() => setVideoFilter(filterVal)}
                   type="button"
-                  className={`px-3.5 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all duration-300 ${
- videoFilter === filterVal 
- ? 'bg-primary text-foreground border border-primary/20 ' 
- : 'bg-muted-2 text-muted-foreground border border-border hover:text-foreground hover:bg-muted'
- }`}
+                  className={`px-3.5 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all duration-300 ${videoFilter === filterVal
+                    ? 'bg-primary text-foreground border border-primary/20 '
+                    : 'bg-muted-2 text-muted-foreground border border-border hover:text-foreground hover:bg-muted'
+                    }`}
                 >
                   {labelMap[filterVal]}
                 </button>
@@ -1536,8 +1535,8 @@ export const SalesDashboard: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold text-muted-foreground uppercase">Client/Company Name</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     required
                     disabled={editVideoWorkCategory !== 'External Client'}
                     value={editVideoClientName}
@@ -1547,8 +1546,8 @@ export const SalesDashboard: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold text-muted-foreground uppercase">Number of Videos</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     required
                     min="0"
                     value={editVideoCount}
@@ -1558,8 +1557,8 @@ export const SalesDashboard: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold text-muted-foreground uppercase">Travel Expense (₹)</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     required
                     min="0"
                     value={editVideoTravelExpense}
@@ -1569,7 +1568,7 @@ export const SalesDashboard: React.FC = () => {
                 </div>
                 <div className="space-y-1 col-span-2">
                   <label className="text-[9px] font-bold text-muted-foreground uppercase">Work Description</label>
-                  <textarea 
+                  <textarea
                     rows={2}
                     value={editReportDesc}
                     onChange={(e) => setEditReportDesc(e.target.value)}
@@ -1683,8 +1682,8 @@ export const SalesDashboard: React.FC = () => {
               <form onSubmit={handleUpdateDailyReport} className="grid grid-cols-4 gap-2 text-xs">
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold text-muted-foreground uppercase">Posters</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     required
                     value={editReportPosters}
                     onChange={(e) => setEditReportPosters(e.target.value)}
@@ -1693,8 +1692,8 @@ export const SalesDashboard: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold text-muted-foreground uppercase">Re-edits</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     required
                     value={editReportReEdits}
                     onChange={(e) => setEditReportReEdits(e.target.value)}
@@ -1703,8 +1702,8 @@ export const SalesDashboard: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold text-muted-foreground uppercase">Logos</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     required
                     value={editReportLogos}
                     onChange={(e) => setEditReportLogos(e.target.value)}
@@ -1713,8 +1712,8 @@ export const SalesDashboard: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold text-muted-foreground uppercase">Others</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     required
                     value={editReportOthers}
                     onChange={(e) => setEditReportOthers(e.target.value)}
@@ -1723,7 +1722,7 @@ export const SalesDashboard: React.FC = () => {
                 </div>
                 <div className="space-y-1 col-span-4">
                   <label className="text-[9px] font-bold text-muted-foreground uppercase">Description / Notes</label>
-                  <textarea 
+                  <textarea
                     rows={2}
                     value={editReportDesc}
                     onChange={(e) => setEditReportDesc(e.target.value)}
@@ -1813,8 +1812,8 @@ export const SalesDashboard: React.FC = () => {
               <form onSubmit={handleUpdateDailyReport} className="space-y-3.5 text-xs">
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold text-muted-foreground uppercase">Ads Placed</label>
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     required
                     value={editReportAdsPlaced}
                     onChange={(e) => setEditReportAdsPlaced(e.target.value)}
@@ -1823,7 +1822,7 @@ export const SalesDashboard: React.FC = () => {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-bold text-muted-foreground uppercase">Description / Notes</label>
-                  <textarea 
+                  <textarea
                     rows={2}
                     value={editReportDesc}
                     onChange={(e) => setEditReportDesc(e.target.value)}
@@ -1875,20 +1874,20 @@ export const SalesDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-muted dark:bg-card text-foreground dark:text-foreground font-sans flex flex-col lg:flex-row relative w-full max-w-full overflow-x-hidden">
-      
+
 
       {/* Sidebar Navigation */}
       <Sidebar />
 
       {/* Main Container */}
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0 pt-14 lg:pt-0 pb-32 md:pb-12">
-        
+
         {/* Header */}
         <header className="bg-card sticky top-14 lg:top-0 z-30 px-3 sm:px-6 md:px-8 py-2.5 sm:py-3.5 border-b border-border">
           <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-4">
             <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4 w-full sm:w-auto">
               <div className="flex items-center gap-2 min-w-0">
-                <button 
+                <button
                   onClick={() => window.dispatchEvent(new CustomEvent('toggle_mobile_sidebar'))}
                   className="lg:hidden p-1.5 rounded-md bg-primary-soft text-primary hover:bg-primary-soft border border-primary/30 flex items-center justify-center shrink-0"
                   title="Open Navigation Menu"
@@ -1910,21 +1909,19 @@ export const SalesDashboard: React.FC = () => {
                   <div className="inline-flex rounded-lg bg-muted p-0.5 border border-border text-[11px] font-bold shrink-0">
                     <button
                       onClick={() => setAdminHubMode('academy_master')}
-                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                        adminHubMode === 'academy_master'
-                          ? 'bg-primary text-primary-foreground shadow-xs'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${adminHubMode === 'academy_master'
+                        ? 'bg-primary text-primary-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                        }`}
                     >
                       Academy Master Hub
                     </button>
                     <button
                       onClick={() => setAdminHubMode('consultant_terminal')}
-                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
-                        adminHubMode === 'consultant_terminal'
-                          ? 'bg-background text-foreground shadow-xs'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
+                      className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${adminHubMode === 'consultant_terminal'
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                        }`}
                     >
                       Sales Terminal
                     </button>
@@ -1951,10 +1948,10 @@ export const SalesDashboard: React.FC = () => {
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
               {isAdminView && (
-                <Button 
-                  variant="glass" 
-                  size="sm" 
-                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 border border-primary/20 hover:bg-muted text-[11px] sm:text-xs font-bold text-primary flex items-center gap-1 shrink-0" 
+                <Button
+                  variant="glass"
+                  size="sm"
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 border border-primary/20 hover:bg-muted text-[11px] sm:text-xs font-bold text-primary flex items-center gap-1 shrink-0"
                   onClick={() => setIsClosingReportOpen(true)}
                 >
                   <Star className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
@@ -1964,10 +1961,10 @@ export const SalesDashboard: React.FC = () => {
 
               {/* Counselor New Admission Trigger */}
               {isCounselor && (
-                <Button 
-                  variant="primary" 
-                  size="sm" 
-                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-md text-[11px] sm:text-xs font-bold shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-1.5 cursor-pointer" 
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-md text-[11px] sm:text-xs font-bold shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-1.5 cursor-pointer"
                   onClick={() => handleOpenAdmissionModal()}
                   icon={<UserPlus className="w-3.5 h-3.5" />}
                 >
@@ -1986,10 +1983,10 @@ export const SalesDashboard: React.FC = () => {
               )}
 
               {!isAdminView && !isOwner && !isCounselor && !isTutor && activeStaff?.designation !== 'Graphic Designer' && activeStaff?.designation !== 'Digital Marketer' && activeStaff?.designation !== 'Videographer' && (
-                <Button 
-                  variant="primary" 
-                  size="sm" 
-                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-md text-[11px] sm:text-xs font-bold shrink-0 animate-pulse" 
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-md text-[11px] sm:text-xs font-bold shrink-0 animate-pulse"
                   onClick={() => setIsModalOpen(true)}
                   icon={<Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
                 >
@@ -1998,10 +1995,10 @@ export const SalesDashboard: React.FC = () => {
               )}
 
               {isOwner && (
-                <Button 
-                  variant="primary" 
-                  size="sm" 
-                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-md text-[11px] sm:text-xs font-bold shrink-0 animate-pulse" 
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="!py-1.5 !px-2.5 sm:!py-2 sm:!px-3 shadow-md rounded-md text-[11px] sm:text-xs font-bold shrink-0 animate-pulse"
                   onClick={() => setIsModalOpen(true)}
                   icon={<Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
                 >
@@ -2014,7 +2011,7 @@ export const SalesDashboard: React.FC = () => {
 
         {/* Main Content Area */}
         <main className="max-w-6xl w-full mx-auto px-3 sm:px-6 md:px-8 mt-4 sm:mt-6 space-y-4 sm:space-y-6">
-          
+
           {activeTab === 'sales' && (
             <div className="space-y-6">
               {(isAdminView || isOwner) && adminHubMode === 'academy_master' ? (
@@ -2047,7 +2044,7 @@ export const SalesDashboard: React.FC = () => {
                 />
               ) : (
                 <>
-                  <SalesDashboardMetrics 
+                  <SalesDashboardMetrics
                     isAdminView={isAdminView}
                     activeStaff={activeStaff}
                     isOwner={isOwner}
@@ -2079,7 +2076,7 @@ export const SalesDashboard: React.FC = () => {
 
                   {/* Agency Notice Board Widget placed ONLY at the bottom of Sales Hub main tab */}
                   <div className="pt-4 border-t border-border">
-                    <AgencyNoticeBoardWidget 
+                    <AgencyNoticeBoardWidget
                       isAdmin={isAdminView || isAdminMode}
                       onOpenAdminNoticeModal={() => setIsNoticeBoardModalOpen(true)}
                     />
@@ -2097,7 +2094,7 @@ export const SalesDashboard: React.FC = () => {
 
           {activeTab === 'attendance' && activeStaff && (
             <div className="space-y-6 pt-2">
-              <AttendanceDashboard 
+              <AttendanceDashboard
                 staffId={activeStaff.id}
                 fullName={activeStaff.full_name}
                 designation={activeStaff.designation || 'Staff'}
@@ -2126,21 +2123,19 @@ export const SalesDashboard: React.FC = () => {
                   <div className="flex items-center gap-1.5 bg-muted-2 p-1 rounded-lg border border-border self-start sm:self-auto">
                     <button
                       onClick={() => setAdminSalaryTabMode('manage')}
-                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                        adminSalaryTabMode === 'manage'
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${adminSalaryTabMode === 'manage'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                        }`}
                     >
                       Team Payroll & HR
                     </button>
                     <button
                       onClick={() => setAdminSalaryTabMode('portal')}
-                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                        adminSalaryTabMode === 'portal'
-                          ? 'bg-primary text-white shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${adminSalaryTabMode === 'portal'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                        }`}
                     >
                       My Personal Payslips
                     </button>
@@ -2167,12 +2162,12 @@ export const SalesDashboard: React.FC = () => {
                         Live Staff Portal View
                       </span>
                     </div>
-                    <StaffSalaryPortal 
+                    <StaffSalaryPortal
                       activeStaff={
                         adminSalaryStaffId && adminSalaryStaffId !== activeStaff?.id
                           ? (staffProfiles.find((s: any) => s.id === adminSalaryStaffId) || activeStaff)
                           : activeStaff
-                      } 
+                      }
                     />
                   </div>
                 ) : (
@@ -2202,11 +2197,10 @@ export const SalesDashboard: React.FC = () => {
                                 <button
                                   type="button"
                                   onClick={() => setHideRelieved(!hideRelieved)}
-                                  className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border transition-colors ${
-                                    hideRelieved
-                                      ? 'bg-muted-2 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
-                                      : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                                  }`}
+                                  className={`text-[9.5px] font-bold px-2 py-0.5 rounded-full border transition-colors ${hideRelieved
+                                    ? 'bg-muted-2 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+                                    : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                                    }`}
                                 >
                                   {hideRelieved ? `Show Relieved (${relievedStaffList.length})` : 'Hide Relieved'}
                                 </button>
@@ -2231,11 +2225,10 @@ export const SalesDashboard: React.FC = () => {
                                 <button
                                   key={sp.id}
                                   onClick={() => setAdminSalaryStaffId(sp.id)}
-                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all shrink-0 ${
-                                    isSelected
-                                      ? 'bg-primary-soft/60 border-primary text-foreground shadow-sm ring-1 ring-primary/30'
-                                      : 'bg-card border-border hover:bg-muted-2 text-muted-foreground hover:text-foreground'
-                                  }`}
+                                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border text-left transition-all shrink-0 ${isSelected
+                                    ? 'bg-primary-soft/60 border-primary text-foreground shadow-sm ring-1 ring-primary/30'
+                                    : 'bg-card border-border hover:bg-muted-2 text-muted-foreground hover:text-foreground'
+                                    }`}
                                 >
                                   <div className="relative">
                                     <img
@@ -2298,6 +2291,8 @@ export const SalesDashboard: React.FC = () => {
                   selectedMonth={selectedMonth}
                   students={counselorStudents}
                   batches={counselorBatches}
+                  installments={academyMasterData?.installments || []}
+                  staffList={staffProfiles}
                   onAddPayment={(s) => {
                     const matchedBatch = counselorBatches.find(b => b.id === s?.batch_id);
                     handleOpenAdmissionModal(matchedBatch);
@@ -2307,12 +2302,12 @@ export const SalesDashboard: React.FC = () => {
               </div>
             ) : isOwner ? (
               <div className="space-y-6 pt-2">
-                <SalesHistoryLog 
-                  sales={ownerMonthSales} 
-                  targetAmount={targetAmount} 
-                  isAdmin={false} 
+                <SalesHistoryLog
+                  sales={ownerMonthSales}
+                  targetAmount={targetAmount}
+                  isAdmin={false}
                   hideTargetProgress={false}
-                  onViewSlip={handleViewSlip} 
+                  onViewSlip={handleViewSlip}
                 />
               </div>
             ) : (
@@ -2431,9 +2426,9 @@ export const SalesDashboard: React.FC = () => {
             >
               <X className="w-6 h-6" />
             </button>
-            <img 
-              src={selectedSlipUrl} 
-              alt="Payment Proof Slip" 
+            <img
+              src={selectedSlipUrl}
+              alt="Payment Proof Slip"
               className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl ring-1 ring-white/10"
             />
           </div>

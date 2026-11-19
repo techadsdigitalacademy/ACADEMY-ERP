@@ -4,6 +4,14 @@ import { Badge } from './Badge';
 import { Button } from './Button';
 import { formatCurrency } from '../services/mockData';
 import { supabase } from '../services/supabase';
+import { 
+  getCollectionMonthKey, 
+  getStudentAdmissionMonthKey, 
+  hasStudentFeeInRegistry, 
+  formatMonthLabel,
+  isStudentDiscontinued,
+  getStudentFinancialState
+} from '../utils/dateAttribution';
 import {
   Users,
   DollarSign,
@@ -59,6 +67,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
   const [selectedCounselor, setSelectedCounselor] = useState<string>(counselorId);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeReportTab, setActiveReportTab] = useState<'admissions' | 'collections'>('admissions');
+  const [admissionsViewMode, setAdmissionsViewMode] = useState<'month_admissions' | 'carry_forward_pipeline'>('month_admissions');
 
   // Fallback internal data states when props are empty or component is used standalone
   const [internalStudents, setInternalStudents] = useState<any[]>([]);
@@ -201,54 +210,73 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
       return;
     }
     try {
-      const { error } = await supabase.from('fee_collections').delete().eq('id', collectionId);
-      if (error) {
-        await fetch(`/supabase-admin/rest/v1/fee_collections?id=eq.${collectionId}`, { method: 'DELETE' });
+      let deleted = false;
+      try {
+        const res = await fetch(`/supabase-admin/rest/v1/fee_collections?id=eq.${collectionId}`, { method: 'DELETE' });
+        if (res.ok) deleted = true;
+      } catch (_) {}
+
+      if (!deleted) {
+        const { error } = await supabase.from('fee_collections').delete().eq('id', collectionId);
+        if (error) throw error;
       }
       // Recalculate student paid fee
       const remaining = effectiveInstallments.filter((i: any) => i.id !== collectionId && i.student_id === studentId);
       const newTotalPaid = remaining.reduce((sum: number, i: any) => sum + Number(i.amount || i.amount_paid || 0), 0);
-      await supabase.from('students').update({ paid_fee: newTotalPaid }).eq('id', studentId);
-      await fetch(`/supabase-admin/rest/v1/students?id=eq.${studentId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paid_fee: newTotalPaid })
-      });
+      try {
+        await fetch(`/supabase-admin/rest/v1/students?id=eq.${studentId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paid_fee: newTotalPaid })
+        });
+      } catch (_) {
+        await supabase.from('students').update({ paid_fee: newTotalPaid }).eq('id', studentId);
+      }
       await loadMissingData();
       window.dispatchEvent(new CustomEvent('students_data_changed'));
+      window.dispatchEvent(new CustomEvent('sales_data_changed'));
       alert('Payment record deleted and student balance recalculated.');
     } catch (err: any) {
       alert('Failed to delete payment: ' + err.message);
     }
   };
 
-  // Month options (24-month selector + all historical months from data)
+  // Month options (Rolling span from 2024 to present + all historical months discovered in data)
   const monthOptions = useMemo(() => {
     const options: { value: string; label: string }[] = [];
     const set = new Set<string>();
     const date = new Date();
-    for (let i = 0; i < 24; i++) {
-      const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
-      const value = d.toISOString().substring(0, 7);
-      if (!set.has(value)) {
-        set.add(value);
-        options.push({ value, label: d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) });
+    const currentYear = date.getFullYear();
+
+    // Span from 2024 through currentYear + 1
+    for (let y = 2024; y <= currentYear + 1; y++) {
+      for (let m = 1; m <= 12; m++) {
+        const val = `${y}-${String(m).padStart(2, '0')}`;
+        set.add(val);
       }
     }
+
+    // Discover historical months from student enrollments
     effectiveStudents.forEach((s: any) => {
-      const dStr = s.enrollment_date || s.created_at;
-      if (dStr && typeof dStr === 'string' && dStr.length >= 7) {
-        const ym = dStr.slice(0, 7);
-        if (!set.has(ym)) {
-          set.add(ym);
-          const [y, m] = ym.split('-');
-          const dObj = new Date(parseInt(y), parseInt(m) - 1, 1);
-          options.push({ value: ym, label: dObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) });
-        }
-      }
+      const ym = getStudentAdmissionMonthKey(s, effectiveInstallments, effectiveBatches.find((b: any) => b.id === s.batch_id));
+      if (ym) set.add(ym);
     });
-    return options.sort((a, b) => b.value.localeCompare(a.value));
-  }, [effectiveStudents]);
+
+    // Discover historical months from fee collections
+    effectiveInstallments.forEach((inst: any) => {
+      const ym = getCollectionMonthKey(inst);
+      if (ym) set.add(ym);
+    });
+
+    Array.from(set)
+      .filter(val => /^\d{4}-\d{2}$/.test(val))
+      .sort((a, b) => b.localeCompare(a))
+      .forEach(value => {
+        options.push({ value, label: formatMonthLabel(value) });
+      });
+
+    return options;
+  }, [effectiveStudents, effectiveInstallments]);
 
   // Filter staff to Academic Counselors
   const counselorStaff = useMemo(() => {
@@ -263,76 +291,135 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
     ? (activeStaff?.id || '')
     : selectedCounselor;
 
-  // Filter students enrolled in the selected month
+  // Filter students enrolled strictly in the selected month
   const monthStudents = useMemo(() => {
     return effectiveStudents.filter((s: any) => {
-      const dateStr = s.enrollment_date || (s.created_at ? s.created_at.split('T')[0] : '');
-      const matchesMonth = dateStr.startsWith(selectedMonth);
+      const matchesMonth = getStudentAdmissionMonthKey(s, effectiveInstallments, effectiveBatches.find(b => b.id === s.batch_id)) === selectedMonth;
       if (!matchesMonth) return false;
       if (effectiveCounselorId && effectiveCounselorId !== 'all') {
         return s.counselor_id === effectiveCounselorId;
       }
       return true;
     });
-  }, [effectiveStudents, selectedMonth, effectiveCounselorId]);
+  }, [effectiveStudents, effectiveInstallments, effectiveBatches, selectedMonth, effectiveCounselorId]);
 
-  // Filter fee collections logged in the selected month
+  // Filter fee collections logged strictly in the selected month
   const monthCollections = useMemo(() => {
     return effectiveInstallments.filter((inst: any) => {
-      const dateStr = inst.payment_date || (inst.created_at ? inst.created_at.split('T')[0] : '');
-      const matchesMonth = dateStr.startsWith(selectedMonth);
+      const matchesMonth = getCollectionMonthKey(inst) === selectedMonth;
       if (!matchesMonth) return false;
 
       if (effectiveCounselorId && effectiveCounselorId !== 'all') {
-        // Match by collected_by or student's counselor_id
-        if (inst.collected_by) {
-          return inst.collected_by === effectiveCounselorId;
-        }
         const student = effectiveStudents.find((st: any) => st.id === inst.student_id);
-        return student?.counselor_id === effectiveCounselorId;
+        const matchesCollector = inst.collected_by === effectiveCounselorId;
+        const matchesStudentCounselor = student?.counselor_id === effectiveCounselorId;
+        return matchesCollector || matchesStudentCounselor;
       }
       return true;
     });
   }, [effectiveInstallments, effectiveStudents, selectedMonth, effectiveCounselorId]);
 
+  // Active ongoing pipeline students (for multi-month carry forward tracking across 3-4 month batches)
+  const activePipelineStudents = useMemo(() => {
+    return effectiveStudents.filter((s: any) => {
+      if (effectiveCounselorId && effectiveCounselorId !== 'all') {
+        if (s.counselor_id !== effectiveCounselorId) return false;
+      }
+      if (isStudentDiscontinued(s)) return false;
+      const batch = effectiveBatches.find((b: any) => b.id === s.batch_id);
+      const isBatchCompleted = (batch?.status || '').toLowerCase() === 'completed';
+      if (isBatchCompleted) return false;
+      if ((s.status || '').toLowerCase() === 'completed') return false;
+      return true;
+    });
+  }, [effectiveStudents, effectiveBatches, effectiveCounselorId]);
+
+  // Pre-calculate financial states for month students
+  const monthStudentsFin = useMemo(() => {
+    return monthStudents.map((s: any) => {
+      const sInst = effectiveInstallments.filter((i: any) => i.student_id === s.id);
+      const paidFromInst = sInst.reduce((sum: number, i: any) => sum + Number(i.amount_paid || i.amount || 0), 0);
+      const paid = Math.max(paidFromInst, Number(s.paid_fee || 0));
+      const fin = getStudentFinancialState(s, paid);
+      return { student: s, paid, fin };
+    });
+  }, [monthStudents, effectiveInstallments]);
+
   // Aggregate Metrics for Selected View
   const totalRegistrations = monthStudents.length;
-  const totalPackageBooked = monthStudents.reduce((sum, s) => sum + Number(s.total_fees || s.total_fee || 0), 0);
+  // Effective booked tuition on month admissions (excluding discontinued unpaid portion)
+  const totalPackageBooked = monthStudentsFin.reduce((sum, item) => sum + item.fin.effectiveExpectedFee, 0);
+  const totalMonthCohortPending = monthStudentsFin.reduce((sum, item) => sum + item.fin.pendingDue, 0);
+  const totalMonthWaived = monthStudentsFin.reduce((sum, item) => sum + item.fin.writtenOffAmount, 0);
+
+  // Month collections: all collections recorded in selected month
   const collectionsSum = monthCollections.reduce((sum, c) => sum + Number(c.amount_paid || c.amount || 0), 0);
   const studentsInitialPaidSum = monthStudents.reduce((sum, s) => {
-    const hasCollection = monthCollections.some((c: any) => c.student_id === s.id);
+    const hasCollection = hasStudentFeeInRegistry(s.id, effectiveInstallments);
     return sum + (hasCollection ? 0 : Number(s.paid_fee || 0));
   }, 0);
   const totalCollections = collectionsSum + studentsInitialPaidSum;
-  const totalPendingBalance = Math.max(0, totalPackageBooked - totalCollections);
   const collectionConversionRate = totalPackageBooked > 0 ? Math.round((totalCollections / totalPackageBooked) * 100) : 0;
+
+  // Active pipeline carry-forward dues across all active batches
+  const totalActivePipelinePending = useMemo(() => {
+    return activePipelineStudents.reduce((sum, s) => {
+      const sInst = effectiveInstallments.filter((i: any) => i.student_id === s.id);
+      const paidFromInst = sInst.reduce((isum: number, i: any) => isum + Number(i.amount_paid || i.amount || 0), 0);
+      const paid = Math.max(paidFromInst, Number(s.paid_fee || 0));
+      const fin = getStudentFinancialState(s, paid);
+      return sum + fin.pendingDue;
+    }, 0);
+  }, [activePipelineStudents, effectiveInstallments]);
 
   // Counselor Leaderboard Summary (For Admin View when 'all' is selected)
   const counselorComparison = useMemo(() => {
     return counselorStaff.map((c: any) => {
       const cStudents = effectiveStudents.filter((s: any) => {
-        const dateStr = s.enrollment_date || (s.created_at ? s.created_at.split('T')[0] : '');
-        return dateStr.startsWith(selectedMonth) && s.counselor_id === c.id;
+        const matches = getStudentAdmissionMonthKey(s, effectiveInstallments, effectiveBatches.find(b => b.id === s.batch_id)) === selectedMonth;
+        return matches && s.counselor_id === c.id;
       });
 
       const cCollections = effectiveInstallments.filter((inst: any) => {
-        const dateStr = inst.payment_date || (inst.created_at ? inst.created_at.split('T')[0] : '');
-        if (!dateStr.startsWith(selectedMonth)) return false;
-        if (inst.collected_by) return inst.collected_by === c.id;
+        const matches = getCollectionMonthKey(inst) === selectedMonth;
+        if (!matches) return false;
         const student = effectiveStudents.find((st: any) => st.id === inst.student_id);
-        return student?.counselor_id === c.id;
+        const matchesCollector = inst.collected_by === c.id;
+        const matchesStudentCounselor = student?.counselor_id === c.id;
+        return matchesCollector || matchesStudentCounselor;
       });
 
       const enrolledCount = cStudents.length;
-      const bookedAmount = cStudents.reduce((sum, s) => sum + Number(s.total_fees || s.total_fee || 0), 0);
+      let bookedAmount = 0;
+      let pendingAmount = 0;
+      cStudents.forEach((s: any) => {
+        const sInst = effectiveInstallments.filter((i: any) => i.student_id === s.id);
+        const paidFromInst = sInst.reduce((isum: number, i: any) => isum + Number(i.amount_paid || i.amount || 0), 0);
+        const paid = Math.max(paidFromInst, Number(s.paid_fee || 0));
+        const fin = getStudentFinancialState(s, paid);
+        bookedAmount += fin.effectiveExpectedFee;
+        pendingAmount += fin.pendingDue;
+      });
+
       const cCollSum = cCollections.reduce((sum, inst) => sum + Number(inst.amount_paid || inst.amount || 0), 0);
       const cExtraPaid = cStudents.reduce((sum, s) => {
-        const has = cCollections.some((inst: any) => inst.student_id === s.id);
+        const has = hasStudentFeeInRegistry(s.id, effectiveInstallments);
         return sum + (has ? 0 : Number(s.paid_fee || 0));
       }, 0);
       const collectedAmount = cCollSum + cExtraPaid;
-      const pendingAmount = Math.max(0, bookedAmount - collectedAmount);
       const rate = bookedAmount > 0 ? Math.round((collectedAmount / bookedAmount) * 100) : 0;
+
+      // Pipeline outstanding across ongoing batches for this counselor
+      const pipelinePending = effectiveStudents.filter((s: any) => {
+        if (s.counselor_id !== c.id || isStudentDiscontinued(s)) return false;
+        const batch = effectiveBatches.find((b: any) => b.id === s.batch_id);
+        return (batch?.status || '').toLowerCase() !== 'completed' && (s.status || '').toLowerCase() !== 'completed';
+      }).reduce((sum: number, s: any) => {
+        const sInst = effectiveInstallments.filter((i: any) => i.student_id === s.id);
+        const paidFromInst = sInst.reduce((isum: number, i: any) => isum + Number(i.amount_paid || i.amount || 0), 0);
+        const paid = Math.max(paidFromInst, Number(s.paid_fee || 0));
+        return sum + getStudentFinancialState(s, paid).pendingDue;
+      }, 0);
 
       return {
         id: c.id,
@@ -342,36 +429,44 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
         bookedAmount,
         collectedAmount,
         pendingAmount,
+        pipelinePending,
         rate
       };
     });
-  }, [counselorStaff, effectiveStudents, effectiveInstallments, selectedMonth]);
+  }, [counselorStaff, effectiveStudents, effectiveInstallments, effectiveBatches, selectedMonth]);
 
-  // Filtered lists for table search
+  // Filtered lists for table search (toggles between Month Admissions and Carry-Forward Pipeline)
+  const activeDisplayStudents = admissionsViewMode === 'month_admissions' ? monthStudents : activePipelineStudents;
+
   const filteredStudents = useMemo(() => {
-    if (!searchQuery.trim()) return monthStudents;
+    if (!searchQuery.trim()) return activeDisplayStudents;
     const q = searchQuery.toLowerCase();
-    return monthStudents.filter((s: any) =>
+    return activeDisplayStudents.filter((s: any) =>
       s.student_name?.toLowerCase().includes(q) ||
+      s.name?.toLowerCase().includes(q) ||
       s.registration_number?.toLowerCase().includes(q) ||
+      s.student_id_code?.toLowerCase().includes(q) ||
       s.phone?.includes(q) ||
-      batches.find((b: any) => b.id === s.batch_id)?.batch_name?.toLowerCase().includes(q)
+      effectiveBatches.find((b: any) => b.id === s.batch_id)?.batch_name?.toLowerCase().includes(q)
     );
-  }, [monthStudents, searchQuery, batches]);
+  }, [activeDisplayStudents, searchQuery, effectiveBatches]);
 
   const filteredCollections = useMemo(() => {
     if (!searchQuery.trim()) return monthCollections;
     const q = searchQuery.toLowerCase();
     return monthCollections.filter((c: any) => {
-      const student = students.find((s: any) => s.id === c.student_id);
+      const student = effectiveStudents.find((s: any) => s.id === c.student_id);
       return (
         student?.student_name?.toLowerCase().includes(q) ||
+        student?.name?.toLowerCase().includes(q) ||
         student?.registration_number?.toLowerCase().includes(q) ||
+        student?.student_id_code?.toLowerCase().includes(q) ||
         c.payment_method?.toLowerCase().includes(q) ||
+        c.payment_mode?.toLowerCase().includes(q) ||
         c.notes?.toLowerCase().includes(q)
       );
     });
-  }, [monthCollections, searchQuery, students]);
+  }, [monthCollections, searchQuery, effectiveStudents]);
 
   // --- EXPORT FUNCTIONS FOR COUNSELOR ADMISSIONS & COLLECTIONS ---
   const handleExportCounselorExcel = () => {
@@ -383,26 +478,27 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
       const csvRows: any[][] = [];
       csvRows.push([`Tech Ads ERP - Counselor Admissions & Collections Report`]);
       csvRows.push([`Counselor: ${counselorName}`, `Month: ${selectedMonth}`]);
-      csvRows.push([`Admissions: ${totalRegistrations}`, `Package Total: ₹${totalPackageBooked.toLocaleString()}`, `Collections: ₹${totalCollections.toLocaleString()}`, `Pending: ₹${totalPendingBalance.toLocaleString()}`, `Conversion: ${collectionConversionRate}%`]);
+      csvRows.push([`Admissions: ${totalRegistrations}`, `Package Total: ₹${totalPackageBooked.toLocaleString()}`, `Collections: ₹${totalCollections.toLocaleString()}`, `Cohort Pending: ₹${totalMonthCohortPending.toLocaleString()}`, `Pipeline Pending: ₹${totalActivePipelinePending.toLocaleString()}`, `Conversion: ${collectionConversionRate}%`]);
       csvRows.push([]);
       csvRows.push(['--- MONTHLY ADMISSIONS ---']);
-      csvRows.push(['Reg No', 'Student Name', 'Assigned Batch', 'Counselor', 'Package Fee (INR)', 'Paid (INR)', 'Balance Due (INR)', 'Enrollment Date']);
+      csvRows.push(['Reg No', 'Student Name', 'Assigned Batch', 'Counselor', 'Package Fee (INR)', 'Paid (INR)', 'Balance Due (INR)', 'Status', 'Enrollment Date']);
 
       monthStudents.forEach((s: any) => {
         const batch = effectiveBatches.find((b: any) => b.id === s.batch_id);
         const counselor = effectiveStaffList.find((st: any) => st.id === s.counselor_id);
         const sInst = effectiveInstallments.filter((i: any) => i.student_id === s.id);
         const paid = sInst.reduce((sum: number, i: any) => sum + Number(i.amount_paid || i.amount || 0), 0) || Number(s.paid_fee || 0);
-        const balance = Math.max(0, Number(s.total_fees || s.total_fee || 0) - paid);
+        const fin = getStudentFinancialState(s, paid);
 
         csvRows.push([
           s.registration_number || s.student_id_code || s.id,
           s.student_name || s.name,
           batch?.batch_name || 'Unassigned',
           counselor?.full_name || 'Direct / Management',
-          Number(s.total_fees || s.total_fee || 0),
+          fin.nominalTotalFee,
           paid,
-          balance,
+          fin.isDiscontinued ? 0 : fin.pendingDue,
+          fin.isDiscontinued ? 'Discontinued' : (paid >= fin.nominalTotalFee ? 'Paid' : 'Active'),
           s.enrollment_date || (s.created_at ? s.created_at.slice(0, 10) : '-')
         ]);
       });
@@ -458,7 +554,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
         const counselor = effectiveStaffList.find((st: any) => st.id === s.counselor_id);
         const sInst = effectiveInstallments.filter((i: any) => i.student_id === s.id);
         const paid = sInst.reduce((sum: number, i: any) => sum + Number(i.amount_paid || i.amount || 0), 0) || Number(s.paid_fee || 0);
-        const balance = Math.max(0, Number(s.total_fees || s.total_fee || 0) - paid);
+        const fin = getStudentFinancialState(s, paid);
 
         return `
           <tr style="border-bottom: 1px solid #e2e8f0;">
@@ -466,9 +562,10 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
             <td style="padding: 8px; font-family: monospace;">${s.registration_number || s.student_id_code || '-'}</td>
             <td style="padding: 8px;">${batch?.batch_name || '-'}</td>
             <td style="padding: 8px;">${counselor?.full_name || 'Direct'}</td>
-            <td style="padding: 8px; text-align: right;">₹${Number(s.total_fees || s.total_fee || 0).toLocaleString()}</td>
+            <td style="padding: 8px; text-align: right;">₹${fin.nominalTotalFee.toLocaleString()}</td>
             <td style="padding: 8px; text-align: right; color: #059669; font-weight: bold;">₹${paid.toLocaleString()}</td>
-            <td style="padding: 8px; text-align: right; color: ${balance > 0 ? '#e11d48' : '#64748b'}; font-weight: bold;">₹${balance.toLocaleString()}</td>
+            <td style="padding: 8px; text-align: right; color: ${fin.pendingDue > 0 ? '#e11d48' : '#64748b'}; font-weight: bold;">${fin.isDiscontinued ? '₹0 (Waived)' : `₹${fin.pendingDue.toLocaleString()}`}</td>
+            <td style="padding: 8px; text-align: center;">${fin.isDiscontinued ? 'Discontinued' : (paid >= fin.nominalTotalFee ? 'Paid' : 'Active')}</td>
             <td style="padding: 8px; text-align: center;">${s.enrollment_date || (s.created_at ? s.created_at.slice(0, 10) : '-')}</td>
           </tr>
         `;
@@ -501,7 +598,8 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
               <div class="metric-item"><div class="metric-label">Admissions</div><div class="metric-val">${totalRegistrations}</div></div>
               <div class="metric-item"><div class="metric-label">Course Package Total</div><div class="metric-val" style="color: #6366f1;">₹${totalPackageBooked.toLocaleString()}</div></div>
               <div class="metric-item"><div class="metric-label">Fee Collections</div><div class="metric-val" style="color: #059669;">₹${totalCollections.toLocaleString()}</div></div>
-              <div class="metric-item"><div class="metric-label">Pending Dues</div><div class="metric-val" style="color: #e11d48;">₹${totalPendingBalance.toLocaleString()}</div></div>
+              <div class="metric-item"><div class="metric-label">Cohort Pending</div><div class="metric-val" style="color: #e11d48;">₹${totalMonthCohortPending.toLocaleString()}</div></div>
+              <div class="metric-item"><div class="metric-label">Pipeline Pending</div><div class="metric-val" style="color: #d97706;">₹${totalActivePipelinePending.toLocaleString()}</div></div>
               <div class="metric-item"><div class="metric-label">Conversion</div><div class="metric-val">${collectionConversionRate}%</div></div>
             </div>
 
@@ -515,11 +613,12 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
                   <th class="right">Package Fee</th>
                   <th class="right">Paid</th>
                   <th class="right">Balance Due</th>
+                  <th class="center">Status</th>
                   <th class="center">Date</th>
                 </tr>
               </thead>
               <tbody>
-                ${studentRows || '<tr><td colspan="8" style="text-align: center; padding: 12px; color: #64748b;">No admissions logged for this period.</td></tr>'}
+                ${studentRows || '<tr><td colspan="9" style="text-align: center; padding: 12px; color: #64748b;">No admissions logged for this period.</td></tr>'}
               </tbody>
             </table>
             <script>
@@ -681,8 +780,19 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
             </div>
           </div>
           <div>
-            <div className="text-2xl font-black text-warning">{formatCurrency(totalPendingBalance)}</div>
-            <p className="text-[10px] text-muted-foreground font-semibold mt-1">Outstanding on this month's batch</p>
+            <div className="text-2xl font-black text-warning">{formatCurrency(totalMonthCohortPending)}</div>
+            <p className="text-[10px] text-muted-foreground font-semibold mt-0.5">
+              Due on {monthOptions.find((m) => m.value === selectedMonth)?.label || selectedMonth} admissions
+            </p>
+            {totalMonthWaived > 0 && (
+              <p className="text-[9.5px] text-muted-foreground italic mt-0.5">
+                {formatCurrency(totalMonthWaived)} waived (discontinued)
+              </p>
+            )}
+            <div className="mt-2.5 pt-2 border-t border-warning/20 flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground font-semibold">Active Batch Pipeline:</span>
+              <strong className="text-foreground font-black">{formatCurrency(totalActivePipelinePending)}</strong>
+            </div>
           </div>
         </Card>
       </div>
@@ -697,7 +807,7 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
                 Counselor Performance Comparison
               </h3>
               <p className="text-xs text-muted-foreground">
-                Breakdown of admissions and fee collections by counselor for {monthOptions.find((m) => m.value === selectedMonth)?.label || selectedMonth}
+                Breakdown of admissions, fee collections & carry-forward pipeline by counselor for {monthOptions.find((m) => m.value === selectedMonth)?.label || selectedMonth}
               </p>
             </div>
           </div>
@@ -710,7 +820,8 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
                   <th className="px-4 py-3 text-center">New Admissions</th>
                   <th className="px-4 py-3 text-right">Course Value (₹)</th>
                   <th className="px-4 py-3 text-right">Collections (₹)</th>
-                  <th className="px-4 py-3 text-right">Pending Balance (₹)</th>
+                  <th className="px-4 py-3 text-right">Cohort Due (₹)</th>
+                  <th className="px-4 py-3 text-right">Pipeline Due (₹)</th>
                   <th className="px-4 py-3 text-center">Realization</th>
                   <th className="px-4 py-3 text-right">Action</th>
                 </tr>
@@ -743,6 +854,9 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
                     <td className="px-4 py-3.5 text-right font-bold text-danger">
                       {formatCurrency(c.pendingAmount)}
                     </td>
+                    <td className="px-4 py-3.5 text-right font-bold text-amber-400">
+                      {formatCurrency(c.pipelinePending)}
+                    </td>
                     <td className="px-4 py-3.5 text-center">
                       <Badge variant={c.rate >= 70 ? 'success' : c.rate >= 40 ? 'warning' : 'info'}>
                         {c.rate}%
@@ -766,8 +880,8 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
 
       {/* 4. Tab Selector: Admissions vs Collections Log */}
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-border pb-3">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 border-b border-border pb-3">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setActiveReportTab('admissions')}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${activeReportTab === 'admissions'
@@ -786,10 +900,42 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
             >
               Fee Collections Log ({monthCollections.length})
             </button>
+
+            {/* Sub-view toggle when admissions tab is active: Month cohort vs All active pipeline */}
+            {activeReportTab === 'admissions' && (
+              <div className="flex items-center gap-1 p-0.5 rounded-xl bg-muted-2 border border-border sm:ml-2">
+                <button
+                  type="button"
+                  onClick={() => setAdmissionsViewMode('month_admissions')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${admissionsViewMode === 'month_admissions'
+                      ? 'bg-card text-foreground shadow-xs border border-border'
+                      : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                >
+                  {formatMonthLabel(selectedMonth)} Admissions ({monthStudents.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdmissionsViewMode('carry_forward_pipeline')}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 ${admissionsViewMode === 'carry_forward_pipeline'
+                      ? 'bg-card text-foreground shadow-xs border border-border'
+                      : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  title="View all students currently enrolled in active ongoing batches across 3-4 months"
+                >
+                  <span>Active Ongoing Pipeline ({activePipelineStudents.length})</span>
+                  {totalActivePipelinePending > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-rose-500/15 text-rose-400 text-[10px] font-extrabold">
+                      {formatCurrency(totalActivePipelinePending)}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Search bar */}
-          <div className="relative w-full sm:w-64">
+          <div className="relative w-full lg:w-64">
             <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
@@ -827,10 +973,10 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
                     const studentInstallments = effectiveInstallments.filter((i: any) => i.student_id === s.id);
                     const paidFromInstallments = studentInstallments.reduce((sum, i) => sum + Number(i.amount_paid || i.amount || 0), 0);
                     const paid = Math.max(paidFromInstallments, Number(s.paid_fee || 0));
-                    const total = Number(s.total_fees || s.total_fee || 0);
-                    const balance = Math.max(0, total - paid);
-                    const isFullyPaid = paid >= total && total > 0;
-                    const isUnpaid = paid === 0;
+                    const fin = getStudentFinancialState(s, paid);
+                    const isDiscontinued = fin.isDiscontinued;
+                    const isFullyPaid = !isDiscontinued && paid >= fin.nominalTotalFee && fin.nominalTotalFee > 0;
+                    const isUnpaid = !isDiscontinued && paid === 0;
 
                     return (
                       <tr
@@ -863,18 +1009,37 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
                           {s.enrollment_date || (s.created_at ? s.created_at.split('T')[0] : '-')}
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-foreground">
-                          {formatCurrency(total)}
+                          {formatCurrency(fin.nominalTotalFee)}
                         </td>
                         <td className="px-4 py-3 text-right font-extrabold text-success">
                           {formatCurrency(paid)}
                         </td>
-                        <td className="px-4 py-3 text-right font-extrabold text-danger">
-                          {formatCurrency(balance)}
+                        <td className="px-4 py-3 text-right">
+                          {isDiscontinued ? (
+                            <div>
+                              <span className="text-muted-foreground text-[11px] font-semibold italic">Waived (₹0)</span>
+                              {fin.writtenOffAmount > 0 && (
+                                <span className="text-[9.5px] text-muted-foreground block">
+                                  ({formatCurrency(fin.writtenOffAmount)} waived)
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className={`font-extrabold ${fin.pendingDue > 0 ? 'text-danger' : 'text-emerald-400'}`}>
+                              {formatCurrency(fin.pendingDue)}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <Badge variant={isFullyPaid ? 'success' : isUnpaid ? 'error' : 'warning'}>
-                            {isFullyPaid ? 'Paid in Full' : isUnpaid ? 'Unpaid' : 'Partial'}
-                          </Badge>
+                          {isDiscontinued ? (
+                            <Badge variant="error" className="text-[10px] font-bold">
+                              Discontinued
+                            </Badge>
+                          ) : (
+                            <Badge variant={isFullyPaid ? 'success' : isUnpaid ? 'error' : 'warning'}>
+                              {isFullyPaid ? 'Paid in Full' : isUnpaid ? 'Unpaid' : 'Partial'}
+                            </Badge>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
@@ -903,7 +1068,9 @@ export const CounselorMonthlyReportView: React.FC<CounselorMonthlyReportViewProp
                   {filteredStudents.length === 0 && (
                     <tr>
                       <td colSpan={10} className="px-4 py-10 text-center text-muted-foreground text-xs">
-                        No student admissions recorded for the selected period.
+                        {admissionsViewMode === 'month_admissions'
+                          ? 'No student admissions recorded for the selected period.'
+                          : 'No active students found in ongoing batches.'}
                       </td>
                     </tr>
                   )}

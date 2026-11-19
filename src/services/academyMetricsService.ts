@@ -3,6 +3,7 @@
  * Aggregates batches, students, fee collections, student attendance, and staff performance.
  */
 import { supabase } from './supabase';
+import { getCollectionMonthKey, isStudentDiscontinued, getStudentFinancialState } from '../utils/dateAttribution';
 
 export interface AcademyPerformanceTargets {
   counselor_admissions_target: number; // default admissions goal per counselor/month
@@ -60,6 +61,7 @@ export interface AcademyFinancialAnalytics {
   total_pending: number;
   recovery_rate: number;
   average_revenue_per_student: number;
+  discontinued_unrealized_fees?: number;
   payment_methods: {
     name: string;
     amount: number;
@@ -185,14 +187,17 @@ export const computeBatchMetrics = (
     totalSeats += capacity;
     totalEnrolled += enrolled;
 
-    // Financial totals for this batch
+    // Financial totals for this batch (excluding discontinued balances from active pending)
     let batchFees = 0;
     let batchCollected = 0;
+    let batchPending = 0;
     bStudents.forEach(st => {
-      batchFees += Number(st.total_fees) || 0;
-      batchCollected += installmentsByStudent.get(st.id) || 0;
+      const paid = installmentsByStudent.get(st.id) || 0;
+      const fin = getStudentFinancialState(st, paid);
+      batchFees += fin.effectiveExpectedFee;
+      batchCollected += paid;
+      batchPending += fin.pendingDue;
     });
-    const batchPending = Math.max(0, batchFees - batchCollected);
     const collectionRate = batchFees > 0 ? Math.round((batchCollected / batchFees) * 100) : 0;
 
     const courseName = b.course_name || b.batch_name || 'General Course';
@@ -255,6 +260,7 @@ export const computeFinancialAnalytics = (
 ): AcademyFinancialAnalytics => {
   let total_expected_fees = 0;
   let total_collected = 0;
+  let total_written_off = 0;
 
   // Map student collected amounts
   const paidByStudent = new Map<string, number>();
@@ -266,7 +272,10 @@ export const computeFinancialAnalytics = (
   });
 
   (students || []).forEach(s => {
-    total_expected_fees += Number(s.total_fees) || 0;
+    const paid = paidByStudent.get(s.id) || 0;
+    const fin = getStudentFinancialState(s, paid);
+    total_expected_fees += fin.effectiveExpectedFee;
+    total_written_off += fin.writtenOffAmount;
   });
 
   const total_pending = Math.max(0, total_expected_fees - total_collected);
@@ -297,14 +306,26 @@ export const computeFinancialAnalytics = (
     percentage: total_collected > 0 ? Math.round((data.amount / total_collected) * 100) : 0
   })).sort((a, b) => b.amount - a.amount);
 
-  // Fee clearance aging
+  // Fee clearance aging (strictly excludes Discontinued debt from overdue / critical buckets)
   let clearedCount = 0, clearedFees = 0, clearedPaid = 0;
   let inProgressCount = 0, inProgressFees = 0, inProgressPaid = 0;
   let criticalCount = 0, criticalFees = 0, criticalPaid = 0;
 
   (students || []).forEach(s => {
-    const total = Number(s.total_fees) || 0;
     const paid = paidByStudent.get(s.id) || 0;
+    const fin = getStudentFinancialState(s, paid);
+
+    if (fin.isDiscontinued) {
+      // Discontinued students have zero active collectible debt
+      if (paid > 0) {
+        clearedCount++;
+        clearedFees += paid;
+        clearedPaid += paid;
+      }
+      return;
+    }
+
+    const total = fin.nominalTotalFee;
     const ratio = total > 0 ? (paid / total) : (paid > 0 ? 1 : 0);
 
     if (ratio >= 0.999 || (total > 0 && paid >= total)) {
@@ -322,12 +343,11 @@ export const computeFinancialAnalytics = (
     }
   });
 
-  // Monthly collection trend (sorted chronologically)
+  // Monthly collection trend (sorted chronologically by canonical payment month)
   const monthMap = new Map<string, { amount: number; count: number }>();
   (installments || []).forEach(inst => {
-    const dateStr = inst.payment_date || inst.created_at || '';
-    const monthKey = dateStr.slice(0, 7) || new Date().toISOString().slice(0, 7);
-    const amt = Number(inst.amount_paid) || 0;
+    const monthKey = getCollectionMonthKey(inst);
+    const amt = Number(inst.amount_paid || inst.amount) || 0;
     const current = monthMap.get(monthKey) || { amount: 0, count: 0 };
     current.amount += amt;
     current.count += 1;
@@ -348,6 +368,7 @@ export const computeFinancialAnalytics = (
     total_pending,
     recovery_rate,
     average_revenue_per_student,
+    discontinued_unrealized_fees: total_written_off,
     payment_methods,
     fee_aging: {
       cleared: {
@@ -416,11 +437,14 @@ export const computeStaffPerformanceMetrics = (
 
     let booked = 0;
     let upfront = 0;
+    let pending = 0;
     cStudents.forEach(st => {
-      booked += Number(st.total_fees) || 0;
-      upfront += studentPaidMap.get(st.id) || 0;
+      const paid = studentPaidMap.get(st.id) || 0;
+      const fin = getStudentFinancialState(st, paid);
+      booked += fin.effectiveExpectedFee;
+      upfront += paid;
+      pending += fin.pendingDue;
     });
-    const pending = Math.max(0, booked - upfront);
     const collectionRate = booked > 0 ? Math.round((upfront / booked) * 100) : 0;
 
     return {
@@ -579,7 +603,7 @@ export const fetchAcademyMasterDataset = async (): Promise<AcademyMasterDataset>
 
     // Normalized Students
     const students = sList.map((s: any) => {
-      const isDiscontinued = s.student_id_code?.includes('[DISCONTINUED]') || localStorage.getItem(`student_status_${s.id}`) === 'discontinued';
+      const isDiscontinued = isStudentDiscontinued(s);
       const cleanCode = s.student_id_code?.replace(/\s*\[DISCONTINUED\]/g, '') || `STU-${s.id.slice(0, 4)}`;
       const assignedBatch = batchesMap.get(s.batch_id);
       const counselorName = s.counselor_id ? staffMap.get(s.counselor_id) || 'Assigned Counselor' : 'Direct / Admin';
@@ -618,10 +642,14 @@ export const fetchAcademyMasterDataset = async (): Promise<AcademyMasterDataset>
       return {
         id: f.id,
         student_id: f.student_id,
+        batch_id: f.batch_id,
+        collected_by: f.collected_by,
         amount_paid: Number(f.amount) || 0,
         amount: Number(f.amount) || 0,
+        installment_month: f.installment_month,
         payment_date: f.created_at ? f.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
         payment_method: f.payment_mode ? f.payment_mode.toUpperCase() : 'ONLINE',
+        payment_mode: f.payment_mode,
         notes: cleanNotes,
         proof_url: proofUrl,
         created_at: f.created_at

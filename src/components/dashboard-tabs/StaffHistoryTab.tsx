@@ -13,6 +13,7 @@ import { supabase, SALES_COLUMNS, monthWindowStart } from '../../services/supaba
 import { formatCurrency } from '../../services/mockData';
 import { dataCache } from '../../services/dataCache';
 import { TableSkeleton } from '../Skeleton';
+import { getCollectionMonthKey, getStudentAdmissionMonthKey, hasStudentFeeInRegistry } from '../../utils/dateAttribution';
 
 interface StaffHistoryTabProps {
   staffProfiles: any[];
@@ -263,13 +264,11 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
           
           counselorTeam.forEach((c: any) => {
             const cStudents = (sRes || []).filter((s: any) => {
-              const dStr = s.enrollment_date || (s.created_at ? s.created_at.split('T')[0] : '');
-              return dStr.startsWith(activeMonthStr) && s.counselor_id === c.id;
+              return getStudentAdmissionMonthKey(s) === activeMonthStr && s.counselor_id === c.id;
             });
 
             const cFees = (fRes || []).filter((f: any) => {
-              const dStr = f.payment_date || (f.created_at ? f.created_at.split('T')[0] : '');
-              if (!dStr.startsWith(activeMonthStr)) return false;
+              if (getCollectionMonthKey(f) !== activeMonthStr) return false;
               if (f.collected_by === c.id) return true;
               const matchedStudent = (sRes || []).find((st: any) => st.id === f.student_id);
               return matchedStudent?.counselor_id === c.id;
@@ -278,7 +277,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
             const bookedAmount = cStudents.reduce((sum: number, s: any) => sum + Number(s.total_fee || 0), 0);
             const feesSum = cFees.reduce((sum: number, f: any) => sum + Number(f.amount || 0), 0);
             const extraDeposit = cStudents.reduce((sum: number, s: any) => {
-              const hasFee = cFees.some((f: any) => f.student_id === s.id);
+              const hasFee = hasStudentFeeInRegistry(s.id, fRes || []);
               return sum + (hasFee ? 0 : Number(s.paid_fee || 0));
             }, 0);
             const achievedAmount = feesSum + extraDeposit;
@@ -867,6 +866,7 @@ export const StaffHistoryTab: React.FC<StaffHistoryTabProps> = ({ staffProfiles,
                     isAdminView={true}
                     activeStaff={selectedProfile}
                     selectedMonth={activeMonthStr}
+                    staffList={staffProfiles}
                     onViewSlip={(slip) => setPreviewSlipUrl(slip)}
                   />
                   <SelfieLightboxModal

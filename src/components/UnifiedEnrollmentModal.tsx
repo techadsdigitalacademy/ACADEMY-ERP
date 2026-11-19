@@ -178,6 +178,7 @@ export const UnifiedEnrollmentModal: React.FC<UnifiedEnrollmentModalProps> = ({
         ? enrollmentDate.trim() 
         : new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
+      const historicalCreatedAt = effectiveEnrollmentDate ? new Date(effectiveEnrollmentDate + 'T12:00:00Z').toISOString() : new Date().toISOString();
       const studentPayload = {
         student_id_code: studentCode,
         name: trimmedName,
@@ -187,7 +188,8 @@ export const UnifiedEnrollmentModal: React.FC<UnifiedEnrollmentModalProps> = ({
         counselor_id: effectiveCounselorId,
         total_fee: numTotalFee,
         paid_fee: numPaidFee,
-        enrollment_date: effectiveEnrollmentDate
+        enrollment_date: effectiveEnrollmentDate,
+        created_at: historicalCreatedAt
       };
 
       // 3. Insert student record (try anon then admin proxy)
@@ -269,7 +271,8 @@ export const UnifiedEnrollmentModal: React.FC<UnifiedEnrollmentModalProps> = ({
           amount: numPaidFee,
           payment_mode: paymentMode, // Strictly 'online' | 'cash' | 'bank_transfer'
           installment_month: curMonth,
-          notes: finalNotes
+          notes: finalNotes,
+          created_at: historicalCreatedAt
         };
 
         const { error: feeErr } = await supabase.from('fee_collections').insert([feePayload]);
